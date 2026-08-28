@@ -1,29 +1,61 @@
 /* ─── Google Fonts ───────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Karla:wght@300;400;500;600;700&family=Playfair+Display+SC:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap');
 
-/* ─── Design Tokens ──────────────────────────────────────────────────── */
+/* ─── Design Tokens — Bingnondo Chinese Heritage ─────────────────────── */
 :root {
-  /* Colors — Bingnondo Cashier System */
-  --color-primary:         #DC2626;
-  --color-on-primary:      #FFFFFF;
-  --color-secondary:       #F87171;
-  --color-on-secondary:    #0F172A;
-  --color-accent:          #A16207;
-  --color-on-accent:       #FFFFFF;
-  --color-background:      #FEF7F7;
-  --color-foreground:      #1C0A0A;
-  --color-card:            #FFFFFF;
-  --color-card-foreground: #1C0A0A;
-  --color-muted:           #F5F0F0;
-  --color-muted-foreground: #6B5B5B;
-  --color-border:          #F0DADA;
-  --color-destructive:     #DC2626;
-  --color-on-destructive:  #FFFFFF;
-  --color-ring:            #DC2626;
+  /* 
+   * Palette: Imperial Chinese — Vermillion + Ink + Gold
+   * Primary:    Deep Vermillion  #B91C1C  (漆紅 — lacquer red)
+   * Secondary:  Soft Cinnabar    #EF4444
+   * Accent:     Ancient Gold     #92400E  (褐金 — warm bronze-gold)
+   * Background: Aged Parchment   #FDF6EC  (宣紙 — xuan paper)
+   * Ink:        Calligraphy Ink  #1A0A00  (墨 — ink black)
+   * Border:     Tea Dust         #E8D5B7
+   */
+  --color-primary:          #B91C1C;
+  --color-on-primary:       #FDF6EC;
+  --color-secondary:        #EF4444;
+  --color-on-secondary:     #1A0A00;
+  --color-accent:           #92400E;
+  --color-on-accent:        #FDF6EC;
+  --color-gold:             #B45309;
+  --color-gold-light:       #FDE68A;
+  --color-background:       #FDF6EC;
+  --color-foreground:       #1A0A00;
+  --color-card:             #FFFBF4;
+  --color-card-foreground:  #1A0A00;
+  --color-muted:            #F3E8D4;
+  --color-muted-foreground: #78553A;
+  --color-border:           #E8D5B7;
+  --color-border-strong:    #C9A87C;
+  --color-destructive:      #B91C1C;
+  --color-on-destructive:   #FDF6EC;
+  --color-ring:             #B91C1C;
+  --color-surface:          #FAF0DC;
 
-  /* Typography */
-  --font-heading: 'Playfair Display SC', Georgia, serif;
-  --font-body:    'Karla', system-ui, sans-serif;
+  /* Typography — Noto Serif TC (heading) + Noto Sans TC (body) */
+  --font-heading: 'Noto Serif TC', 'Songti SC', Georgia, serif;
+  --font-body:    'Noto Sans TC', 'PingFang SC', system-ui, sans-serif;
+
+  /* Spacing scale (dense/dashboard 8-32px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radius */
+  --radius-sm:  4px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+
+  /* Shadows — warm tinted */
+  --shadow-sm:  0 1px 4px rgba(26,10,0,0.08);
+  --shadow-md:  0 4px 16px rgba(26,10,0,0.10);
+  --shadow-lg:  0 12px 40px rgba(26,10,0,0.14);
 
   /* Base */
   font-family: var(--font-body);
@@ -38,15 +70,9 @@
 }
 
 /* ─── Reset ──────────────────────────────────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+*, *::before, *::after { box-sizing: border-box; }
 
-body {
-  margin: 0;
-  padding: 0;
-  min-height: 100dvh;
-}
+body { margin: 0; padding: 0; min-height: 100dvh; }
 
 #root {
   width: 100%;
@@ -55,16 +81,10 @@ body {
   flex-direction: column;
 }
 
-button {
-  font-family: var(--font-body);
-}
-
-input, textarea, select {
-  font-family: var(--font-body);
-}
+button, input, textarea, select { font-family: var(--font-body); }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-muted-foreground); }
+::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }

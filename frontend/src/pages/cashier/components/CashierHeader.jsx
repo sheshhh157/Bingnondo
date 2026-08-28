@@ -1,18 +1,19 @@
 import { VIEWS } from '../CashierPage';
 import './CashierHeader.css';
+import logo from '../../../assets/logo.png';
 
 export default function CashierHeader({ user, view, onViewChange, onLogout, draftCount }) {
   return (
     <header className="c-header">
       {/* Left: wordmark */}
       <div className="c-header__brand">
-        <svg className="c-header__mark" width="28" height="28" viewBox="0 0 56 56" fill="none" aria-hidden="true">
-          <rect width="56" height="56" rx="14" fill="#DC2626"/>
-          <path d="M14 20C14 17.8 15.8 16 18 16H26C29.3 16 32 18.7 32 22C32 23.5 31.4 24.9 30.4 25.9C32.5 26.9 34 29.1 34 31.6C34 35.1 31.1 38 27.6 38H18C15.8 38 14 36.2 14 34V20Z" fill="white"/>
-          <circle cx="38" cy="22" r="6" fill="white" fillOpacity="0.35"/>
-          <path d="M20 24H25C26.7 24 28 22.7 28 21C28 19.3 26.7 18 25 18H20V24Z" fill="#DC2626"/>
-          <path d="M20 32H27C28.7 32 30 30.7 30 29C30 27.3 28.7 26 27 26H20V32Z" fill="#DC2626"/>
-        </svg>
+        <img 
+          className="c-header__logo" 
+          src={logo} 
+          alt="Bingnondo Cafe Logo" 
+          width="35" 
+          height="35"
+        />
         <div className="c-header__titles">
           <span className="c-header__cafe">Bingnondo</span>
           <span className="c-header__role">Cashier Station</span>

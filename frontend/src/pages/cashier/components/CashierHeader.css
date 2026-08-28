@@ -1,214 +1,200 @@
-/* ─── Root Layout ───────────────────────────────────────────────────── */
-.cashier-root {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-  background: var(--color-background);
-  overflow: hidden;
-}
-
-.cashier-main {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ─── Workspace (Order view) ─────────────────────────────────────────── */
-.cashier-workspace {
+/* ─── Header Shell ──────────────────────────────────────────────────── */
+.c-header {
   display: grid;
-  grid-template-columns: 1fr 360px;
-  height: 100%;
-  overflow: hidden;
-  gap: 0;
-}
-
-/* ─── Menu Panel (Left) ──────────────────────────────────────────────── */
-.cashier-menu-panel {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-right: 1.5px solid var(--color-border);
-}
-
-.cashier-menu-toolbar {
-  padding: 1rem 1.25rem 0.75rem;
-  border-bottom: 1.5px solid var(--color-border);
-  background: var(--color-card);
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-/* Search */
-.cashier-search-wrap {
-  position: relative;
-}
-
-.cashier-search-icon {
-  position: absolute;
-  left: 0.75rem;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-muted-foreground);
-  pointer-events: none;
-}
-
-.cashier-search {
-  width: 100%;
-  padding: 0.6rem 0.75rem 0.6rem 2.25rem;
-  border: 1.5px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-background);
-  color: var(--color-foreground);
-  font-family: var(--font-body);
-  font-size: 0.875rem;
-  box-sizing: border-box;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-
-.cashier-search:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
-}
-
-/* Category tabs */
-.cashier-categories {
-  display: flex;
-  gap: 0.4rem;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: none;
-}
-
-.cashier-categories::-webkit-scrollbar { display: none; }
-
-.cashier-cat-btn {
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0 1.25rem;
+  height: 54px;
+  background: var(--color-primary);
+  border-bottom: 2px solid rgba(253,230,138,0.25);
   flex-shrink: 0;
-  padding: 0.35rem 0.875rem;
-  border: 1.5px solid var(--color-border);
+  z-index: 10;
+}
+
+/* ─── Brand ─────────────────────────────────────────────────────────── */
+.c-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.c-header__mark {
+  flex-shrink: 0;
   border-radius: 6px;
+}
+
+.c-header__titles {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.c-header__cafe {
+  font-family: var(--font-heading);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-on-primary);
+  letter-spacing: 0.01em;
+}
+
+.c-header__role {
+  font-family: var(--font-body);
+  font-size: 0.625rem;
+  color: rgba(253,246,236,0.6);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* ─── Nav Tabs ──────────────────────────────────────────────────────── */
+.c-header__nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.c-header__tab {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.875rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-muted-foreground);
+  color: rgba(253,246,236,0.65);
   font-family: var(--font-body);
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
+  position: relative;
   transition: all 150ms ease;
   white-space: nowrap;
 }
 
-.cashier-cat-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+.c-header__tab:hover {
+  color: var(--color-on-primary);
+  background: rgba(253,246,236,0.1);
 }
 
-.cashier-cat-btn--active {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: white;
+.c-header__tab--active {
+  background: rgba(253,246,236,0.15);
+  border-color: rgba(253,230,138,0.35);
+  color: #FDE68A;
 }
 
-.cashier-cat-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+.c-header__tab:focus-visible {
+  outline: 2px solid #FDE68A;
   outline-offset: 2px;
 }
 
-/* ─── Order Panel (Right) ─────────────────────────────────────────────── */
-.cashier-order-panel {
+.c-header__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: #FDE68A;
+  color: var(--color-foreground);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  border-radius: 999px;
+}
+
+/* ─── User Area ─────────────────────────────────────────────────────── */
+.c-header__user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.c-header__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(253,230,138,0.25);
+  border: 1.5px solid rgba(253,230,138,0.4);
+  color: #FDE68A;
+  font-family: var(--font-heading);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.c-header__user-info {
   display: flex;
   flex-direction: column;
-  background: var(--color-card);
-  overflow: hidden;
+  line-height: 1.2;
 }
 
-/* ─── Toast ─────────────────────────────────────────────────────────── */
-.cashier-toast {
-  position: fixed;
-  bottom: 1.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.75rem 1.25rem;
-  background: var(--color-foreground);
-  color: var(--color-card);
+.c-header__user-name {
   font-family: var(--font-body);
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  white-space: nowrap;
-  z-index: 200;
-  animation: toastIn 220ms ease;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-on-primary);
 }
 
-@keyframes toastIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+.c-header__user-role {
+  font-family: var(--font-body);
+  font-size: 0.625rem;
+  color: rgba(253,246,236,0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.c-header__logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(253,246,236,0.2);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: rgba(253,246,236,0.6);
+  cursor: pointer;
+  transition: all 150ms ease;
+  flex-shrink: 0;
+}
+
+.c-header__logout:hover {
+  border-color: rgba(253,230,138,0.5);
+  color: #FDE68A;
+  background: rgba(253,246,236,0.1);
+}
+
+.c-header__logout:focus-visible {
+  outline: 2px solid #FDE68A;
+  outline-offset: 2px;
 }
 
 /* ─── RESPONSIVE ─────────────────────────────────────────────────────── */
-
-/* Tablet (768–1023px): order panel slides to bottom sheet */
 @media (max-width: 1023px) {
-  .cashier-workspace {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
-    overflow: hidden;
-  }
-
-  .cashier-menu-panel {
-    border-right: none;
-    border-bottom: 1.5px solid var(--color-border);
-  }
-
-  .cashier-order-panel {
-    max-height: 320px;
-    border-top: 1.5px solid var(--color-border);
-  }
-}
-
-/* Mobile (<640px): full-screen tabs, menu or order shown at a time */
-@media (max-width: 639px) {
-  .cashier-root {
-    overflow: auto;
-  }
-
-  .cashier-main {
-    overflow: visible;
-  }
-
-  .cashier-workspace {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
+  .c-header {
+    grid-template-columns: auto auto;
+    grid-template-rows: auto auto;
     height: auto;
-    overflow: visible;
+    padding: 0.625rem 1rem 0;
+    gap: 0;
   }
-
-  .cashier-menu-panel {
-    border-bottom: 1.5px solid var(--color-border);
-    overflow: visible;
+  .c-header__nav {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    border-top: 1px solid rgba(253,246,236,0.12);
+    margin-top: 0.5rem;
+    padding: 0.375rem 0;
+    gap: 0.25rem;
   }
-
-  .cashier-order-panel {
-    max-height: none;
-    min-height: 300px;
-    overflow: visible;
-  }
-
-  .cashier-toast {
-    bottom: 1rem;
-    font-size: 0.8125rem;
-    padding: 0.625rem 1rem;
-    white-space: normal;
-    max-width: calc(100vw - 2rem);
-    text-align: center;
-  }
+  .c-header__user { margin-left: auto; }
+  .c-header__user-info { display: none; }
 }
 
-/* Large desktop (≥1440px): wider right panel */
-@media (min-width: 1440px) {
-  .cashier-workspace {
-    grid-template-columns: 1fr 420px;
-  }
+@media (max-width: 480px) {
+  .c-header { padding: 0.5rem 0.875rem 0; }
+  .c-header__titles { display: none; }
+  .c-header__tab { font-size: 0.75rem; padding: 0.3rem 0.625rem; }
 }
