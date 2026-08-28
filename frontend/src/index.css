@@ -1,0 +1,70 @@
+/* ─── Google Fonts ───────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Karla:wght@300;400;500;600;700&family=Playfair+Display+SC:wght@400;700&display=swap');
+
+/* ─── Design Tokens ──────────────────────────────────────────────────── */
+:root {
+  /* Colors — Bingnondo Cashier System */
+  --color-primary:         #DC2626;
+  --color-on-primary:      #FFFFFF;
+  --color-secondary:       #F87171;
+  --color-on-secondary:    #0F172A;
+  --color-accent:          #A16207;
+  --color-on-accent:       #FFFFFF;
+  --color-background:      #FEF7F7;
+  --color-foreground:      #1C0A0A;
+  --color-card:            #FFFFFF;
+  --color-card-foreground: #1C0A0A;
+  --color-muted:           #F5F0F0;
+  --color-muted-foreground: #6B5B5B;
+  --color-border:          #F0DADA;
+  --color-destructive:     #DC2626;
+  --color-on-destructive:  #FFFFFF;
+  --color-ring:            #DC2626;
+
+  /* Typography */
+  --font-heading: 'Playfair Display SC', Georgia, serif;
+  --font-body:    'Karla', system-ui, sans-serif;
+
+  /* Base */
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-foreground);
+  background: var(--color-background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Reset ──────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+}
+
+#root {
+  width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  font-family: var(--font-body);
+}
+
+input, textarea, select {
+  font-family: var(--font-body);
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted-foreground); }
