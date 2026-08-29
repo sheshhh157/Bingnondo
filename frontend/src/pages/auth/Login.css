@@ -51,32 +51,15 @@
   z-index: 0;
 }
 
-/* Landscape: tree + mountains + birds — anchored to bottom, full width */
-.login-brand__landscape {
+/* Combined scene SVG — landscape + dark overlay baked in */
+.login-brand__scene {
   position: absolute;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   width: 100%;
-  height: 75%;
+  height: 100%;
   object-fit: cover;
   object-position: bottom center;
-  opacity: 0.28;
-  /* Match maroon palette of the brand panel */
-  mix-blend-mode: screen;
-}
-
-/* Dragon: small, upper area — like flying in the sky */
-.login-brand__dragon {
-  position: absolute;
-  top: 6%;
-  right: 8%;
-  width: clamp(90px, 14%, 140px);
-  height: clamp(90px, 14%, 140px);
-  object-fit: contain;
-  opacity: 0.22;
-  mix-blend-mode: screen;
-  /* Slight rotation — looks like it's gliding */
-  transform: rotate(-8deg) scaleX(-1);
+  pointer-events: none;
 }
 
 /* ─── Other decorators ───────────────────────────────────────────── */
@@ -494,18 +477,9 @@
   .login-brand__lattice { bottom: 1.25rem; right: 1.25rem; }
   .login-brand__shadow-pool { width: 130px; height: 130px; }
 
-  /* Landscape fills more horizontally */
-  .login-brand__landscape {
-    height: 100%;
-    object-position: center center;
-  }
-
-  /* Dragon repositions to far right on tablet */
-  .login-brand__dragon {
-    top: 10%;
-    right: 3%;
-    width: 80px;
-    height: 80px;
+  /* Scene SVG covers full panel height */
+  .login-brand__scene {
+    object-position: center bottom;
   }
 
   .login-form-panel {
@@ -545,19 +519,9 @@
   .login-brand__ink-circle { width: 100px; height: 100px; top: -0.75rem; right: -0.75rem; }
   .login-brand__lattice { bottom: 0.875rem; right: 0.875rem; }
 
-  /* Dragon even smaller on mobile */
-  .login-brand__dragon {
-    top: 8%;
-    right: 2%;
-    width: 56px;
-    height: 56px;
-    opacity: 0.16;
-  }
-
-  /* Landscape — covers full panel height */
-  .login-brand__landscape {
-    height: 100%;
-    opacity: 0.22;
+  /* Scene fills compact panel */
+  .login-brand__scene {
+    object-position: center center;
   }
 
   .login-form-panel { padding: 2rem 1.25rem 2.5rem; }
@@ -571,7 +535,6 @@
   .login-brand__tagline { font-size: 2.625rem; }
   .login-brand__ink-circle { width: 340px; height: 340px; top: -4.5rem; right: -4.5rem; }
   .login-brand__lucky-cat { width: 120px; height: 120px; }
-  .login-brand__dragon { width: 160px; height: 160px; top: 5%; right: 10%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

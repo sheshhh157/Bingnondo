@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import './Login.css';
 import logo from '../../assets/logo.png';
-import bgLandscape from '../../assets/bg-landscape.svg';
-import bgDragon from '../../assets/bg-dragon.svg';
+import bgCombined from '../../assets/portrait.svg';
 
 export default function Login() {
   const { login } = useAuth();
@@ -38,20 +37,12 @@ export default function Login() {
       {/* ── LEFT: Brand panel ─────────────────────────────────────── */}
       <div className="login-brand" aria-hidden="true">
 
-        {/* SVG decorators — landscape fills bottom, dragon flies in sky */}
+        {/* Single combined SVG — landscape + dragon already composited */}
         <div className="login-brand__deco" aria-hidden="true">
-          {/* Landscape: tree + mountains + birds across full left panel */}
           <img
-            src={bgLandscape}
+            src={bgCombined}
             alt=""
-            className="login-brand__landscape"
-            draggable="false"
-          />
-          {/* Dragon: small, positioned upper-right of brand panel like flying */}
-          <img
-            src={bgDragon}
-            alt=""
-            className="login-brand__dragon"
+            className="login-brand__scene"
             draggable="false"
           />
         </div>
