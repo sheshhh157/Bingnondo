@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import './Login.css';
 import logo from '../../assets/logo.png';
+import bgCombined from '../../assets/portrait.svg';
 
 export default function Login() {
   const { login } = useAuth();
@@ -32,37 +33,73 @@ export default function Login() {
 
   return (
     <div className="login-root">
-      {/* Left — Brand panel */}
+
+      {/* ── LEFT: Brand panel ─────────────────────────────────────── */}
       <div className="login-brand" aria-hidden="true">
+
+        {/* Single combined SVG — landscape + dragon already composited */}
+        <div className="login-brand__deco" aria-hidden="true">
+          <img
+            src={bgCombined}
+            alt=""
+            className="login-brand__scene"
+            draggable="false"
+          />
+        </div>
+
+        {/* Decorative: concentric ink circles top-right */}
+        <div className="login-brand__ink-circle" aria-hidden="true" />
+
+        {/* Decorative: bottom-left glow pool */}
+        <div className="login-brand__shadow-pool" aria-hidden="true" />
+
+        {/* Decorative: vertical column lines */}
+        <div className="login-brand__columns" aria-hidden="true">
+          <div className="login-brand__col-line" />
+          <div className="login-brand__col-line" />
+          <div className="login-brand__col-line" />
+        </div>
+
+        {/* Main content sits above the decorators */}
         <div className="login-brand__inner">
           <div className="login-brand__logo">
-            <img 
-              src={logo} 
-              alt="Bingnondo Cafe Logo" 
+            <img
+              src={logo}
+              alt="Bingnondo Cafe"
               className="login-brand__lucky-cat"
-              width="80"
-              height="80"
             />
           </div>
-          <p className="login-brand__tagline">每一道佳餚<br />始於這個櫃台</p>
-          <div className="login-brand__rule" />
-          <div className="login-brand__tickets">
-            <Ticket label="Counter Orders" />
-            <Ticket label="Quick Checkout" />
-            <Ticket label="Real-time Kitchen" />
+
+          <div className="login-brand__text-group">
+            <div className="login-brand__charm">
+              <div className="login-brand__charm-bar" />
+              <p className="login-brand__tagline">
+                Every great dish<br />starts at the counter.
+              </p>
+            </div>
+
+            <div className="login-brand__rule" />
+
+            <div className="login-brand__tickets">
+              <Ticket label="Counter Orders" />
+              <Ticket label="Quick Checkout" />
+              <Ticket label="Real-time Kitchen" />
+            </div>
           </div>
         </div>
-        {/* Lattice decoration */}
+
+        {/* Bottom-right 3×3 dot lattice */}
         <div className="login-brand__lattice" aria-hidden="true">
-          {Array.from({ length: 25 }).map((_, i) => (
+          {Array.from({ length: 9 }).map((_, i) => (
             <span key={i} className="login-brand__dot" />
           ))}
         </div>
       </div>
 
-      {/* Right — Form panel */}
+      {/* ── RIGHT: Form panel ─────────────────────────────────────── */}
       <div className="login-form-panel">
         <div className="login-form-panel__inner">
+
           <div className="login-form__header">
             <span className="login-form__role-badge">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -84,10 +121,14 @@ export default function Login() {
                     <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
                   </svg>
                 </span>
-                <input id="email" name="email" type="email" autoComplete="email"
-                  className="login-field__input" placeholder="you@bingnondo.com"
+                <input
+                  id="email" name="email" type="email" autoComplete="email"
+                  className="login-field__input"
+                  placeholder="you@bingnondo.com"
                   value={form.email} onChange={handleChange}
-                  aria-required="true" aria-describedby={error ? 'login-error' : undefined} />
+                  aria-required="true"
+                  aria-describedby={error ? 'login-error' : undefined}
+                />
               </div>
             </div>
 
@@ -100,33 +141,49 @@ export default function Login() {
                     <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                   </svg>
                 </span>
-                <input id="password" name="password" type="password" autoComplete="current-password"
-                  className="login-field__input" placeholder="••••••••"
+                <input
+                  id="password" name="password" type="password" autoComplete="current-password"
+                  className="login-field__input"
+                  placeholder="••••••••"
                   value={form.password} onChange={handleChange}
-                  aria-required="true" aria-describedby={error ? 'login-error' : undefined} />
+                  aria-required="true"
+                  aria-describedby={error ? 'login-error' : undefined}
+                />
               </div>
             </div>
 
             {error && (
               <p id="login-error" className="login-form__error" role="alert">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
                 {error}
               </p>
             )}
 
             <button type="submit" className="login-form__submit" disabled={loading} aria-busy={loading}>
-              {loading
-                ? <span className="login-form__spinner" aria-label="Signing in…" />
-                : <>Sign in <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></>
-              }
+              {loading ? (
+                <span className="login-form__spinner" aria-label="Signing in…" />
+              ) : (
+                <>
+                  Sign in
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </>
+              )}
             </button>
           </form>
 
-          <p className="login-form__footer">Having trouble? Contact your <strong>administrator</strong>.</p>
+          <p className="login-form__footer">
+            Having trouble? Contact your <strong>administrator</strong>.
+          </p>
+
         </div>
       </div>
+
     </div>
   );
 }
