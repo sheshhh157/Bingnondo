@@ -1,6 +1,6 @@
 import { VIEWS } from '../CashierPage';
 import './CashierHeader.css';
-import logo from '../../../assets/logo.png';
+import logo from '../../../assets/logo1.png';
 
 export default function CashierHeader({ user, view, onViewChange, onLogout, draftCount }) {
   return (
