@@ -1,51 +1,61 @@
 import { useAuth } from '../../../context/AuthContext';
 
-export default function KitchenHeader({ counts, filter, onFilterChange }) {
+export default function KitchenHeader({ counterCount, onlineCount }) {
   const { user, logout } = useAuth();
   const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const dateStr = now.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const dateStr = now.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
     <header className="kp-header" role="banner">
+      {/* Brand */}
       <div className="kp-header__brand">
-        <div className="kp-header__seal" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M5 4h7a4 4 0 013 1.5 3 3 0 010 5A4 4 0 0112 16H5V4z" fill="#FDF6EC" fillRule="evenodd" clipRule="evenodd"/>
-            <path d="M5 10h7" stroke="#B91C1C" strokeWidth="1.5"/>
-          </svg>
-        </div>
+        <svg className="kp-header__logo" width="30" height="30" viewBox="0 0 30 30" fill="none" aria-label="Bingnondo Kitchen">
+          <rect width="30" height="30" rx="6" fill="#22C55E"/>
+          <path d="M7 9h10a5 5 0 013.5 1.5 4 4 0 010 6A5 5 0 0117 21H7V9z" fill="#0F172A" fillRule="evenodd" clipRule="evenodd"/>
+          <path d="M7 15h10" stroke="#22C55E" strokeWidth="2"/>
+        </svg>
         <div className="kp-header__brand-text">
           <span className="kp-header__name">Bingnondo</span>
-          <span className="kp-header__role">Kitchen</span>
+          <span className="kp-header__role">
+            <span className="kp-header__role-dot" aria-hidden="true" />
+            Kitchen Display
+          </span>
         </div>
       </div>
 
-      <nav className="kp-header__nav" role="navigation" aria-label="Order filter">
-        {[
-          { key: 'all',       label: 'All',       count: counts.all },
-          { key: 'confirmed', label: 'Incoming',  count: counts.confirmed },
-          { key: 'preparing', label: 'Preparing', count: counts.preparing },
-        ].map(({ key, label, count }) => (
-          <button
-            key={key}
-            className={`kp-tab ${filter === key ? 'kp-tab--active' : ''}`}
-            onClick={() => onFilterChange(key)}
-            aria-pressed={filter === key}
-          >
-            {label}
-            {count > 0 && <span className="kp-tab__badge" aria-hidden="true">{count}</span>}
-          </button>
-        ))}
-      </nav>
+      {/* Live queue summary */}
+      <div className="kp-header__summary" role="status" aria-live="polite" aria-label="Order queue summary">
+        <div className="kp-summary-chip kp-summary-chip--counter">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <rect x="1" y="4" width="10" height="7" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M3 4V3.5a3 3 0 016 0V4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+          Counter
+          <span className="kp-summary-chip__count">{counterCount}</span>
+        </div>
+        <div className="kp-header__summary-div" aria-hidden="true" />
+        <div className="kp-summary-chip kp-summary-chip--online">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
+            <ellipse cx="6" cy="6" rx="2" ry="4.5" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M1.5 6h9M2 4h8M2 8h8" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+          </svg>
+          Online
+          <span className="kp-summary-chip__count">{onlineCount}</span>
+        </div>
+      </div>
 
+      {/* Clock + user */}
       <div className="kp-header__right">
-        <div className="kp-header__clock" aria-label={`${timeStr}, ${dateStr}`}>
+        <div className="kp-header__clock" aria-label={`Time: ${timeStr}`}>
           <span className="kp-header__time">{timeStr}</span>
           <span className="kp-header__date">{dateStr}</span>
         </div>
         <div className="kp-header__user">
-          <span className="kp-header__username">{user?.full_name || user?.name || 'Kitchen'}</span>
+          <span className="kp-header__username" aria-label={`Signed in as ${user?.full_name || 'Kitchen'}`}>
+            {user?.full_name || user?.name || 'Kitchen'}
+          </span>
           <button
             className="kp-header__logout"
             onClick={logout}
@@ -53,7 +63,8 @@ export default function KitchenHeader({ counts, filter, onFilterChange }) {
             title="Sign out"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <path d="M5.5 2H3a1 1 0 00-1 1v9a1 1 0 001 1h2.5M9.5 10.5L12.5 7.5 9.5 4.5M12.5 7.5H5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5.5 2H3a1 1 0 00-1 1v9a1 1 0 001 1h2.5M9.5 10.5L12.5 7.5 9.5 4.5M12.5 7.5H5.5"
+                stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
         </div>

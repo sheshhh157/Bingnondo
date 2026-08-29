@@ -2,12 +2,12 @@ import { useState, useEffect, useReducer, useCallback } from 'react';
 import { kitchenAPI } from '../../services/api';
 import { getSocket, KITCHEN_EVENTS } from '../../services/socket';
 import KitchenHeader from './components/KitchenHeader';
-import OrderCard from './components/OrderCard';
+import OrderColumn from './components/OrderColumn';
 import AlertPanel from './components/AlertPanel';
 import ConnectionStatus from './components/ConnectionStatus';
-import EmptyQueue from './components/EmptyQueue';
 import './KitchenPage.css';
 
+// ─── Reducers ────────────────────────────────────────────────────────────────
 function ordersReducer(state, action) {
   switch (action.type) {
     case 'LOAD': return action.payload;
@@ -38,6 +38,7 @@ function alertsReducer(state, action) {
   }
 }
 
+// ─── Sound ───────────────────────────────────────────────────────────────────
 function playAlert() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -54,15 +55,16 @@ function playAlert() {
   } catch (_) {}
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function KitchenPage() {
   const [orders, dispatchOrders] = useReducer(ordersReducer, []);
   const [alerts, dispatchAlerts] = useReducer(alertsReducer, []);
-  const [filter, setFilter] = useState('all');
   const [connected, setConnected] = useState(true);
   const [reconnecting, setReconnecting] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Initial load
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -85,12 +87,13 @@ export default function KitchenPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Socket.io
   useEffect(() => {
     const socket = getSocket();
-    socket.on('connect',          () => { setConnected(true); setReconnecting(false); });
-    socket.on('disconnect',        () => setConnected(false));
-    socket.on('reconnecting',      () => setReconnecting(true));
-    socket.on('reconnect_failed',  () => setReconnecting(false));
+    socket.on('connect',         () => { setConnected(true); setReconnecting(false); });
+    socket.on('disconnect',       () => setConnected(false));
+    socket.on('reconnecting',     () => setReconnecting(true));
+    socket.on('reconnect_failed', () => setReconnecting(false));
     socket.on(KITCHEN_EVENTS.NEW_ORDER, (order) => {
       dispatchOrders({ type: 'ADD', payload: order });
       playAlert();
@@ -118,24 +121,28 @@ export default function KitchenPage() {
     dispatchAlerts({ type: 'ACKNOWLEDGE', id: alertId });
   }, []);
 
-  const filtered = filter === 'all' ? orders : orders.filter((o) => o.status === filter);
-  const counts = {
-    all:       orders.length,
-    confirmed: orders.filter((o) => o.status === 'confirmed').length,
-    preparing: orders.filter((o) => o.status === 'preparing').length,
-  };
+  // Split orders by channel
+  const counterOrders = orders.filter((o) => o.order_channel !== 'mobile_app');
+  const onlineOrders  = orders.filter((o) => o.order_channel === 'mobile_app');
 
   return (
     <div className="kp-root">
       <ConnectionStatus connected={connected} reconnecting={reconnecting} />
-      <KitchenHeader counts={counts} filter={filter} onFilterChange={setFilter} />
+
+      <KitchenHeader
+        counterCount={counterOrders.length}
+        onlineCount={onlineOrders.length}
+      />
+
       <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} />
 
       <main className="kp-main" id="main-content">
         {pageLoading ? (
-          <div className="kp-state" role="status">
-            <div className="kp-spinner" aria-hidden="true" />
-            <p>Loading kitchen queue…</p>
+          <div className="kp-state" role="status" aria-live="polite">
+            <div className="kp-loader" aria-hidden="true">
+              <div /><div /><div />
+            </div>
+            <span>Loading kitchen queue…</span>
           </div>
         ) : error ? (
           <div className="kp-state kp-state--error" role="alert">
@@ -148,22 +155,46 @@ export default function KitchenPage() {
               Retry
             </button>
           </div>
-        ) : filtered.length === 0 ? (
-          <EmptyQueue filter={filter} />
         ) : (
-          <section
-            className="kp-grid"
-            aria-label={`${filtered.length} order${filtered.length !== 1 ? 's' : ''} in queue`}
-          >
-            {filtered.map((order) => (
-              <OrderCard key={order.id} order={order} onStatusChange={handleStatusChange} />
-            ))}
-          </section>
+          <div className="kp-split">
+            {/* LEFT — Counter */}
+            <OrderColumn
+              lane="counter"
+              label="Counter Orders"
+              icon={
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <rect x="1" y="5" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M4 5V4a4 4 0 018 0v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M6 10h4M8 8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              }
+              orders={counterOrders}
+              onStatusChange={handleStatusChange}
+            />
+
+            {/* Divider */}
+            <div className="kp-divider" aria-hidden="true" />
+
+            {/* RIGHT — Online */}
+            <OrderColumn
+              lane="online"
+              label="Online Orders"
+              icon={
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
+                  <ellipse cx="8" cy="8" rx="2.5" ry="6.5" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M1.5 8h13M2 5h12M2 11h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                </svg>
+              }
+              orders={onlineOrders}
+              onStatusChange={handleStatusChange}
+            />
+          </div>
         )}
       </main>
 
       <div className="kp-sr-only" role="status" aria-live="polite" aria-atomic="true">
-        {counts.all > 0 ? `${counts.all} orders in queue` : 'Queue is empty'}
+        {`${counterOrders.length} counter, ${onlineOrders.length} online orders in queue`}
       </div>
     </div>
   );
