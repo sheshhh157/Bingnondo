@@ -106,7 +106,8 @@ export const authAPI = {
   staffLogin: async ({ email, password }) => {
     await delay();
     const accounts = [
-      { id: 1, full_name: 'Cashier One', email: 'cashier@bingnondo.com', password: 'cashier123', role: 'cashier' },
+      { id: 1, full_name: 'Cashier One',  email: 'cashier@bingnondo.com', password: 'cashier123', role: 'cashier' },
+      { id: 2, full_name: 'Kitchen Staff', email: 'kitchen@bingnondo.com', password: 'kitchen123', role: 'kitchen_staff' },
     ];
     const user = accounts.find((a) => a.email === email && a.password === password);
     if (!user) throw { response: { data: { message: 'Invalid credentials. Try again.' } } };
@@ -180,3 +181,75 @@ export const paymentsAPI = {
 };
 
 export default { authAPI, menuAPI, ordersAPI, paymentsAPI };
+// ─── KITCHEN ──────────────────────────────────────────────────────────────────
+// Mock orders na nasa confirmed/preparing status para sa Kitchen Display
+let MOCK_KITCHEN_ORDERS = [
+  {
+    id: 2001,
+    order_number: 'ORD-2001',
+    status: 'confirmed',
+    order_channel: 'counter',
+    created_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+    order_items: [
+      { id: 1, quantity: 2, notes: '', menu_item: { name: 'Tapsilog' } },
+      { id: 2, quantity: 1, notes: 'extra spicy', menu_item: { name: 'Goto' } },
+    ],
+  },
+  {
+    id: 2002,
+    order_number: 'ORD-2002',
+    status: 'preparing',
+    order_channel: 'mobile_app',
+    created_at: new Date(Date.now() - 9 * 60 * 1000).toISOString(),
+    order_items: [
+      { id: 3, quantity: 1, notes: '', menu_item: { name: 'Sinigang Set' } },
+      { id: 4, quantity: 2, notes: '', menu_item: { name: 'Iced Tea' } },
+    ],
+  },
+  {
+    id: 2003,
+    order_number: 'ORD-2003',
+    status: 'confirmed',
+    order_channel: 'counter',
+    created_at: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+    order_items: [
+      { id: 5, quantity: 3, notes: 'no garlic', menu_item: { name: 'Longsilog' } },
+    ],
+  },
+];
+
+let MOCK_ALERTS = [
+  {
+    id: 301,
+    order_id: 2001,
+    acknowledged_at: null,
+    order: { order_number: 'ORD-2001' },
+    esp32_device: { location_label: 'Table 4' },
+  },
+];
+
+export const kitchenAPI = {
+  getOrders: async () => {
+    await delay(400);
+    return { data: MOCK_KITCHEN_ORDERS.filter((o) => ['confirmed', 'preparing'].includes(o.status)) };
+  },
+
+  updateOrderStatus: async (orderId, status) => {
+    await delay(300);
+    const order = MOCK_KITCHEN_ORDERS.find((o) => o.id === Number(orderId));
+    if (order) order.status = status;
+    return { data: { success: true } };
+  },
+
+  getAlerts: async () => {
+    await delay(200);
+    return { data: MOCK_ALERTS };
+  },
+
+  acknowledgeAlert: async (alertId) => {
+    await delay(200);
+    const alert = MOCK_ALERTS.find((a) => a.id === Number(alertId));
+    if (alert) alert.acknowledged_at = new Date().toISOString();
+    return { data: { success: true } };
+  },
+};
