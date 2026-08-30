@@ -37,17 +37,17 @@ export default function AlertPanel({ alerts, onAcknowledge }) {
         <span className="kp-alerts__count">{active.length}</span>
       </div>
 
+      {/* Column layout — each alert is a card stacked vertically */}
       <ul className="kp-alerts__list">
         {active.map((alert) => (
           <li key={alert.id} className="kp-alerts__item">
-            <div className="kp-alerts__item-info">
-              <p className="kp-alerts__item-label">
-                New Order — #{alert.order?.order_number || alert.order_id}
-              </p>
-              {alert.esp32_device && (
-                <p className="kp-alerts__item-device">{alert.esp32_device.location_label}</p>
-              )}
-            </div>
+            <p className="kp-alerts__item-tag">New Order</p>
+            <p className="kp-alerts__item-label">
+              #{alert.order?.order_number || alert.order_id}
+            </p>
+            {alert.esp32_device && (
+              <p className="kp-alerts__item-device">{alert.esp32_device.location_label}</p>
+            )}
             <button
               className="kp-btn kp-btn--ack"
               onClick={() => handleAck(alert.id)}
