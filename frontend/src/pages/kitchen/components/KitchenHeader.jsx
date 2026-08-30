@@ -3,17 +3,17 @@ import { useAuth } from '../../../context/AuthContext';
 export default function KitchenHeader({ counterCount, onlineCount }) {
   const { user, logout } = useAuth();
   const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
   const dateStr = now.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
     <header className="kp-header" role="banner">
       {/* Brand */}
       <div className="kp-header__brand">
-        <svg className="kp-header__logo" width="30" height="30" viewBox="0 0 30 30" fill="none" aria-label="Bingnondo Kitchen">
-          <rect width="30" height="30" rx="6" fill="#22C55E"/>
-          <path d="M7 9h10a5 5 0 013.5 1.5 4 4 0 010 6A5 5 0 0117 21H7V9z" fill="#0F172A" fillRule="evenodd" clipRule="evenodd"/>
-          <path d="M7 15h10" stroke="#22C55E" strokeWidth="2"/>
+        <svg className="kp-header__logo" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-label="Bingnondo Kitchen">
+          <rect width="32" height="32" rx="7" fill="var(--color-primary)"/>
+          <path d="M8 9h10a5 5 0 013.5 1.5 4 4 0 010 6A5 5 0 0118 22H8V9z" fill="#FDF6EC" fillRule="evenodd" clipRule="evenodd"/>
+          <path d="M8 15.5h10" stroke="var(--color-primary)" strokeWidth="2"/>
         </svg>
         <div className="kp-header__brand-text">
           <span className="kp-header__name">Bingnondo</span>
@@ -53,7 +53,7 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
           <span className="kp-header__date">{dateStr}</span>
         </div>
         <div className="kp-header__user">
-          <span className="kp-header__username" aria-label={`Signed in as ${user?.full_name || 'Kitchen'}`}>
+          <span className="kp-header__username">
             {user?.full_name || user?.name || 'Kitchen'}
           </span>
           <button
