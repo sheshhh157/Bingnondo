@@ -297,7 +297,6 @@ export const categoriesAPI = {
 };
 
 export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMenuAPI, categoriesAPI };
-export default { authAPI, menuAPI, ordersAPI, paymentsAPI };
 // ─── KITCHEN ──────────────────────────────────────────────────────────────────
 const minsAgo = (m) => new Date(Date.now() - m * 60 * 1000).toISOString();
 
