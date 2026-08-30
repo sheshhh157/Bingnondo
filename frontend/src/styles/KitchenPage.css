@@ -96,14 +96,14 @@
   border: 0;
 }
 
-:focus-visible {
+.kp-root :focus-visible {
   outline: 2px solid #0D7A5F;
   outline-offset: 2px;
   border-radius: var(--k-r-sm);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  .kp-root *, .kp-root *::before, .kp-root *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }

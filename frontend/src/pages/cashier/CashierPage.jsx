@@ -7,7 +7,7 @@ import OrderDraft from './components/OrderDraft';
 import PaymentModal from './components/PaymentModal';
 import CashierHeader from './components/CashierHeader';
 import TransactionHistory from './components/TransactionHistory';
-import './CashierPage.css';
+import '../../styles/CashierPage.css';
 
 export const VIEWS = { ORDER: 'order', HISTORY: 'history' };
 

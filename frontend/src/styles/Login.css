@@ -1,6 +1,3 @@
-/* ─── Google Fonts ───────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Noto+Sans+TC:wght@300;400;500;600&display=swap');
-
 /* ═══════════════════════════════════════════════════════════════════
    LUCKY CAT PALETTE
    Dark Maroon   #2D0000  (cat body)
@@ -419,10 +416,10 @@
   border: 2.5px solid rgba(245,237,216,0.3);
   border-top-color: #F5EDD8;
   border-radius: 50%;
-  animation: spin 0.65s linear infinite;
+  animation: login-spin 0.65s linear infinite;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes login-spin { to { transform: rotate(360deg); } }
 
 /* ─── Footer ─────────────────────────────────────────────────────── */
 .login-form__footer {

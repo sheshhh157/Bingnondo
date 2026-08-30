@@ -1,4 +1,4 @@
-import './StaffPlaceholder.css';
+import '../../styles/StaffPlaceholder.css';
 
 const CONFIG = {
   delivery: {

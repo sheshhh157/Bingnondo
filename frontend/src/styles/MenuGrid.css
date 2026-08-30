@@ -222,7 +222,7 @@
 .menu-retry-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
 /* ─── Skeleton ───────────────────────────────────────────────────────── */
-@keyframes shimmer {
+@keyframes mg-shimmer {
   from { background-position: -400px 0; }
   to   { background-position: 400px 0; }
 }
@@ -231,7 +231,7 @@
 .skeleton-line {
   background: linear-gradient(90deg, var(--color-muted) 25%, var(--color-border) 50%, var(--color-muted) 75%);
   background-size: 800px 100%;
-  animation: shimmer 1.4s infinite linear;
+  animation: mg-shimmer 1.4s infinite linear;
   border-radius: var(--radius-sm);
 }
 

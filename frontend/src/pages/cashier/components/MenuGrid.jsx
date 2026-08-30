@@ -1,4 +1,4 @@
-import './MenuGrid.css';
+import '../../../styles/MenuGrid.css';
 
 export default function MenuGrid({ items, loading, error, onAdd, onRetry, draft }) {
   if (loading) return <MenuSkeleton />;

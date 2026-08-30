@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { staffMenuAPI, inventoryAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
-import './MenuPage.css';
+import '../../styles/MenuPage.css';
 
 // ─── Toast (matches codebase — no external lib) ───────────────────────────────
 function useToast() {

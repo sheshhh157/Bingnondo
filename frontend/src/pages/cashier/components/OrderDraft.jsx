@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import './OrderDraft.css';
+import '../../../styles/OrderDraft.css';
 
 const fmt = (n) => `₱${Number(n).toFixed(2)}`;
 
