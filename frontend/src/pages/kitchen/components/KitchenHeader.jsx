@@ -1,4 +1,5 @@
 import { useAuth } from '../../../context/AuthContext';
+import logo1 from '../../../assets/logo2.png';
 
 export default function KitchenHeader({ counterCount, onlineCount }) {
   const { user, logout } = useAuth();
@@ -10,11 +11,11 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
     <header className="kp-header" role="banner">
       {/* Brand */}
       <div className="kp-header__brand">
-        <svg className="kp-header__logo" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-label="Bingnondo Kitchen">
-          <rect width="32" height="32" rx="7" fill="#0D7A5F"/>
-          <path d="M8 9h10a5 5 0 013.5 1.5 4 4 0 010 6A5 5 0 0118 22H8V9z" fill="#F0FAF6" fillRule="evenodd" clipRule="evenodd"/>
-          <path d="M8 15.5h10" stroke="#0D7A5F" strokeWidth="2"/>
-        </svg>
+        <img
+          src={logo1}
+          alt="Bingnondo Kitchen"
+          className="kp-header__logo"
+        />
         <div className="kp-header__brand-text">
           <span className="kp-header__name">Bingnondo</span>
           <span className="kp-header__role">
