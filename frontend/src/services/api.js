@@ -106,7 +106,8 @@ export const authAPI = {
   staffLogin: async ({ email, password }) => {
     await delay();
     const accounts = [
-      { id: 1, full_name: 'Cashier One', email: 'cashier@bingnondo.com', password: 'cashier123', role: 'cashier' },
+      { id: 1, full_name: 'Cashier One',  email: 'cashier@bingnondo.com', password: 'cashier123', role: 'cashier' },
+      { id: 2, full_name: 'Kitchen Staff', email: 'kitchen@bingnondo.com', password: 'kitchen123', role: 'kitchen_staff' },
     ];
     const user = accounts.find((a) => a.email === email && a.password === password);
     if (!user) throw { response: { data: { message: 'Invalid credentials. Try again.' } } };
@@ -180,3 +181,149 @@ export const paymentsAPI = {
 };
 
 export default { authAPI, menuAPI, ordersAPI, paymentsAPI };
+// ─── KITCHEN ──────────────────────────────────────────────────────────────────
+const minsAgo = (m) => new Date(Date.now() - m * 60 * 1000).toISOString();
+
+let MOCK_KITCHEN_ORDERS = [
+  // ── COUNTER ──────────────────────────────────────────────────────────────
+  {
+    id: 2001, order_number: 'ORD-2001', status: 'confirmed', order_channel: 'counter',
+    created_at: minsAgo(2),
+    order_items: [
+      { id: 1, quantity: 2, notes: '',            menu_item: { name: 'Tapsilog' } },
+      { id: 2, quantity: 1, notes: 'extra spicy', menu_item: { name: 'Goto' } },
+      { id: 3, quantity: 1, notes: '',            menu_item: { name: 'Iced Tea' } },
+    ],
+  },
+  {
+    id: 2003, order_number: 'ORD-2003', status: 'preparing', order_channel: 'counter',
+    created_at: minsAgo(7),
+    order_items: [
+      { id: 7, quantity: 3, notes: 'no garlic', menu_item: { name: 'Longsilog' } },
+      { id: 8, quantity: 2, notes: '',          menu_item: { name: 'Extra Rice' } },
+    ],
+  },
+  {
+    id: 2005, order_number: 'ORD-2005', status: 'confirmed', order_channel: 'counter',
+    created_at: minsAgo(4),
+    order_items: [
+      { id: 11, quantity: 1, notes: '', menu_item: { name: 'Adobo Rice' } },
+      { id: 12, quantity: 1, notes: '', menu_item: { name: 'Coke Regular' } },
+    ],
+  },
+  {
+    id: 2007, order_number: 'ORD-2007', status: 'preparing', order_channel: 'counter',
+    created_at: minsAgo(10),
+    order_items: [
+      { id: 15, quantity: 2, notes: '', menu_item: { name: 'Fried Chicken' } },
+      { id: 16, quantity: 2, notes: '', menu_item: { name: 'Extra Rice' } },
+      { id: 17, quantity: 2, notes: '', menu_item: { name: 'Pineapple Juice' } },
+    ],
+  },
+  {
+    id: 2009, order_number: 'ORD-2009', status: 'confirmed', order_channel: 'counter',
+    created_at: minsAgo(16),
+    order_items: [
+      { id: 19, quantity: 1, notes: 'less sugar', menu_item: { name: 'Arroz Caldo' } },
+      { id: 20, quantity: 1, notes: '',           menu_item: { name: 'Hot Coffee' } },
+    ],
+  },
+  {
+    id: 2011, order_number: 'ORD-2011', status: 'confirmed', order_channel: 'counter',
+    created_at: minsAgo(1),
+    order_items: [
+      { id: 23, quantity: 4, notes: '', menu_item: { name: 'Lumpiang Shanghai' } },
+      { id: 24, quantity: 2, notes: '', menu_item: { name: 'Bottled Water' } },
+    ],
+  },
+  // ── ONLINE ───────────────────────────────────────────────────────────────
+  {
+    id: 2002, order_number: 'ORD-2002', status: 'preparing', order_channel: 'mobile_app',
+    created_at: minsAgo(9),
+    order_items: [
+      { id: 4, quantity: 1, notes: '', menu_item: { name: 'Sinigang Set' } },
+      { id: 5, quantity: 2, notes: '', menu_item: { name: 'Iced Tea' } },
+    ],
+  },
+  {
+    id: 2004, order_number: 'ORD-2004', status: 'confirmed', order_channel: 'mobile_app',
+    created_at: minsAgo(3),
+    order_items: [
+      { id: 9,  quantity: 1, notes: '',       menu_item: { name: 'Bangsilog' } },
+      { id: 10, quantity: 1, notes: 'no ice', menu_item: { name: 'Pineapple Juice' } },
+      { id: 11, quantity: 1, notes: '',       menu_item: { name: 'Extra Egg' } },
+    ],
+  },
+  {
+    id: 2006, order_number: 'ORD-2006', status: 'confirmed', order_channel: 'mobile_app',
+    created_at: minsAgo(8),
+    order_items: [
+      { id: 13, quantity: 2, notes: 'extra sauce', menu_item: { name: 'Tapsilog' } },
+      { id: 14, quantity: 2, notes: '',            menu_item: { name: 'Coke Zero' } },
+    ],
+  },
+  {
+    id: 2008, order_number: 'ORD-2008', status: 'preparing', order_channel: 'mobile_app',
+    created_at: minsAgo(5),
+    order_items: [
+      { id: 18, quantity: 1, notes: '', menu_item: { name: 'Pancit Bihon' } },
+      { id: 19, quantity: 1, notes: '', menu_item: { name: 'Goto' } },
+      { id: 20, quantity: 1, notes: '', menu_item: { name: 'Hot Coffee' } },
+    ],
+  },
+  {
+    id: 2010, order_number: 'ORD-2010', status: 'confirmed', order_channel: 'mobile_app',
+    created_at: minsAgo(20),
+    order_items: [
+      { id: 21, quantity: 2, notes: '', menu_item: { name: 'Bistek Rice' } },
+      { id: 22, quantity: 2, notes: '', menu_item: { name: 'Iced Tea' } },
+    ],
+  },
+  {
+    id: 2012, order_number: 'ORD-2012', status: 'confirmed', order_channel: 'mobile_app',
+    created_at: minsAgo(1),
+    order_items: [
+      { id: 25, quantity: 1, notes: 'well done', menu_item: { name: 'Tocilog' } },
+      { id: 26, quantity: 1, notes: '',          menu_item: { name: 'Extra Rice' } },
+      { id: 27, quantity: 1, notes: '',          menu_item: { name: 'Bottled Water' } },
+    ],
+  },
+];
+
+let MOCK_ALERTS = [
+  {
+    id: 301, order_id: 2001, acknowledged_at: null,
+    order: { order_number: 'ORD-2001' },
+    esp32_device: { location_label: 'Table 4' },
+  },
+  {
+    id: 302, order_id: 2004, acknowledged_at: null,
+    order: { order_number: 'ORD-2004' },
+    esp32_device: { location_label: 'Table 7' },
+  },
+];
+export const kitchenAPI = {
+  getOrders: async () => {
+    await delay(400);
+    return { data: MOCK_KITCHEN_ORDERS.filter((o) => ['confirmed', 'preparing'].includes(o.status)) };
+  },
+
+  updateOrderStatus: async (orderId, status) => {
+    await delay(300);
+    const order = MOCK_KITCHEN_ORDERS.find((o) => o.id === Number(orderId));
+    if (order) order.status = status;
+    return { data: { success: true } };
+  },
+
+  getAlerts: async () => {
+    await delay(200);
+    return { data: MOCK_ALERTS };
+  },
+
+  acknowledgeAlert: async (alertId) => {
+    await delay(200);
+    const alert = MOCK_ALERTS.find((a) => a.id === Number(alertId));
+    if (alert) alert.acknowledged_at = new Date().toISOString();
+    return { data: { success: true } };
+  },
+};
