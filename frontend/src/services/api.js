@@ -10,7 +10,7 @@ const MOCK_CATEGORIES = [
   { id: 5, name: 'Add-ons' },
 ];
 
-const MOCK_MENU_ITEMS = [
+let MOCK_MENU_ITEMS = [
   // Silog Meals
   { id: 1,  category_id: 1, name: 'Tapsilog',      description: 'Beef tapa, sinangag, itlog',      price: 120, is_available: true,  image_url: null },
   { id: 2,  category_id: 1, name: 'Longsilog',     description: 'Longganisa, sinangag, itlog',     price: 110, is_available: true,  image_url: null },
@@ -26,24 +26,26 @@ const MOCK_MENU_ITEMS = [
   { id: 10, category_id: 2, name: 'Bistek Rice',   description: 'Beef bistek with steamed rice',   price: 145, is_available: false, image_url: null },
 
   // Merienda
-  { id: 11, category_id: 3, name: 'Pancit Bihon',  description: 'Stir-fried rice noodles',         price: 75,  is_available: true,  image_url: null },
-  { id: 12, category_id: 3, name: 'Lumpiang Shanghai', description: '5 pcs with sweet chili sauce', price: 65, is_available: true,  image_url: null },
-  { id: 13, category_id: 3, name: 'Goto',          description: 'Rice congee with beef tripe',     price: 85,  is_available: true,  image_url: null },
-  { id: 14, category_id: 3, name: 'Arroz Caldo',   description: 'Chicken congee with ginger',      price: 80,  is_available: true,  image_url: null },
+  { id: 11, category_id: 3, name: 'Pancit Bihon',      description: 'Stir-fried rice noodles',         price: 75,  is_available: true,  image_url: null },
+  { id: 12, category_id: 3, name: 'Lumpiang Shanghai',  description: '5 pcs with sweet chili sauce',    price: 65,  is_available: true,  image_url: null },
+  { id: 13, category_id: 3, name: 'Goto',               description: 'Rice congee with beef tripe',     price: 85,  is_available: true,  image_url: null },
+  { id: 14, category_id: 3, name: 'Arroz Caldo',        description: 'Chicken congee with ginger',      price: 80,  is_available: true,  image_url: null },
 
   // Drinks
-  { id: 15, category_id: 4, name: 'Coke Regular',  description: '12oz bottle',                     price: 40,  is_available: true,  image_url: null },
-  { id: 16, category_id: 4, name: 'Coke Zero',     description: '12oz bottle',                     price: 40,  is_available: true,  image_url: null },
-  { id: 17, category_id: 4, name: 'Iced Tea',      description: 'House blend, 16oz',               price: 45,  is_available: true,  image_url: null },
-  { id: 18, category_id: 4, name: 'Bottled Water', description: '500ml',                           price: 25,  is_available: true,  image_url: null },
-  { id: 19, category_id: 4, name: 'Pineapple Juice', description: 'Fresh, 16oz',                   price: 55,  is_available: true,  image_url: null },
-  { id: 20, category_id: 4, name: 'Hot Coffee',    description: 'Brewed coffee',                   price: 60,  is_available: true,  image_url: null },
+  { id: 15, category_id: 4, name: 'Coke Regular',    description: '12oz bottle',       price: 40,  is_available: true,  image_url: null },
+  { id: 16, category_id: 4, name: 'Coke Zero',       description: '12oz bottle',       price: 40,  is_available: true,  image_url: null },
+  { id: 17, category_id: 4, name: 'Iced Tea',        description: 'House blend, 16oz', price: 45,  is_available: true,  image_url: null },
+  { id: 18, category_id: 4, name: 'Bottled Water',   description: '500ml',             price: 25,  is_available: true,  image_url: null },
+  { id: 19, category_id: 4, name: 'Pineapple Juice', description: 'Fresh, 16oz',       price: 55,  is_available: true,  image_url: null },
+  { id: 20, category_id: 4, name: 'Hot Coffee',      description: 'Brewed coffee',     price: 60,  is_available: true,  image_url: null },
 
   // Add-ons
-  { id: 21, category_id: 5, name: 'Extra Rice',    description: '',                                price: 20,  is_available: true,  image_url: null },
-  { id: 22, category_id: 5, name: 'Extra Egg',     description: '',                                price: 20,  is_available: true,  image_url: null },
-  { id: 23, category_id: 5, name: 'Extra Sauce',   description: '',                                price: 10,  is_available: true,  image_url: null },
+  { id: 21, category_id: 5, name: 'Extra Rice',  description: '', price: 20, is_available: true, image_url: null },
+  { id: 22, category_id: 5, name: 'Extra Egg',   description: '', price: 20, is_available: true, image_url: null },
+  { id: 23, category_id: 5, name: 'Extra Sauce', description: '', price: 10, is_available: true, image_url: null },
 ];
+
+let menuItemCounter = 24;
 
 // Mock transaction history — mga lumang orders para sa TransactionHistory tab
 const today = new Date();
@@ -98,6 +100,30 @@ let MOCK_ORDERS = [
 
 let orderCounter = 1006;
 
+// Mock inventory
+let MOCK_INVENTORY = [
+  { id: 1,  name: 'Beef Tapa',       unit: 'g',   current_stock: 2400, reorder_level: 500  },
+  { id: 2,  name: 'Longganisa',      unit: 'pcs', current_stock: 80,   reorder_level: 20   },
+  { id: 3,  name: 'Tocino',          unit: 'g',   current_stock: 1800, reorder_level: 400  },
+  { id: 4,  name: 'Bangus',          unit: 'pcs', current_stock: 12,   reorder_level: 10   },
+  { id: 5,  name: 'Spam',            unit: 'can', current_stock: 4,    reorder_level: 6    },
+  { id: 6,  name: 'Corned Beef',     unit: 'can', current_stock: 18,   reorder_level: 6    },
+  { id: 7,  name: 'Chicken',         unit: 'g',   current_stock: 3200, reorder_level: 800  },
+  { id: 8,  name: 'Pork',            unit: 'g',   current_stock: 0,    reorder_level: 600  },
+  { id: 9,  name: 'Eggs',            unit: 'pcs', current_stock: 55,   reorder_level: 24   },
+  { id: 10, name: 'Jasmine Rice',    unit: 'kg',  current_stock: 22,   reorder_level: 5    },
+  { id: 11, name: 'Garlic',          unit: 'g',   current_stock: 350,  reorder_level: 150  },
+  { id: 12, name: 'Cooking Oil',     unit: 'ml',  current_stock: 1200, reorder_level: 500  },
+  { id: 13, name: 'Soy Sauce',       unit: 'ml',  current_stock: 800,  reorder_level: 300  },
+  { id: 14, name: 'Calamansi',       unit: 'pcs', current_stock: 30,   reorder_level: 20   },
+  { id: 15, name: 'Tamarind',        unit: 'g',   current_stock: 0,    reorder_level: 100  },
+  { id: 16, name: 'Rice Noodles',    unit: 'g',   current_stock: 900,  reorder_level: 250  },
+  { id: 17, name: 'Spring Roll Wrap',unit: 'pcs', current_stock: 60,   reorder_level: 30   },
+  { id: 18, name: 'Ground Pork',     unit: 'g',   current_stock: 1100, reorder_level: 300  },
+  { id: 19, name: 'Ginger',          unit: 'g',   current_stock: 180,  reorder_level: 80   },
+  { id: 20, name: 'Brewed Coffee',   unit: 'g',   current_stock: 450,  reorder_level: 100  },
+];
+
 // ─── HELPER: simulate network delay ──────────────────────────────────────────
 const delay = (ms = 300) => new Promise((res) => setTimeout(res, ms));
 
@@ -107,6 +133,8 @@ export const authAPI = {
     await delay();
     const accounts = [
       { id: 1, full_name: 'Cashier One',  email: 'cashier@bingnondo.com', password: 'cashier123', role: 'cashier' },
+      { id: 2, full_name: 'Staff Member', email: 'staff@bingnondo.com',   password: 'staff123',   role: 'staff'   },
+      { id: 3, full_name: 'Owner',        email: 'owner@bingnondo.com',   password: 'owner123',   role: 'owner'   },
       { id: 2, full_name: 'Kitchen Staff', email: 'kitchen@bingnondo.com', password: 'kitchen123', role: 'kitchen_staff' },
     ];
     const user = accounts.find((a) => a.email === email && a.password === password);
@@ -117,7 +145,7 @@ export const authAPI = {
   logout: async () => { await delay(100); return { data: { message: 'Logged out.' } }; },
 };
 
-// ─── MENU ─────────────────────────────────────────────────────────────────────
+// ─── MENU (cashier read) ──────────────────────────────────────────────────────
 export const menuAPI = {
   getAll: async () => {
     await delay(400);
@@ -180,6 +208,95 @@ export const paymentsAPI = {
   },
 };
 
+// ─── INVENTORY (§4.1) ─────────────────────────────────────────────────────────
+export const inventoryAPI = {
+  getAll: async () => {
+    await delay(350);
+    return { data: { items: [...MOCK_INVENTORY] } };
+  },
+
+  transaction: async (id, { change_type, quantity, note }) => {
+    await delay(400);
+    const item = MOCK_INVENTORY.find((i) => i.id === id);
+    if (!item) throw { response: { data: { message: 'Item not found.' } } };
+    if (change_type === 'restock') {
+      item.current_stock += Number(quantity);
+    } else if (change_type === 'adjustment') {
+      item.current_stock = Number(quantity);
+    }
+    return { data: { ...item } };
+  },
+};
+
+// ─── STAFF MENU (§4.2) — full CRUD, separate from cashier read-only ───────────
+export const staffMenuAPI = {
+  getAll: async () => {
+    await delay(350);
+    // Enrich items with category_name
+    const enriched = MOCK_MENU_ITEMS.map((item) => ({
+      ...item,
+      category_name: MOCK_CATEGORIES.find((c) => c.id === item.category_id)?.name || '—',
+    }));
+    return { data: { categories: MOCK_CATEGORIES, items: enriched } };
+  },
+
+  create: async (payload) => {
+    await delay(500);
+    const cat = MOCK_CATEGORIES.find((c) => c.id === Number(payload.category_id));
+    const newItem = {
+      id: menuItemCounter++,
+      category_id: Number(payload.category_id),
+      category_name: cat?.name || '—',
+      name: payload.name,
+      description: payload.description || '',
+      price: Number(payload.price),
+      is_available: payload.is_available ?? true,
+      image_url: payload.image_url || null,
+    };
+    MOCK_MENU_ITEMS = [...MOCK_MENU_ITEMS, newItem];
+    return { data: newItem };
+  },
+
+  update: async (id, payload) => {
+    await delay(450);
+    const idx = MOCK_MENU_ITEMS.findIndex((i) => i.id === id);
+    if (idx === -1) throw { response: { data: { message: 'Item not found.' } } };
+    const cat = MOCK_CATEGORIES.find((c) => c.id === Number(payload.category_id));
+    const updated = {
+      ...MOCK_MENU_ITEMS[idx],
+      ...payload,
+      category_id: Number(payload.category_id),
+      category_name: cat?.name || '—',
+      price: Number(payload.price),
+    };
+    MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.map((i) => (i.id === id ? updated : i));
+    return { data: updated };
+  },
+
+  setAvailability: async (id, is_available) => {
+    await delay(250);
+    MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.map((i) =>
+      i.id === id ? { ...i, is_available } : i
+    );
+    return { data: { id, is_available } };
+  },
+
+  remove: async (id) => {
+    await delay(350);
+    MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.filter((i) => i.id !== id);
+    return { data: { success: true } };
+  },
+};
+
+// ─── CATEGORIES (§4.2) ────────────────────────────────────────────────────────
+export const categoriesAPI = {
+  getAll: async () => {
+    await delay(200);
+    return { data: { categories: [...MOCK_CATEGORIES] } };
+  },
+};
+
+export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMenuAPI, categoriesAPI };
 export default { authAPI, menuAPI, ordersAPI, paymentsAPI };
 // ─── KITCHEN ──────────────────────────────────────────────────────────────────
 const minsAgo = (m) => new Date(Date.now() - m * 60 * 1000).toISOString();

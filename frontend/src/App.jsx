@@ -2,6 +2,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/auth/Login';
 import CashierPage from './pages/cashier/CashierPage';
+import StaffLayout from './pages/staff/StaffLayout';
+import InventoryPage from './pages/staff/InventoryPage';
+import MenuPage from './pages/staff/MenuPage';
+import StaffPlaceholder from './pages/staff/StaffPlaceholder';
 import KitchenPage from './pages/kitchen/KitchenPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -19,6 +23,8 @@ function ProtectedRoute({ children, allowedRoles }) {
 function RoleRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'cashier') return <Navigate to="/cashier" replace />;
+  if (user.role === 'staff' || user.role === 'owner') return <Navigate to="/staff/inventory" replace />;
   if (user.role === 'cashier')       return <Navigate to="/cashier" replace />;
   if (user.role === 'kitchen_staff') return <Navigate to="/kitchen" replace />;
   // Other roles redirect to login until their pages are built
@@ -32,6 +38,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
 
+          {/* Cashier */}
           <Route
             path="/cashier"
             element={
@@ -40,6 +47,22 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Staff — nested under StaffLayout */}
+          <Route
+            path="/staff"
+            element={
+              <ProtectedRoute allowedRoles={['staff', 'owner']}>
+                <StaffLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/staff/inventory" replace />} />
+            <Route path="inventory" element={<InventoryPage />} />
+            <Route path="menu" element={<MenuPage />} />
+            <Route path="delivery" element={<StaffPlaceholder type="delivery" />} />
+            <Route path="chat" element={<StaffPlaceholder type="chat" />} />
+          </Route>
 
           <Route
             path="/kitchen"
