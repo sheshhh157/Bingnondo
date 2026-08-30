@@ -30,3 +30,9 @@ export const disconnectSocket = () => {
 };
 
 export default getSocket;
+// ─── Kitchen-specific socket event names ──────────────────────────────────────
+export const KITCHEN_EVENTS = {
+  NEW_ORDER:          'new_order',
+  ORDER_STATUS_UPDATE:'order_status_update',
+  KITCHEN_ALERT:      'kitchen_alert',
+};
