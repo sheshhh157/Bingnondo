@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { inventoryAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
-import './InventoryPage.css';
+import '../../styles/InventoryPage.css';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function stockStatus(current, reorder) {

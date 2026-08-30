@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { paymentsAPI } from '../../../services/api';
-import './PaymentModal.css';
+import '../../../styles/PaymentModal.css';
 
 const fmt = (n) => `₱${Number(n).toFixed(2)}`;
 

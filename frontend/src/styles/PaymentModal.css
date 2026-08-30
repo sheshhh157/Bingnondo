@@ -333,10 +333,10 @@
   border: 2.5px solid rgba(253,246,236,0.3);
   border-top-color: var(--color-on-primary);
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: pm-spin 0.6s linear infinite;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pm-spin { to { transform: rotate(360deg); } }
 
 /* ─── Receipt ────────────────────────────────────────────────────────── */
 .pm-receipt {

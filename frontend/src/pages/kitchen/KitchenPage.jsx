@@ -5,7 +5,7 @@ import KitchenHeader from './components/KitchenHeader';
 import OrderColumn from './components/OrderColumn';
 import AlertPanel from './components/AlertPanel';
 import ConnectionStatus from './components/ConnectionStatus';
-import './KitchenPage.css';
+import '../../styles/KitchenPage.css';
 
 // ─── Reducers ────────────────────────────────────────────────────────────────
 function ordersReducer(state, action) {

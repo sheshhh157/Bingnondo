@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ordersAPI } from '../../../services/api';
-import './TransactionHistory.css';
+import '../../../styles/TransactionHistory.css';
 
 const STATUS_LABEL = {
   pending: 'Pending',
