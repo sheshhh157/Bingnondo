@@ -443,3 +443,180 @@ export const kitchenAPI = {
     return { data: { success: true } };
   },
 };
+
+// ─── DELIVERY MOCK DATA (§4.3) ────────────────────────────────────────────────
+let MOCK_DELIVERIES = [
+  {
+    id: 1,
+    order_id: 1003,
+    status: 'pending_assignment',
+    delivery_preference: 'own',
+    rider_name: null,
+    rider_contact: null,
+    lalamove_booking_id: null,
+    order: {
+      order_number: 'ORD-1003',
+      created_at: hrsAgo(0.13),
+      customer_name: 'Maria Santos',
+      customer_address: '45 Rizal St., Binondo, Manila',
+      order_items: [
+        { quantity: 1, menu_item: { name: 'Tapsilog' } },
+        { quantity: 2, menu_item: { name: 'Iced Tea' } },
+      ],
+    },
+  },
+  {
+    id: 2,
+    order_id: 1004,
+    status: 'pending_assignment',
+    delivery_preference: 'lalamove',
+    rider_name: null,
+    rider_contact: null,
+    lalamove_booking_id: null,
+    order: {
+      order_number: 'ORD-1004',
+      created_at: hrsAgo(0.2),
+      customer_name: 'Jose Reyes',
+      customer_address: '12 Ongpin St., Binondo, Manila',
+      order_items: [
+        { quantity: 1, menu_item: { name: 'Sinigang Set' } },
+        { quantity: 1, menu_item: { name: 'Extra Rice' } },
+      ],
+    },
+  },
+  {
+    id: 3,
+    order_id: 1005,
+    status: 'assigned',
+    delivery_preference: 'own',
+    rider_name: 'Carlo Mendoza',
+    rider_contact: '09171234567',
+    lalamove_booking_id: null,
+    order: {
+      order_number: 'ORD-1005',
+      created_at: hrsAgo(0.42),
+      customer_name: 'Ana Cruz',
+      customer_address: '78 Nueva St., Binondo, Manila',
+      order_items: [
+        { quantity: 2, menu_item: { name: 'Longsilog' } },
+        { quantity: 2, menu_item: { name: 'Bottled Water' } },
+      ],
+    },
+  },
+  {
+    id: 4,
+    order_id: 1006,
+    status: 'assigned',
+    delivery_preference: 'lalamove',
+    rider_name: null,
+    rider_contact: null,
+    lalamove_booking_id: 'LLM-20248801',
+    order: {
+      order_number: 'ORD-1006',
+      created_at: hrsAgo(0.5),
+      customer_name: 'Pedro Lim',
+      customer_address: '3 Yuchengco St., Binondo, Manila',
+      order_items: [
+        { quantity: 1, menu_item: { name: 'Fried Chicken' } },
+        { quantity: 1, menu_item: { name: 'Coke Regular' } },
+      ],
+    },
+  },
+  {
+    id: 5,
+    order_id: 1007,
+    status: 'out_for_delivery',
+    delivery_preference: 'own',
+    rider_name: 'Ramon Garcia',
+    rider_contact: '09189876543',
+    lalamove_booking_id: null,
+    order: {
+      order_number: 'ORD-1007',
+      created_at: hrsAgo(0.75),
+      customer_name: 'Luz Tan',
+      customer_address: '22 Carvajal St., Binondo, Manila',
+      order_items: [
+        { quantity: 1, menu_item: { name: 'Bangsilog' } },
+        { quantity: 1, menu_item: { name: 'Pineapple Juice' } },
+        { quantity: 1, menu_item: { name: 'Extra Egg' } },
+      ],
+    },
+  },
+  {
+    id: 6,
+    order_id: 1008,
+    status: 'delivered',
+    delivery_preference: 'own',
+    rider_name: 'Carlo Mendoza',
+    rider_contact: '09171234567',
+    lalamove_booking_id: null,
+    order: {
+      order_number: 'ORD-1008',
+      created_at: hrsAgo(1.5),
+      customer_name: 'Rosa Villanueva',
+      customer_address: '5 Globo de Oro St., Binondo, Manila',
+      order_items: [
+        { quantity: 3, menu_item: { name: 'Adobo Rice' } },
+        { quantity: 3, menu_item: { name: 'Iced Tea' } },
+      ],
+    },
+  },
+  {
+    id: 7,
+    order_id: 1009,
+    status: 'cancelled',
+    delivery_preference: 'own',
+    rider_name: null,
+    rider_contact: null,
+    lalamove_booking_id: null,
+    order: {
+      order_number: 'ORD-1009',
+      created_at: hrsAgo(2),
+      customer_name: 'Tony Uy',
+      customer_address: '88 Quintin Paredes St., Binondo, Manila',
+      order_items: [
+        { quantity: 1, menu_item: { name: 'Cornsilog' } },
+      ],
+    },
+  },
+];
+
+let deliveryCounter = 8;
+
+// ─── DELIVERY API (§4.3) ──────────────────────────────────────────────────────
+export const deliveryAPI = {
+  /** GET /api/deliveries — all deliveries for staff view */
+  getAll: async () => {
+    await delay(400);
+    return { data: { deliveries: [...MOCK_DELIVERIES] } };
+  },
+
+  /** POST /api/deliveries/:id/assign — assign rider or book Lalamove */
+  assign: async (id, payload) => {
+    await delay(500);
+    const delivery = MOCK_DELIVERIES.find((d) => d.id === id);
+    if (!delivery) throw { response: { data: { message: 'Delivery not found.' } } };
+
+    delivery.status = 'assigned';
+    delivery.delivery_preference = payload.delivery_preference;
+
+    if (payload.delivery_preference === 'lalamove') {
+      // Simulate Lalamove booking ID
+      delivery.lalamove_booking_id = `LLM-${Date.now().toString().slice(-8)}`;
+    } else {
+      delivery.rider_name    = payload.rider_name;
+      delivery.rider_contact = payload.rider_contact;
+    }
+
+    return { data: { ...delivery } };
+  },
+
+  /** PATCH /api/deliveries/:id/status — update delivery status */
+  updateStatus: async (id, status) => {
+    await delay(350);
+    const delivery = MOCK_DELIVERIES.find((d) => d.id === id);
+    if (!delivery) throw { response: { data: { message: 'Delivery not found.' } } };
+    delivery.status = status;
+    return { data: { ...delivery } };
+  },
+};
