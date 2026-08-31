@@ -33,23 +33,87 @@ function StockBar({ current, reorder }) {
   );
 }
 
-// ─── Toast helper (no external lib — matches codebase pattern) ────────────────
+// ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
   const [msg, setMsg] = useState('');
   const [type, setType] = useState('success');
   const timerRef = useRef(null);
-
   const show = useCallback((message, t = 'success') => {
     clearTimeout(timerRef.current);
     setMsg(message);
     setType(t);
     timerRef.current = setTimeout(() => setMsg(''), 3000);
   }, []);
-
   return { msg, type, show };
 }
 
-// ─── Transaction Modal ─────────────────────────────────────────────────────────
+// ─── Pagination ───────────────────────────────────────────────────────────────
+const PER_PAGE_OPTIONS = [5, 8, 10, 15, 20, 50];
+
+function Pagination({ page, totalPages, total, perPage, from, to, onPage, onPerPage }) {
+  const pages = [];
+  const delta = 1;
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= page - delta && i <= page + delta)) {
+      pages.push(i);
+    } else if (pages[pages.length - 1] !== '…') {
+      pages.push('…');
+    }
+  }
+
+  return (
+    <div className="pag" role="navigation" aria-label="Pagination">
+      {/* Left: info + per-page selector */}
+      <div className="pag__left">
+        <span className="pag__info">{from}–{to} of {total}</span>
+        <label className="pag__limit-label" htmlFor="inv-per-page">
+          Show
+          <select
+            id="inv-per-page"
+            className="pag__limit-select"
+            value={perPage}
+            onChange={(e) => { onPerPage(Number(e.target.value)); onPage(1); }}
+            aria-label="Items per page"
+          >
+            {PER_PAGE_OPTIONS.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          per page
+        </label>
+      </div>
+
+      {/* Right: page buttons — hidden when only 1 page */}
+      {totalPages > 1 && (
+        <div className="pag__controls">
+          <button className="pag__btn" onClick={() => onPage(page - 1)} disabled={page === 1} aria-label="Previous page">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          {pages.map((p, i) =>
+            p === '…'
+              ? <span key={`e${i}`} className="pag__ellipsis">…</span>
+              : <button
+                  key={p}
+                  className={`pag__btn pag__btn--num${p === page ? ' pag__btn--active' : ''}`}
+                  onClick={() => onPage(p)}
+                  aria-label={`Page ${p}`}
+                  aria-current={p === page ? 'page' : undefined}
+                >{p}</button>
+          )}
+          <button className="pag__btn" onClick={() => onPage(page + 1)} disabled={page === totalPages} aria-label="Next page">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Transaction Modal ────────────────────────────────────────────────────────
 function TransactionModal({ item, type, onClose, onSubmit }) {
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
@@ -210,7 +274,10 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('name');
-  const [modal, setModal] = useState(null); // { item, type }
+  const [modal, setModal] = useState(null);
+  const [page, setPage] = useState(1);
+  const [perPageTable, setPerPageTable] = useState(10);
+  const [perPageCards, setPerPageCards] = useState(8);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchItems = useCallback(async () => {
@@ -256,7 +323,6 @@ export default function InventoryPage() {
     if (filterStatus === 'out') r = r.filter((i) => i.current_stock <= 0);
     else if (filterStatus === 'low') r = r.filter((i) => i.current_stock > 0 && i.current_stock <= i.reorder_level);
     else if (filterStatus === 'ok') r = r.filter((i) => i.current_stock > i.reorder_level);
-
     return [...r].sort((a, b) => {
       if (sortBy === 'name') return a.name.localeCompare(b.name);
       if (sortBy === 'stock_asc') return a.current_stock - b.current_stock;
@@ -264,6 +330,29 @@ export default function InventoryPage() {
       return 0;
     });
   }, [items, search, filterStatus, sortBy]);
+
+  // Reset to page 1 when filters/search/perPage change
+  useEffect(() => { setPage(1); }, [search, filterStatus, sortBy, perPageTable, perPageCards]);
+
+  // Paginated slices
+  const totalPagesTable = Math.max(1, Math.ceil(filtered.length / perPageTable));
+  const totalPagesCards = Math.max(1, Math.ceil(filtered.length / perPageCards));
+  const safePage = Math.min(page, Math.max(totalPagesTable, totalPagesCards));
+
+  const pagedTable = useMemo(() => {
+    const start = (safePage - 1) * perPageTable;
+    return filtered.slice(start, start + perPageTable);
+  }, [filtered, safePage, perPageTable]);
+
+  const pagedCards = useMemo(() => {
+    const start = (safePage - 1) * perPageCards;
+    return filtered.slice(start, start + perPageCards);
+  }, [filtered, safePage, perPageCards]);
+
+  const fromTable = filtered.length === 0 ? 0 : (safePage - 1) * perPageTable + 1;
+  const toTable   = Math.min(safePage * perPageTable, filtered.length);
+  const fromCards = filtered.length === 0 ? 0 : (safePage - 1) * perPageCards + 1;
+  const toCards   = Math.min(safePage * perPageCards, filtered.length);
 
   if (error && !loading) return (
     <div className="inv-error">
@@ -375,7 +464,7 @@ export default function InventoryPage() {
                 </svg>
                 <p>{search ? 'No items match your search.' : 'Inventory is empty.'}</p>
               </div>
-            : filtered.map((item) => (
+            : pagedCards.map((item) => (
                 <InventoryCard
                   key={item.id}
                   item={item}
@@ -385,6 +474,20 @@ export default function InventoryPage() {
               ))
         }
       </div>
+
+      {/* Mobile pagination */}
+      {!loading && filtered.length > 0 && (
+        <Pagination
+          page={safePage}
+          totalPages={totalPagesCards}
+          total={filtered.length}
+          perPage={perPageCards}
+          from={fromCards}
+          to={toCards}
+          onPage={setPage}
+          onPerPage={setPerPageCards}
+        />
+      )}
 
       {/* Desktop table */}
       <div className="inv-table-wrap">
@@ -416,7 +519,7 @@ export default function InventoryPage() {
                       <p>{search ? 'No items match your search.' : 'Inventory is empty.'}</p>
                     </div>
                   </td></tr>
-                : filtered.map((item) => (
+                : pagedTable.map((item) => (
                     <tr key={item.id} className="inv-table__row">
                       <td className="inv-table__td">
                         <span className="inv-table__name">{item.name}</span>
@@ -443,7 +546,16 @@ export default function InventoryPage() {
 
         {!loading && filtered.length > 0 && (
           <div className="inv-table__footer">
-            Showing <strong>{filtered.length}</strong> of <strong>{items.length}</strong> ingredients
+            <Pagination
+              page={safePage}
+              totalPages={totalPagesTable}
+              total={filtered.length}
+              perPage={perPageTable}
+              from={fromTable}
+              to={toTable}
+              onPage={setPage}
+              onPerPage={setPerPageTable}
+            />
           </div>
         )}
       </div>
