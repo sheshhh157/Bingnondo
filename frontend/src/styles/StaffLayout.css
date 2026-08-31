@@ -468,7 +468,7 @@
 }
 
 @media (max-width: 767px) {
-  .sl-main { padding: 20px 16px 40px; }
+  .sl-main { padding: 72px 16px 40px; }
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {

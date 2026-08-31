@@ -403,7 +403,9 @@ function MenuItemRow({ item, onEdit, onDelete, onToggle, toggling }) {
 // ─── Pagination ───────────────────────────────────────────────────────────────
 const PER_PAGE_OPTIONS = [5, 8, 10, 12, 15, 20, 50];
 
-function Pagination({ page, totalPages, total, perPage, from, to, onPage, onPerPage }) {
+function Pagination({ page, totalPages, total, from, to, onPage }) {
+  if (totalPages <= 1 && total <= 5) return null;
+
   const pages = [];
   const delta = 1;
   for (let i = 1; i <= totalPages; i++) {
@@ -416,27 +418,7 @@ function Pagination({ page, totalPages, total, perPage, from, to, onPage, onPerP
 
   return (
     <div className="pag" role="navigation" aria-label="Pagination">
-      {/* Left: info + per-page selector */}
-      <div className="pag__left">
-        <span className="pag__info">{from}–{to} of {total}</span>
-        <label className="pag__limit-label" htmlFor="mn-per-page">
-          Show
-          <select
-            id="mn-per-page"
-            className="pag__limit-select"
-            value={perPage}
-            onChange={(e) => { onPerPage(Number(e.target.value)); onPage(1); }}
-            aria-label="Items per page"
-          >
-            {PER_PAGE_OPTIONS.map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-          per page
-        </label>
-      </div>
-
-      {/* Right: page buttons — hidden when only 1 page */}
+      <span className="pag__info">{from}–{to} of {total}</span>
       {totalPages > 1 && (
         <div className="pag__controls">
           <button className="pag__btn" onClick={() => onPage(page - 1)} disabled={page === 1} aria-label="Previous page">
@@ -644,6 +626,20 @@ export default function MenuPage() {
               </button>
             ))}
           </div>
+
+          <label className="pag__limit-label" htmlFor="mn-per-page">
+            Show
+            <select
+              id="mn-per-page"
+              className="pag__limit-select"
+              value={perPage}
+              onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
+              aria-label="Items per page"
+            >
+              {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            per page
+          </label>
         </div>
       </div>
 
@@ -673,7 +669,7 @@ export default function MenuPage() {
               <MenuItemCard key={item.id} item={item} onEdit={(i) => setModal({ mode: 'edit', item: i })} onDelete={setDeleteTarget} onToggle={handleToggle} toggling={toggling} />
             ))}
           </div>
-          <Pagination page={safePage} totalPages={totalPages} total={filtered.length} perPage={perPage} from={from} to={to} onPage={setPage} onPerPage={setPerPage} />
+          <Pagination page={safePage} totalPages={totalPages} total={filtered.length} from={from} to={to} onPage={setPage} />
         </>
       ) : (
         <div className="mn-table-wrap">
@@ -694,7 +690,7 @@ export default function MenuPage() {
             </tbody>
           </table>
           <div className="mn-table__footer">
-            <Pagination page={safePage} totalPages={totalPages} total={filtered.length} perPage={perPage} from={from} to={to} onPage={setPage} onPerPage={setPerPage} />
+            <Pagination page={safePage} totalPages={totalPages} total={filtered.length} from={from} to={to} onPage={setPage} />
           </div>
         </div>
       )}

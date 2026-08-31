@@ -815,3 +815,13 @@
 .pag__limit-select:focus {
   border-color: var(--color-primary);
 }
+
+
+/* ─── Pagination visibility per breakpoint ──────────────────────────── */
+.inv-pag-mobile {
+  display: block;
+}
+
+@media (min-width: 1024px) {
+  .inv-pag-mobile { display: none; }
+}
