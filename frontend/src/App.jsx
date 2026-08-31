@@ -7,6 +7,8 @@ import InventoryPage from './pages/staff/InventoryPage';
 import MenuPage from './pages/staff/MenuPage';
 import StaffPlaceholder from './pages/staff/StaffPlaceholder';
 import KitchenPage from './pages/kitchen/KitchenPage';
+import OwnerLayout from './pages/owner/OwnerLayout';
+import OwnerDashboard from './pages/owner/OwnerDashboard';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -24,10 +26,9 @@ function RoleRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'cashier') return <Navigate to="/cashier" replace />;
-  if (user.role === 'staff' || user.role === 'owner') return <Navigate to="/staff/inventory" replace />;
-  if (user.role === 'cashier')       return <Navigate to="/cashier" replace />;
+  if (user.role === 'staff') return <Navigate to="/staff/inventory" replace />;
+  if (user.role === 'owner') return <Navigate to="/owner/dashboard" replace />;
   if (user.role === 'kitchen_staff') return <Navigate to="/kitchen" replace />;
-  // Other roles redirect to login until their pages are built
   return <Navigate to="/login" replace />;
 }
 
@@ -52,7 +53,7 @@ export default function App() {
           <Route
             path="/staff"
             element={
-              <ProtectedRoute allowedRoles={['staff', 'owner']}>
+              <ProtectedRoute allowedRoles={['staff']}>
                 <StaffLayout />
               </ProtectedRoute>
             }
@@ -64,16 +65,29 @@ export default function App() {
             <Route path="chat" element={<StaffPlaceholder type="chat" />} />
           </Route>
 
+          {/* Owner */}
+          <Route
+            path="/owner"
+            element={
+              <ProtectedRoute allowedRoles={['owner']}>
+                <OwnerLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/owner/dashboard" replace />} />
+            <Route path="dashboard" element={<OwnerDashboard />} />
+          </Route>
+
+          {/* Kitchen */}
           <Route
             path="/kitchen"
             element={
-              <ProtectedRoute allowedRoles={['kitchen_staff', 'owner', 'admin']}>
+              <ProtectedRoute allowedRoles={['kitchen_staff', 'admin']}>
                 <KitchenPage />
               </ProtectedRoute>
             }
           />
 
-          {/* Future role pages go here */}
           <Route path="/" element={<RoleRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
