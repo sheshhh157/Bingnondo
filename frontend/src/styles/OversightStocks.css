@@ -1,0 +1,144 @@
+/* ─── OVERSIGHT STOCKS (read-only) ────────────────────────────────────── */
+
+.osk-root { display: flex; flex-direction: column; gap: 20px; }
+.osk-title { margin: 0; font-family: var(--font-heading); font-size: 1.5rem; font-weight: 700; }
+.osk-sub { margin: 4px 0 0; color: var(--color-muted-foreground); font-size: 0.875rem; }
+
+.osk-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.osk-stat {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: var(--shadow-sm);
+}
+.osk-stat__label { font-size: 0.72rem; color: var(--color-muted-foreground); text-transform: uppercase; letter-spacing: 0.04em; }
+.osk-stat__value { font-family: var(--font-heading); font-size: 1.5rem; font-weight: 700; }
+.osk-stat__value--ok { color: #1D4ED8; }
+.osk-stat__value--low { color: #B45309; }
+.osk-stat__value--out { color: var(--color-destructive); }
+
+.osk-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--color-destructive);
+  background: #FDF6F5;
+  border: 1px solid #F3CFCF;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+.osk-alert svg { flex-shrink: 0; color: var(--color-destructive); }
+
+.osk-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.osk-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  padding: 0 10px;
+  color: var(--color-muted-foreground);
+  flex: 1;
+  min-width: 200px;
+}
+.osk-search__input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 10px 0;
+  font-size: 0.875rem;
+  outline: none;
+  color: var(--color-foreground);
+}
+.osk-select {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  font-size: 0.85rem;
+  color: var(--color-foreground);
+}
+
+.osk-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 80px 0;
+  color: var(--color-muted-foreground);
+  font-size: 0.875rem;
+}
+
+.osk-table-wrap {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+}
+.osk-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 560px; }
+.osk-table th {
+  text-align: left;
+  padding: 12px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.osk-table td { padding: 12px; border-bottom: 1px solid var(--color-border); }
+.osk-table tr:last-child td { border-bottom: none; }
+.osk-name { font-weight: 600; }
+.osk-muted { color: var(--color-muted-foreground); }
+
+.osk-bar { display: flex; align-items: center; gap: 8px; }
+.osk-bar__track {
+  flex: 1;
+  max-width: 160px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+.osk-bar__fill { height: 100%; border-radius: 99px; }
+.osk-bar__fill--ok { background: #1D4ED8; }
+.osk-bar__fill--low { background: #B45309; }
+.osk-bar__fill--out { background: var(--color-destructive); }
+.osk-bar__value { font-weight: 600; font-size: 0.85rem; }
+
+.osk-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.osk-badge--ok { background: #E8EFFB; color: #1D4ED8; }
+.osk-badge--low { background: #FBF3E4; color: #B45309; }
+.osk-badge--out { background: #FBEAEA; color: var(--color-destructive); }
+
+.osk-empty { text-align: center; color: var(--color-muted-foreground); padding: 24px; }
+
+.osk-skel { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--color-border), var(--color-muted), var(--color-border)); background-size: 200% 100%; animation: osk-shimmer 1.2s infinite linear; }
+@keyframes osk-shimmer { to { background-position: -200% 0; } }
+
+@media (max-width: 760px) {
+  .osk-stats { grid-template-columns: repeat(2, 1fr); }
+}
