@@ -1,0 +1,212 @@
+/* ─── SHARED COMPONENT STYLES ─────────────────────────────────────────────── */
+
+/* ─── SHARED COMPONENT STYLES ─────────────────────────────────────────────── */
+
+/* Common action button used in page headers */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  color: var(--color-foreground);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.ui-btn:hover { background: var(--color-surface); border-color: var(--color-primary); }
+.ui-btn--primary { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); }
+.ui-btn--primary:hover { filter: brightness(1.05); background: var(--color-primary); }
+.ui-btn--danger:hover { background: #FBEAEA; color: var(--color-destructive); border-color: #F3CFCF; }
+.ui-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Loader — dot bounce */
+.ui-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 80px 0;
+  color: var(--color-muted-foreground);
+  font-size: 0.875rem;
+}
+
+.ui-loader {
+  display: flex;
+  gap: 6px;
+}
+.ui-loader div {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  animation: uibounce 1.2s infinite ease-in-out;
+}
+.ui-loader div:nth-child(2) { animation-delay: 0.15s; }
+.ui-loader div:nth-child(3) { animation-delay: 0.3s; }
+@keyframes uibounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* Badge — status variants */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ui-badge--success { background: #E8EFFB; color: #1D4ED8; }
+.ui-badge--warning { background: #FBF3E4; color: #B45309; }
+.ui-badge--danger  { background: #FBEAEA; color: var(--color-destructive); }
+.ui-badge--info    { background: #E1F0FF; color: #1D4ED8; }
+.ui-badge--muted   { background: #E9EFE8; color: #4B5563; }
+.ui-badge--gold    { background: #E7DDC8; color: #7C5A00; }
+.ui-badge__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ui-badge--none { background: transparent; padding: 0; }
+
+/* Empty states */
+.ui-empty {
+  text-align: center;
+  color: var(--color-muted-foreground);
+  padding: 40px 0;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+.ui-empty__icon { color: var(--color-muted); display: flex; }
+
+/* Stat card */
+.ui-stat {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: var(--shadow-sm);
+}
+.ui-stat--alert { border-color: #F3CFCF; background: #FDF6F5; }
+.ui-stat--queue { border-color: #E7DDC8; }
+.ui-stat__label {
+  font-size: 0.72rem;
+  color: var(--color-muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ui-stat__value {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+.ui-stat--alert .ui-stat__value { color: var(--color-destructive); }
+.ui-stat__sub { font-size: 0.75rem; color: var(--color-muted-foreground); }
+
+/* Page header */
+.ui-pageheader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ui-pageheader__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+.ui-pageheader__sub { margin: 4px 0 0; color: var(--color-muted-foreground); font-size: 0.875rem; }
+.ui-pageheader__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Error banner */
+.ui-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--color-destructive);
+  background: #FDF6F5;
+  border: 1px solid #F3CFCF;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+.ui-error svg { flex-shrink: 0; color: var(--color-destructive); }
+
+/* Card panel */
+.ui-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.ui-card__title {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+/* Toast container */
+.ui-toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+}
+.ui-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 14px;
+  animation: uitoast-in 0.25s ease;
+}
+.ui-toast--danger { border-left-color: var(--color-destructive); }
+.ui-toast--warning { border-left-color: #B45309; }
+.ui-toast__icon { color: var(--color-primary); flex-shrink: 0; display: flex; margin-top: 1px; }
+.ui-toast--danger .ui-toast__icon { color: var(--color-destructive); }
+.ui-toast--warning .ui-toast__icon { color: #B45309; }
+.ui-toast__body { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.ui-toast__title { font-size: 0.85rem; font-weight: 600; color: var(--color-foreground); }
+.ui-toast__desc { font-size: 0.78rem; color: var(--color-muted-foreground); }
+.ui-toast__close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-muted-foreground);
+  padding: 2px;
+  display: flex;
+}
+.ui-toast__close:hover { color: var(--color-foreground); }
+@keyframes uitoast-in {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes osk-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+@media (max-width: 480px) {
+  .ui-pageheader__title { font-size: 1.2rem; }
+  .ui-toast-container { right: 12px; left: 12px; bottom: 12px; max-width: none; }
+}
