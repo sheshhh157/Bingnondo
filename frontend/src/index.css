@@ -3,15 +3,6 @@
 
 /* ─── Design Tokens — Bingnondo Chinese Heritage ─────────────────────── */
 :root {
-  /*
-   * Palette: Imperial Chinese — Vermillion + Ink + Gold
-   * Primary:    Deep Vermillion  #B91C1C  (漆紅 — lacquer red)
-   * Secondary:  Soft Cinnabar    #EF4444
-   * Accent:     Ancient Gold     #92400E  (褐金 — warm bronze-gold)
-   * Background: Aged Parchment   #FDF6EC  (宣紙 — xuan paper)
-   * Ink:        Calligraphy Ink  #1A0A00  (墨 — ink black)
-   * Border:     Tea Dust         #E8D5B7
-   */
   --color-primary:          #B91C1C;
   --color-on-primary:       #FDF6EC;
   --color-secondary:        #EF4444;
@@ -33,11 +24,9 @@
   --color-ring:             #B91C1C;
   --color-surface:          #FAF0DC;
 
-  /* Typography — Noto Serif TC (heading) + Noto Sans TC (body) */
   --font-heading: 'Noto Serif TC', 'Songti SC', Georgia, serif;
   --font-body:    'Noto Sans TC', 'PingFang SC', system-ui, sans-serif;
 
-  /* Spacing scale (dense/dashboard 8-32px) */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -46,18 +35,15 @@
   --space-6: 24px;
   --space-8: 32px;
 
-  /* Radius */
   --radius-sm:  4px;
   --radius-md:  8px;
   --radius-lg:  12px;
   --radius-xl:  16px;
 
-  /* Shadows — warm tinted */
   --shadow-sm:  0 1px 4px rgba(26,10,0,0.08);
   --shadow-md:  0 4px 16px rgba(26,10,0,0.10);
   --shadow-lg:  0 12px 40px rgba(26,10,0,0.14);
 
-  /* Base */
   font-family: var(--font-body);
   font-size: 16px;
   line-height: 1.5;
@@ -69,44 +55,35 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── Staff Theme — Huang Tu (黃土) Ochre Earth ──────────────────────────
- *
- * Scoped to .sl-root so Cashier and Kitchen are completely untouched.
- *
- * Palette: Tang Dynasty Earthenware — Deep Amber + Ochre + Loam Ink
- * Primary:    Amber Dark   #B45309  (黃褐 — huáng hè, amber-brown)
- * Bright:     Warm Amber   #D97706  (橙黃 — chéng huáng)
- * Background: Ochre Paper  #FDF6E3  (黃紙 — huáng zhǐ)
- * Ink:        Deep Loam    #1A0E00  (土墨 — tǔ mò)
- * Muted:      Warm Sand    #F5E8C8
- * Border:     Dried Grass  #E8CFA0
+/* ─── Manager Theme — Imperial Blue (海藍) Azure Court ──────────────────
+ * Scoped to .mr-root so it reads as a distinct station (owner-level), while
+ * staying within the Chinese-heritage family. Deep blue + aged gold + ink.
  * ─────────────────────────────────────────────────────────────────────── */
-.sl-root {
-  --color-primary:          #B45309;
-  --color-on-primary:       #FEF3C7;
-  --color-secondary:        #D97706;
-  --color-on-secondary:     #1A0E00;
-  --color-accent:           #92400E;
-  --color-on-accent:        #FEF3C7;
-  --color-gold:             #D97706;
-  --color-gold-light:       #FEF3C7;
-  --color-background:       #FDF6E3;
-  --color-foreground:       #1A0E00;
-  --color-card:             #FFFCF0;
-  --color-card-foreground:  #1A0E00;
-  --color-muted:            #F5E8C8;
-  --color-muted-foreground: #7C4A00;
-  --color-border:           #E8CFA0;
-  --color-border-strong:    #C9A262;
+.mr-root {
+  --color-primary:          #1D4ED8;
+  --color-on-primary:       #EFF6FF;
+  --color-secondary:        #1E3A8A;
+  --color-on-secondary:     #EFF6FF;
+  --color-accent:           #B45309;
+  --color-on-accent:        #FDF6EC;
+  --color-gold:             #B45309;
+  --color-gold-light:       #FDE68A;
+  --color-background:       #F1F5F9;
+  --color-foreground:       #0F172A;
+  --color-card:             #FFFFFF;
+  --color-card-foreground:  #0F172A;
+  --color-muted:            #E2E8F0;
+  --color-muted-foreground: #475569;
+  --color-border:           #CBD5E1;
+  --color-border-strong:    #94A3B8;
   --color-destructive:      #B91C1C;
-  --color-on-destructive:   #FEF3C7;
-  --color-ring:             #B45309;
-  --color-surface:          #FAF0D0;
+  --color-on-destructive:   #FDF6EC;
+  --color-ring:             #1D4ED8;
+  --color-surface:          #E8EFFB;
 
-  /* Shadows — ochre-tinted */
-  --shadow-sm:  0 1px 4px rgba(61,31,0,0.08);
-  --shadow-md:  0 4px 16px rgba(61,31,0,0.10);
-  --shadow-lg:  0 12px 40px rgba(61,31,0,0.14);
+  --shadow-sm:  0 1px 4px rgba(15,23,42,0.07);
+  --shadow-md:  0 4px 16px rgba(15,23,42,0.10);
+  --shadow-lg:  0 12px 40px rgba(15,23,42,0.13);
 
   background: var(--color-background);
 }
