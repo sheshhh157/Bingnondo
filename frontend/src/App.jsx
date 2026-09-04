@@ -9,6 +9,10 @@ import StaffPlaceholder from './pages/staff/StaffPlaceholder';
 import KitchenPage from './pages/kitchen/KitchenPage';
 import OwnerLayout from './pages/owner/OwnerLayout';
 import OwnerDashboard from './pages/owner/OwnerDashboard';
+import AdminLayout from './pages/admin/AdminLayout';
+import StaffAccounts from './pages/admin/StaffAccounts';
+import SystemSettings from './pages/admin/SystemSettings';
+import AuditLog from './pages/admin/AuditLog';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -29,6 +33,7 @@ function RoleRedirect() {
   if (user.role === 'staff') return <Navigate to="/staff/inventory" replace />;
   if (user.role === 'owner') return <Navigate to="/owner/dashboard" replace />;
   if (user.role === 'kitchen_staff') return <Navigate to="/kitchen" replace />;
+  if (user.role === 'admin') return <Navigate to="/admin/accounts" replace />;
   return <Navigate to="/login" replace />;
 }
 
@@ -87,6 +92,21 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Admin */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/admin/accounts" replace />} />
+            <Route path="accounts" element={<StaffAccounts />} />
+            <Route path="settings" element={<SystemSettings />} />
+            <Route path="audit"    element={<AuditLog />} />
+          </Route>
 
           <Route path="/" element={<RoleRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />

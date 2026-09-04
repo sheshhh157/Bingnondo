@@ -135,7 +135,8 @@ export const authAPI = {
       { id: 1, full_name: 'Cashier One',  email: 'cashier@bingnondo.com', password: 'cashier123', role: 'cashier' },
       { id: 2, full_name: 'Staff Member', email: 'staff@bingnondo.com',   password: 'staff123',   role: 'staff'   },
       { id: 3, full_name: 'Owner',        email: 'owner@bingnondo.com',   password: 'owner123',   role: 'owner'   },
-      { id: 2, full_name: 'Kitchen Staff', email: 'kitchen@bingnondo.com', password: 'kitchen123', role: 'kitchen_staff' },
+      { id: 4, full_name: 'Kitchen Staff', email: 'kitchen@bingnondo.com', password: 'kitchen123', role: 'kitchen_staff' },
+      { id: 5, email: 'admin@bingnondo.com', password: 'admin123', full_name: 'System Admin', role: 'admin' }
     ];
     const user = accounts.find((a) => a.email === email && a.password === password);
     if (!user) throw { response: { data: { message: 'Invalid credentials. Try again.' } } };
@@ -441,5 +442,142 @@ export const kitchenAPI = {
     const alert = MOCK_ALERTS.find((a) => a.id === Number(alertId));
     if (alert) alert.acknowledged_at = new Date().toISOString();
     return { data: { success: true } };
+  },
+};
+
+// ─── ADMIN API ─────────────────────────────────────────────────────────────────
+// Mock data — replace with real API calls when backend is ready.
+
+let MOCK_STAFF_ACCOUNTS = [
+  { id: 101, full_name: 'Maria Santos',   email: 'maria@bingnondo.com',  role: 'cashier',       status: 'active',   created_at: new Date(Date.now()-86400000*10).toISOString() },
+  { id: 102, full_name: 'Juan Dela Cruz', email: 'juan@bingnondo.com',   role: 'kitchen_staff', status: 'active',   created_at: new Date(Date.now()-86400000*20).toISOString() },
+  { id: 103, full_name: 'Ana Reyes',      email: 'ana@bingnondo.com',    role: 'staff',         status: 'inactive', created_at: new Date(Date.now()-86400000*30).toISOString() },
+  { id: 104, full_name: 'Pedro Bautista', email: 'pedro@bingnondo.com',  role: 'cashier',       status: 'active',   created_at: new Date(Date.now()-86400000*5).toISOString()  },
+  { id: 105, full_name: 'Rosa Mendoza',   email: 'rosa@bingnondo.com',   role: 'owner',         status: 'active',   created_at: new Date(Date.now()-86400000*60).toISOString() },
+];
+let staffAccountCounter = 200;
+
+let MOCK_SETTINGS = {
+  paymongo_key:    '',
+  openai_key:      '',
+  gemini_key:      '',
+  business_hours:  {
+    Monday:    { open:'07:00', close:'22:00', closed:false },
+    Tuesday:   { open:'07:00', close:'22:00', closed:false },
+    Wednesday: { open:'07:00', close:'22:00', closed:false },
+    Thursday:  { open:'07:00', close:'22:00', closed:false },
+    Friday:    { open:'07:00', close:'23:00', closed:false },
+    Saturday:  { open:'08:00', close:'23:00', closed:false },
+    Sunday:    { open:'08:00', close:'21:00', closed:false },
+  },
+  menu_categories: ['Silog Meals','Rice Meals','Merienda','Drinks','Add-ons'],
+};
+
+let MOCK_DEVICES = [
+  { id: 1, device_code: 'ESP32-KITCHEN-01', location_label: 'Main Kitchen', is_online: true  },
+  { id: 2, device_code: 'ESP32-TABLE-01',   location_label: 'Table Counter', is_online: false },
+];
+let deviceCounter = 10;
+
+let MOCK_AUDIT_LOG = [
+  { id: 1, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'create',         target_type:'staff_account', target_id:101, details:{ role:'cashier' },              created_at: new Date(Date.now()-86400000*10).toISOString() },
+  { id: 2, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'register_device',target_type:'esp32_device',  target_id:1,   details:{ label:'Main Kitchen' },        created_at: new Date(Date.now()-86400000*8).toISOString()  },
+  { id: 3, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'update_settings',target_type:'settings',       target_id:null, details:{ field:'business_hours' },   created_at: new Date(Date.now()-86400000*5).toISOString()  },
+  { id: 4, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'deactivate',     target_type:'staff_account', target_id:103, details:{ reason:'resignation' },        created_at: new Date(Date.now()-86400000*2).toISOString()  },
+  { id: 5, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'reset_password', target_type:'staff_account', target_id:104, details:{},                              created_at: new Date(Date.now()-3600000).toISOString()     },
+];
+let auditCounter = 100;
+
+function addAuditEntry(action, targetType, targetId, details={}) {
+  MOCK_AUDIT_LOG.unshift({
+    id: ++auditCounter, actor_id:1, actor_name:'System Admin', actor_role:'admin',
+    action, target_type:targetType, target_id:targetId, details,
+    created_at: new Date().toISOString(),
+  });
+}
+
+function paginate(arr, page=1, limit=10) {
+  const start = (page-1)*limit;
+  return { data: arr.slice(start, start+limit), totalPages: Math.max(1, Math.ceil(arr.length/limit)), total: arr.length };
+}
+
+export const adminAPI = {
+  // ── Staff Accounts ──────────────────────────────────────────────────
+  listStaffAccounts: async ({ page=1, limit=10, search, role, status } = {}) => {
+    await delay(350);
+    let result = [...MOCK_STAFF_ACCOUNTS];
+    if (search) result = result.filter(a => a.full_name.toLowerCase().includes(search.toLowerCase()) || a.email.toLowerCase().includes(search.toLowerCase()));
+    if (role)   result = result.filter(a => a.role   === role);
+    if (status) result = result.filter(a => a.status === status);
+    return { data: paginate(result, page, limit) };
+  },
+
+  createStaffAccount: async (data) => {
+    await delay(400);
+    const account = { id: ++staffAccountCounter, ...data, status:'active', created_at: new Date().toISOString() };
+    MOCK_STAFF_ACCOUNTS.push(account);
+    addAuditEntry('create', 'staff_account', account.id, { role: data.role });
+    return { data: account };
+  },
+
+  updateStaffStatus: async (id, status) => {
+    await delay(300);
+    const account = MOCK_STAFF_ACCOUNTS.find(a => a.id === Number(id));
+    if (account) account.status = status;
+    addAuditEntry(status==='active'?'reactivate':'deactivate', 'staff_account', Number(id), {});
+    return { data: { success: true } };
+  },
+
+  resetStaffPassword: async (id) => {
+    await delay(300);
+    addAuditEntry('reset_password', 'staff_account', Number(id), {});
+    return { data: { success: true } };
+  },
+
+  // ── Settings ────────────────────────────────────────────────────────
+  getSettings: async () => {
+    await delay(300);
+    return { data: { ...MOCK_SETTINGS } };
+  },
+
+  updateSettings: async (updates) => {
+    await delay(300);
+    Object.assign(MOCK_SETTINGS, updates);
+    const field = Object.keys(updates)[0];
+    addAuditEntry('update_settings', 'settings', null, { field });
+    return { data: { success: true } };
+  },
+
+  // ── ESP32 Devices ────────────────────────────────────────────────────
+  listDevices: async () => {
+    await delay(250);
+    return { data: [...MOCK_DEVICES] };
+  },
+
+  registerDevice: async (data) => {
+    await delay(350);
+    const device = { id: ++deviceCounter, ...data, is_online: false };
+    MOCK_DEVICES.push(device);
+    addAuditEntry('register_device', 'esp32_device', device.id, { label: data.location_label });
+    return { data: device };
+  },
+
+  removeDevice: async (id) => {
+    await delay(300);
+    const device = MOCK_DEVICES.find(d => d.id === Number(id));
+    MOCK_DEVICES = MOCK_DEVICES.filter(d => d.id !== Number(id));
+    addAuditEntry('remove_device', 'esp32_device', Number(id), { label: device?.location_label });
+    return { data: { success: true } };
+  },
+
+  // ── Audit Log ────────────────────────────────────────────────────────
+  getAuditLog: async ({ page=1, limit=20, actor_id, action, from, to } = {}) => {
+    await delay(350);
+    let result = [...MOCK_AUDIT_LOG];
+    if (actor_id) result = result.filter(e => String(e.actor_id) === String(actor_id));
+    if (action)   result = result.filter(e => e.action === action);
+    if (from)     result = result.filter(e => new Date(e.created_at) >= new Date(from));
+    if (to)       result = result.filter(e => new Date(e.created_at) <= new Date(to + 'T23:59:59'));
+    return { data: paginate(result, page, limit) };
   },
 };
