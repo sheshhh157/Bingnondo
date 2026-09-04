@@ -13,6 +13,7 @@ import AdminLayout from './pages/admin/AdminLayout';
 import StaffAccounts from './pages/admin/StaffAccounts';
 import SystemSettings from './pages/admin/SystemSettings';
 import AuditLog from './pages/admin/AuditLog';
+import CustomerRestrictions from './pages/admin/CustomerRestrictions';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -105,7 +106,8 @@ export default function App() {
             <Route index element={<Navigate to="/admin/accounts" replace />} />
             <Route path="accounts" element={<StaffAccounts />} />
             <Route path="settings" element={<SystemSettings />} />
-            <Route path="audit"    element={<AuditLog />} />
+            <Route path="audit"       element={<AuditLog />} />
+            <Route path="restrictions" element={<CustomerRestrictions />} />
           </Route>
 
           <Route path="/" element={<RoleRedirect />} />

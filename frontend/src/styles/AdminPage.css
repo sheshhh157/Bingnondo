@@ -586,3 +586,229 @@
 /* ─── Keyframes ──────────────────────────────────────────────────────── */
 @keyframes ap-spin     { to { transform: rotate(360deg); } }
 @keyframes ap-slide-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+/* ─── 6.4 Customer Restrictions ──────────────────────────────────────
+ * All classes prefixed .cr- to avoid any collision.
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* ── Stats row ─────────────────────────────────────────────────────── */
+.cr-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 767px) {
+  .cr-stats { grid-template-columns: repeat(2, 1fr); }
+}
+.cr-stat {
+  background: #181510;
+  border: 1px solid #2E2B22;
+  border-radius: 4px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cr-stat__value {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 600;
+  color: #E8E0D4;
+  line-height: 1;
+}
+.cr-stat__label {
+  font-size: 0.6875rem;
+  color: rgba(232,224,212,0.35);
+  letter-spacing: 0.03em;
+}
+
+/* ── Restriction badge ──────────────────────────────────────────────── */
+.cr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cr-badge__dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cr-badge--none     { background:#1C1410; color:#7A7060; border:1px solid #2E2820; }
+.cr-badge--none     .cr-badge__dot { background:#7A7060; }
+.cr-badge--warned   { background:#1E1608; color:#D4A030; border:1px solid #3A2C10; }
+.cr-badge--warned   .cr-badge__dot { background:#D4A030; }
+.cr-badge--codblock { background:#1A1020; color:#A090D0; border:1px solid #2E2040; }
+.cr-badge--codblock .cr-badge__dot { background:#A090D0; }
+.cr-badge--suspend  { background:#1C0F0D; color:#E06050; border:1px solid #3A1818; }
+.cr-badge--suspend  .cr-badge__dot { background:#E06050; }
+
+/* ── Violation type badge ───────────────────────────────────────────── */
+.cr-viol {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cr-viol--cancel { background:#1C0F0D; color:#E8705A; border:1px solid #3A1818; }
+.cr-viol--late   { background:#2A1008; color:#F0905A; border:1px solid #4A1C10; }
+.cr-viol--noshow { background:#1E1608; color:#D4A030; border:1px solid #3A2C10; }
+
+/* ── Violation count button (in table) ─────────────────────────────── */
+.cr-viol-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 1px solid #2E2B22;
+  border-radius: 2px;
+  padding: 3px 9px;
+  font-size: 0.75rem;
+  color: rgba(232,224,212,0.5);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: all 120ms ease;
+}
+.cr-viol-count:hover {
+  background: #211F18;
+  color: rgba(232,224,212,0.8);
+  border-color: #3A3628;
+}
+
+/* ── Customer avatar (slightly different from staff avatar) ─────────── */
+.cr-customer-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: #1C1820;
+  border: 1px solid #2E2840;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 500;
+  color: rgba(232,224,212,0.55);
+  flex-shrink: 0;
+}
+
+/* ── Modal customer header ──────────────────────────────────────────── */
+.cr-modal-customer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0 12px;
+}
+.cr-modal-avatar {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: #1C1820;
+  border: 1px solid #2E2840;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; font-weight: 500;
+  color: rgba(232,224,212,0.6);
+  flex-shrink: 0;
+}
+.cr-modal-name  { font-size: 0.9375rem; font-weight: 500; color: #E8E0D4; }
+.cr-modal-email { font-size: 0.75rem; color: rgba(232,224,212,0.4); margin-top: 2px; }
+
+/* ── Violation list in modal ────────────────────────────────────────── */
+.cr-viol-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+.cr-viol-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #211F18;
+  border: 1px solid #2E2B22;
+  border-radius: 2px;
+}
+.cr-viol-row__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cr-viol-row__order {
+  font-size: 0.6875rem;
+  font-family: monospace;
+  color: rgba(232,224,212,0.3);
+}
+.cr-viol-row__date {
+  font-size: 0.6875rem;
+  color: rgba(232,224,212,0.3);
+  white-space: nowrap;
+}
+
+/* ── Escalation key (inside violation modal) ────────────────────────── */
+.cr-escalation {
+  background: #141210;
+  border: 1px solid #2E2B22;
+  border-radius: 2px;
+  padding: 12px 14px;
+  margin-top: 4px;
+}
+.cr-escalation__title {
+  font-size: 0.6875rem;
+  color: rgba(232,224,212,0.3);
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+.cr-escalation__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cr-escalation__step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #1A1710;
+  border: 1px solid #2A2720;
+  border-radius: 2px;
+  padding: 4px 10px;
+}
+.cr-escalation__n {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #C9963C;
+  white-space: nowrap;
+}
+.cr-escalation__desc {
+  font-size: 0.6875rem;
+  color: rgba(232,224,212,0.4);
+  white-space: nowrap;
+}
+
+/* ── Override modal notices ─────────────────────────────────────────── */
+.cr-override-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 2px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.cr-override-notice--lift {
+  background: #0E1E12;
+  border: 1px solid #1E3A22;
+  color: #5EC87A;
+}
+.cr-override-notice--warn {
+  background: #1E1608;
+  border: 1px solid #3A2C10;
+  color: #D4A030;
+}
+
+/* ── Textarea override for admin ────────────────────────────────────── */
+.ap-input[rows] {
+  resize: vertical;
+  height: auto;
+}

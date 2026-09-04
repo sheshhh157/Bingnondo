@@ -581,3 +581,111 @@ export const adminAPI = {
     return { data: paginate(result, page, limit) };
   },
 };
+// ─── CUSTOMER RESTRICTIONS (6.4) ───────────────────────────────────────────────
+
+let MOCK_CUSTOMER_RESTRICTIONS = [
+  {
+    customer_id: 1001, customer_name: 'Jose Rizal',     customer_email: 'jose@gmail.com',
+    restriction_level: 'suspended',      violation_count: 4,
+    reason: 'Repeated no-show after 3rd order in 30 days.',
+    updated_by: 1, updated_by_name: 'System Admin',
+    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+  {
+    customer_id: 1002, customer_name: 'Maria Clara',    customer_email: 'mclara@yahoo.com',
+    restriction_level: 'cod_restricted', violation_count: 3,
+    reason: 'Third cancellation within 30-day window.',
+    updated_by: null, updated_by_name: null,
+    updated_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+  },
+  {
+    customer_id: 1003, customer_name: 'Andres Bonifacio', customer_email: 'andres@mail.ph',
+    restriction_level: 'warned',         violation_count: 2,
+    reason: null, updated_by: null, updated_by_name: null,
+    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+  },
+  {
+    customer_id: 1004, customer_name: 'Gabriela Silang',  customer_email: 'gsilang@hotmail.com',
+    restriction_level: 'none',           violation_count: 1,
+    reason: null, updated_by: null, updated_by_name: null,
+    updated_at: null,
+  },
+  {
+    customer_id: 1005, customer_name: 'Apolinario Mabini', customer_email: 'sublimeparalytico@ph.net',
+    restriction_level: 'suspended',      violation_count: 5,
+    reason: 'Persistent no-show. Admin review required.',
+    updated_by: 1, updated_by_name: 'System Admin',
+    updated_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+  },
+];
+
+const MOCK_VIOLATIONS = {
+  1001: [
+    { id: 101, order_id: 5011, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*3).toISOString()  },
+    { id: 102, order_id: 4892, violation_type: 'cancelled_after_prep',  created_at: new Date(Date.now()-86400000*10).toISOString() },
+    { id: 103, order_id: 4701, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*18).toISOString() },
+    { id: 104, order_id: 4500, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*25).toISOString() },
+  ],
+  1002: [
+    { id: 201, order_id: 5100, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*5).toISOString()  },
+    { id: 202, order_id: 4980, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*12).toISOString() },
+    { id: 203, order_id: 4810, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*20).toISOString() },
+  ],
+  1003: [
+    { id: 301, order_id: 5050, violation_type: 'cancelled_after_prep',  created_at: new Date(Date.now()-86400000*1).toISOString()  },
+    { id: 302, order_id: 4920, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*8).toISOString()  },
+  ],
+  1004: [
+    { id: 401, order_id: 5200, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*2).toISOString()  },
+  ],
+  1005: [
+    { id: 501, order_id: 5300, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*1).toISOString()  },
+    { id: 502, order_id: 5280, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*7).toISOString()  },
+    { id: 503, order_id: 5200, violation_type: 'cancelled_after_prep',  created_at: new Date(Date.now()-86400000*14).toISOString() },
+    { id: 504, order_id: 5150, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*21).toISOString() },
+    { id: 505, order_id: 5000, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*28).toISOString() },
+  ],
+};
+
+export const customerRestrictionsAPI = {
+  listCustomerRestrictions: async ({ page = 1, limit = 12, search, restriction_level } = {}) => {
+    await delay(350);
+    let result = [...MOCK_CUSTOMER_RESTRICTIONS];
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(c =>
+        c.customer_name.toLowerCase().includes(q) ||
+        c.customer_email.toLowerCase().includes(q)
+      );
+    }
+    if (restriction_level) result = result.filter(c => c.restriction_level === restriction_level);
+    return { data: paginate(result, page, limit) };
+  },
+
+  getCustomerViolations: async (customerId) => {
+    await delay(250);
+    const viols = MOCK_VIOLATIONS[Number(customerId)] || [];
+    return { data: viols };
+  },
+
+  overrideCustomerRestriction: async (customerId, { restriction_level, reason }) => {
+    await delay(400);
+    const customer = MOCK_CUSTOMER_RESTRICTIONS.find(c => c.customer_id === Number(customerId));
+    if (customer) {
+      customer.restriction_level = restriction_level;
+      customer.reason            = reason;
+      customer.updated_by        = 1;
+      customer.updated_by_name   = 'System Admin';
+      customer.updated_at        = new Date().toISOString();
+    }
+    addAuditEntry('override_restriction', 'customer', Number(customerId), { restriction_level, reason });
+    return { data: { success: true } };
+  },
+};
+
+// Re-export customerRestrictionsAPI methods on adminAPI for convenience
+Object.assign(adminAPI, {
+  listCustomerRestrictions:      customerRestrictionsAPI.listCustomerRestrictions,
+  getCustomerViolations:         customerRestrictionsAPI.getCustomerViolations,
+  overrideCustomerRestriction:   customerRestrictionsAPI.overrideCustomerRestriction,
+});
