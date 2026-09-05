@@ -136,7 +136,8 @@ export const authAPI = {
       { id: 2, full_name: 'Staff Member', email: 'staff@bingnondo.com',   password: 'staff123',   role: 'staff'   },
       { id: 3, full_name: 'Owner',        email: 'owner@bingnondo.com',   password: 'owner123',   role: 'owner'   },
       { id: 4, full_name: 'Kitchen Staff', email: 'kitchen@bingnondo.com', password: 'kitchen123', role: 'kitchen_staff' },
-      { id: 5, email: 'admin@bingnondo.com', password: 'admin123', full_name: 'System Admin', role: 'admin' }
+      { id: 5, email: 'admin@bingnondo.com', password: 'admin123', full_name: 'System Admin', role: 'admin' },
+      { id: 6, full_name: 'Manager', email: 'manager@bingnondo.com', password: 'manager123', role: 'manager' }
     ];
     const user = accounts.find((a) => a.email === email && a.password === password);
     if (!user) throw { response: { data: { message: 'Invalid credentials. Try again.' } } };

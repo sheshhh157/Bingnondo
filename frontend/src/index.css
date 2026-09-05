@@ -1,5 +1,6 @@
 /* ─── Google Fonts ───────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap');
+@import './styles/components.css';
 
 /* ─── Design Tokens — Bingnondo Chinese Heritage ─────────────────────── */
 :root {
@@ -130,3 +131,35 @@ button, input, textarea, select { font-family: var(--font-body); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
+
+/* ─── Manager Theme — Imperial Blue (海藍) Azure Court ───────────────── */
+/* Scoped to .mr-root so it reads as a distinct station (owner-level),  */
+/* staying within the Chinese-heritage family.                          */
+.mr-root {
+  --color-primary:          #1D4ED8;
+  --color-on-primary:       #EFF6FF;
+  --color-secondary:        #1E3A8A;
+  --color-on-secondary:     #EFF6FF;
+  --color-accent:           #B45309;
+  --color-on-accent:        #FDF6EC;
+  --color-gold:             #B45309;
+  --color-gold-light:       #FDE68A;
+  --color-background:       #F1F5F9;
+  --color-foreground:       #0F172A;
+  --color-card:             #FFFFFF;
+  --color-card-foreground:  #0F172A;
+  --color-muted:            #E2E8F0;
+  --color-muted-foreground: #475569;
+  --color-border:           #CBD5E1;
+  --color-border-strong:    #94A3B8;
+  --color-destructive:      #B91C1C;
+  --color-on-destructive:   #FDF6EC;
+  --color-ring:             #1D4ED8;
+  --color-surface:          #E8EFFB;
+
+  --shadow-sm:  0 1px 4px rgba(15,23,42,0.07);
+  --shadow-md:  0 4px 16px rgba(15,23,42,0.10);
+  --shadow-lg:  0 12px 40px rgba(15,23,42,0.13);
+
+  background: var(--color-background);
+}

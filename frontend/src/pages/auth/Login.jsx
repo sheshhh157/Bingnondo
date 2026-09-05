@@ -23,7 +23,7 @@ export default function Login() {
     setLoading(true); setError('');
     try {
       const userData = await login(form);
-      const routes = { cashier: '/cashier', kitchen_staff: '/kitchen', staff: '/staff', owner: '/owner', admin: '/admin' };
+      const routes = { cashier: '/cashier', kitchen_staff: '/kitchen', staff: '/staff', owner: '/owner', admin: '/admin', manager: '/manager' };
       navigate(routes[userData.role] || '/');
     } catch (err) {
       const msg = err.response?.data?.message || 'Invalid credentials. Try again.';
