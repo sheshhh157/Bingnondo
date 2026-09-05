@@ -1,40 +1,21 @@
+// All staff sections (§4.1–§4.4) are now implemented.
+// This file is kept as a safety fallback for unknown route types.
 import '../../styles/StaffPlaceholder.css';
 
-const CONFIG = {
-  delivery: {
-    section: '§4.3',
-    title: 'Delivery Assignment',
-    desc: 'View pending deliveries, assign riders, or book Lalamove. Coming up next.',
-    icon: (
-      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3"/>
-        <rect width="13" height="8" x="9" y="11" rx="1"/>
-        <circle cx="11" cy="19" r="2"/>
-        <circle cx="19" cy="19" r="2"/>
-      </svg>
-    ),
-  },
-  chat: {
-    section: '§4.4',
-    title: 'Support Chat Inbox',
-    desc: 'Reply to customer messages tied to their active orders. Coming up next.',
-    icon: (
-      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-    ),
-  },
-};
-
 export default function StaffPlaceholder({ type }) {
-  const cfg = CONFIG[type] || CONFIG.delivery;
   return (
     <div className="sph-root">
       <div className="sph-card">
-        <div className="sph-icon" aria-hidden="true">{cfg.icon}</div>
-        <span className="sph-section">{cfg.section}</span>
-        <h1 className="sph-title">{cfg.title}</h1>
-        <p className="sph-desc">{cfg.desc}</p>
+        <div className="sph-icon" aria-hidden="true">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <span className="sph-section">Coming soon</span>
+        <h1 className="sph-title">Page not found</h1>
+        <p className="sph-desc">This section ({type}) is not yet available.</p>
       </div>
     </div>
   );

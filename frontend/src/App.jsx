@@ -5,6 +5,8 @@ import CashierPage from './pages/cashier/CashierPage';
 import StaffLayout from './pages/staff/StaffLayout';
 import InventoryPage from './pages/staff/InventoryPage';
 import MenuPage from './pages/staff/MenuPage';
+import DeliveryPage from './pages/staff/DeliveryPage';
+import SupportChatPage from './pages/staff/SupportChatPage';
 import StaffPlaceholder from './pages/staff/StaffPlaceholder';
 import KitchenPage from './pages/kitchen/KitchenPage';
 import OwnerLayout from './pages/owner/OwnerLayout';
@@ -67,8 +69,8 @@ export default function App() {
             <Route index element={<Navigate to="/staff/inventory" replace />} />
             <Route path="inventory" element={<InventoryPage />} />
             <Route path="menu" element={<MenuPage />} />
-            <Route path="delivery" element={<StaffPlaceholder type="delivery" />} />
-            <Route path="chat" element={<StaffPlaceholder type="chat" />} />
+            <Route path="delivery" element={<DeliveryPage />} />
+            <Route path="chat" element={<SupportChatPage />} />
           </Route>
 
           {/* Owner */}
