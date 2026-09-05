@@ -620,3 +620,160 @@ export const deliveryAPI = {
     return { data: { ...delivery } };
   },
 };
+// ─── SUPPORT CHAT MOCK DATA (§4.4) ────────────────────────────────────────────
+let MOCK_CHAT_THREADS = [
+  {
+    id: 1,
+    customer_id: 101,
+    customer_name: 'Maria Santos',
+    customer_email: 'maria.santos@email.com',
+    status: 'unlocked',
+    last_message_text: 'Kamusta na yung order ko? Matagal na eh',
+    last_message_at: hrsAgo(0.08),
+    active_order_number: 'ORD-1003',
+    active_orders: [
+      { id: 1003, order_number: 'ORD-1003', status: 'out_for_delivery', items: [{ quantity: 1, name: 'Tapsilog', price: 120 }, { quantity: 2, name: 'Iced Tea', price: 45 }] },
+    ],
+  },
+  {
+    id: 2,
+    customer_id: 102,
+    customer_name: 'Jose Reyes',
+    customer_email: 'jose.reyes@email.com',
+    status: 'unlocked',
+    last_message_text: 'Hi! May extra chili ba kayo?',
+    last_message_at: hrsAgo(0.25),
+    active_order_number: 'ORD-1004',
+    active_orders: [
+      { id: 1004, order_number: 'ORD-1004', status: 'preparing', items: [{ quantity: 1, name: 'Sinigang Set', price: 150 }, { quantity: 1, name: 'Extra Rice', price: 20 }] },
+    ],
+  },
+  {
+    id: 3,
+    customer_id: 103,
+    customer_name: 'Ana Cruz',
+    customer_email: 'ana.cruz@email.com',
+    status: 'unlocked',
+    last_message_text: 'Okay lang siya, salamat!',
+    last_message_at: hrsAgo(0.5),
+    active_order_number: 'ORD-1005',
+    active_orders: [
+      { id: 1005, order_number: 'ORD-1005', status: 'assigned', items: [{ quantity: 2, name: 'Longsilog', price: 110 }] },
+    ],
+  },
+  {
+    id: 4,
+    customer_id: 104,
+    customer_name: 'Pedro Lim',
+    customer_email: 'pedro.lim@email.com',
+    status: 'unlocked',
+    last_message_text: 'Pwede bang baguhin yung address?',
+    last_message_at: hrsAgo(1),
+    active_order_number: 'ORD-1006',
+    active_orders: [
+      { id: 1006, order_number: 'ORD-1006', status: 'confirmed', items: [{ quantity: 1, name: 'Fried Chicken', price: 135 }, { quantity: 1, name: 'Coke Regular', price: 40 }] },
+    ],
+  },
+  {
+    id: 5,
+    customer_id: 105,
+    customer_name: 'Rosa Villanueva',
+    customer_email: 'rosa.v@email.com',
+    status: 'locked',
+    last_message_text: 'Okay, salamat po! Masarap talaga.',
+    last_message_at: hrsAgo(2.5),
+    active_order_number: null,
+    active_orders: [],
+  },
+  {
+    id: 6,
+    customer_id: 106,
+    customer_name: 'Tony Uy',
+    customer_email: 'tony.uy@email.com',
+    status: 'locked',
+    last_message_text: 'Sige po, noted. Salamat!',
+    last_message_at: hrsAgo(5),
+    active_order_number: null,
+    active_orders: [],
+  },
+];
+
+let MOCK_CHAT_MESSAGES = {
+  1: [
+    { id: 1, chat_id: 1, sender_type: 'customer', sender_name: 'Maria Santos', message_text: 'Hello po! May order po ako.', related_order_number: 'ORD-1003', sent_at: hrsAgo(0.5) },
+    { id: 2, chat_id: 1, sender_type: 'staff',    sender_name: 'Staff',        message_text: 'Hello Maria! Noted po ang order mo. Ilalabas na namin agad.', related_order_number: null, sent_at: hrsAgo(0.45) },
+    { id: 3, chat_id: 1, sender_type: 'customer', sender_name: 'Maria Santos', message_text: 'Sige po, salamat! Gaano katagal?', related_order_number: null, sent_at: hrsAgo(0.3) },
+    { id: 4, chat_id: 1, sender_type: 'staff',    sender_name: 'Staff',        message_text: 'Mga 20-30 minutes po, naka-assign na ang rider.', related_order_number: 'ORD-1003', sent_at: hrsAgo(0.25) },
+    { id: 5, chat_id: 1, sender_type: 'customer', sender_name: 'Maria Santos', message_text: 'Kamusta na yung order ko? Matagal na eh', related_order_number: 'ORD-1003', sent_at: hrsAgo(0.08) },
+  ],
+  2: [
+    { id: 6, chat_id: 2, sender_type: 'customer', sender_name: 'Jose Reyes', message_text: 'Hi! May extra chili ba kayo?', related_order_number: 'ORD-1004', sent_at: hrsAgo(0.25) },
+  ],
+  3: [
+    { id: 7, chat_id: 3, sender_type: 'customer', sender_name: 'Ana Cruz', message_text: 'Pwede bang magpalit ng item?', related_order_number: 'ORD-1005', sent_at: hrsAgo(1) },
+    { id: 8, chat_id: 3, sender_type: 'staff',    sender_name: 'Staff',      message_text: 'Hi Ana! Pasensya na po, naka-prepare na kasi. Hindi na ma-change.', related_order_number: 'ORD-1005', sent_at: hrsAgo(0.9) },
+    { id: 9, chat_id: 3, sender_type: 'customer', sender_name: 'Ana Cruz', message_text: 'Okay lang siya, salamat!', related_order_number: null, sent_at: hrsAgo(0.5) },
+  ],
+  4: [
+    { id: 10, chat_id: 4, sender_type: 'customer', sender_name: 'Pedro Lim', message_text: 'Pwede bang baguhin yung address?', related_order_number: 'ORD-1006', sent_at: hrsAgo(1) },
+  ],
+  5: [
+    { id: 11, chat_id: 5, sender_type: 'customer', sender_name: 'Rosa Villanueva', message_text: 'Natanggap ko na yung order ko!', related_order_number: null, sent_at: hrsAgo(3) },
+    { id: 12, chat_id: 5, sender_type: 'staff',    sender_name: 'Staff',            message_text: 'Salamat po Rosa! Ulit ulit po kayo.', related_order_number: null, sent_at: hrsAgo(2.8) },
+    { id: 13, chat_id: 5, sender_type: 'customer', sender_name: 'Rosa Villanueva', message_text: 'Okay, salamat po! Masarap talaga.', related_order_number: null, sent_at: hrsAgo(2.5) },
+  ],
+  6: [
+    { id: 14, chat_id: 6, sender_type: 'customer', sender_name: 'Tony Uy', message_text: 'Pwede bang i-cancel?', related_order_number: null, sent_at: hrsAgo(6) },
+    { id: 15, chat_id: 6, sender_type: 'staff',    sender_name: 'Staff',     message_text: 'Hi Tony! Na-cancel na po. Pasensya sa abala.', related_order_number: null, sent_at: hrsAgo(5.5) },
+    { id: 16, chat_id: 6, sender_type: 'customer', sender_name: 'Tony Uy', message_text: 'Sige po, noted. Salamat!', related_order_number: null, sent_at: hrsAgo(5) },
+  ],
+};
+
+let msgCounter = 17;
+
+// ─── SUPPORT CHAT API (§4.4) ──────────────────────────────────────────────────
+export const supportChatAPI = {
+  /** GET /api/support-chat/threads — all threads (staff view) */
+  getThreads: async () => {
+    await delay(400);
+    return { data: { threads: [...MOCK_CHAT_THREADS] } };
+  },
+
+  /** GET /api/support-chat/:chatId/messages */
+  getMessages: async (chatId) => {
+    await delay(350);
+    const messages = MOCK_CHAT_MESSAGES[chatId] || [];
+    return { data: { messages: [...messages] } };
+  },
+
+  /** POST /api/support-chat/message */
+  sendMessage: async (payload) => {
+    await delay(300);
+    const { chat_id, message_text, sender_type, related_order_id } = payload;
+
+    const thread = MOCK_CHAT_THREADS.find((t) => t.id === chat_id);
+    if (!thread) throw { response: { data: { message: 'Thread not found.' } } };
+    if (thread.status === 'locked') throw { response: { data: { message: 'Thread is locked.' } } };
+
+    const newMsg = {
+      id: msgCounter++,
+      chat_id,
+      sender_type: sender_type || 'staff',
+      sender_name: sender_type === 'customer' ? thread.customer_name : 'Staff',
+      message_text,
+      related_order_number: related_order_id
+        ? thread.active_orders?.find((o) => o.id === related_order_id)?.order_number || null
+        : null,
+      sent_at: new Date().toISOString(),
+    };
+
+    if (!MOCK_CHAT_MESSAGES[chat_id]) MOCK_CHAT_MESSAGES[chat_id] = [];
+    MOCK_CHAT_MESSAGES[chat_id] = [...MOCK_CHAT_MESSAGES[chat_id], newMsg];
+
+    // Update thread preview
+    thread.last_message_text = message_text;
+    thread.last_message_at   = newMsg.sent_at;
+
+    return { data: { message: newMsg } };
+  },
+};
