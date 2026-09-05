@@ -3,7 +3,7 @@ import { staffMenuAPI, inventoryAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import '../../styles/MenuPage.css';
 
-// ─── Toast (matches codebase — no external lib) ───────────────────────────────
+// ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
   const [msg, setMsg] = useState('');
   const [type, setType] = useState('success');
@@ -16,7 +16,7 @@ function useToast() {
   return { msg, type, show };
 }
 
-// ─── Toggle switch ─────────────────────────────────────────────────────────────
+// ─── Toggle switch ────────────────────────────────────────────────────────────
 function Toggle({ checked, onChange, disabled, label }) {
   return (
     <button
@@ -33,7 +33,7 @@ function Toggle({ checked, onChange, disabled, label }) {
   );
 }
 
-// ─── Image upload ──────────────────────────────────────────────────────────────
+// ─── Image upload ─────────────────────────────────────────────────────────────
 function ImageUpload({ value, onChange }) {
   const inputRef = useRef(null);
   const [preview, setPreview] = useState(value || null);
@@ -180,7 +180,6 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
     if (!form.price || Number(form.price) <= 0) { setError('Enter a valid price.'); return; }
     setLoading(true); setError('');
     try {
-      // Mock: no actual upload, just use a placeholder URL if file is selected
       const image_url = photoFile ? `https://placehold.co/400x300?text=${encodeURIComponent(form.name)}` : (item?.image_url || null);
       await onSave({ ...form, price: Number(form.price), image_url, ingredients: linked }, isEdit ? item.id : null);
       onClose();
@@ -201,7 +200,6 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
           </button>
         </div>
 
-        {/* Tab bar */}
         <div className="mn-modal__tabs">
           {[{ id: 'details', label: 'Details' }, { id: 'ingredients', label: `Ingredients${linked.length ? ` (${linked.length})` : ''}` }].map(({ id, label }) => (
             <button key={id} type="button" onClick={() => setTab(id)} className={`mn-modal__tab${tab === id ? ' mn-modal__tab--active' : ''}`}>{label}</button>
@@ -216,18 +214,15 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                   <label className="mn-field__label">Photo</label>
                   <ImageUpload value={item?.image_url} onChange={setPhotoFile} />
                 </div>
-
                 <div className="mn-grid-2">
                   <div className="mn-field mn-grid-2__full">
                     <label htmlFor="mn-name" className="mn-field__label">Name *</label>
                     <input id="mn-name" type="text" value={form.name} onChange={(e) => set('name')(e.target.value)} className="mn-field__input" placeholder="e.g. Tapsilog" required autoFocus={!isEdit} />
                   </div>
-
                   <div className="mn-field">
                     <label htmlFor="mn-price" className="mn-field__label">Price (₱) *</label>
                     <input id="mn-price" type="number" min="0" step="0.5" value={form.price} onChange={(e) => set('price')(e.target.value)} className="mn-field__input" placeholder="e.g. 120" required />
                   </div>
-
                   <div className="mn-field">
                     <label htmlFor="mn-cat" className="mn-field__label">Category *</label>
                     <select id="mn-cat" value={form.category_id} onChange={(e) => set('category_id')(Number(e.target.value))} className="mn-field__input">
@@ -235,12 +230,10 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                     </select>
                   </div>
                 </div>
-
                 <div className="mn-field">
                   <label htmlFor="mn-desc" className="mn-field__label">Description</label>
                   <textarea id="mn-desc" value={form.description} onChange={(e) => set('description')(e.target.value)} className="mn-field__input mn-field__textarea" placeholder="Short description shown to customers…" rows={2} />
                 </div>
-
                 <div className="mn-avail-row">
                   <div>
                     <p className="mn-avail-row__label">Availability</p>
@@ -261,7 +254,6 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                 <IngredientLinker inventoryItems={inventoryItems} linked={linked} onChange={setLinked} />
               </div>
             )}
-
             {error && (
               <p className="mn-modal__error" role="alert">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -284,7 +276,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
   );
 }
 
-// ─── Confirm dialog ────────────────────────────────────────────────────────────
+// ─── Confirm dialog ───────────────────────────────────────────────────────────
 function ConfirmDialog({ item, onClose, onConfirm }) {
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -312,7 +304,7 @@ function ConfirmDialog({ item, onClose, onConfirm }) {
   );
 }
 
-// ─── Menu item card (mobile / grid) ───────────────────────────────────────────
+// ─── Menu item card ───────────────────────────────────────────────────────────
 function MenuItemCard({ item, onEdit, onDelete, onToggle, toggling }) {
   return (
     <article className="mn-card">
@@ -328,21 +320,18 @@ function MenuItemCard({ item, onEdit, onDelete, onToggle, toggling }) {
         }
         <span className="mn-card__cat-tag">{item.category_name}</span>
       </div>
-
       <div className="mn-card__body">
         <div className="mn-card__top-row">
           <h3 className="mn-card__name">{item.name}</h3>
           <span className="mn-card__price">₱{Number(item.price).toFixed(0)}</span>
         </div>
         {item.description && <p className="mn-card__desc">{item.description}</p>}
-
         <div className="mn-card__footer">
           <span className={`mn-badge${item.is_available ? ' mn-badge--ok' : ' mn-badge--off'}`}>
             {item.is_available ? 'Available' : 'Unavailable'}
           </span>
           <Toggle checked={item.is_available} onChange={() => onToggle(item.id, item.is_available)} disabled={toggling === item.id} label="Toggle availability" />
         </div>
-
         <div className="mn-card__actions">
           <button className="mn-btn mn-btn--secondary mn-btn--sm mn-card__edit" onClick={() => onEdit(item)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -363,7 +352,7 @@ function MenuItemCard({ item, onEdit, onDelete, onToggle, toggling }) {
   );
 }
 
-// ─── Table row (desktop) ──────────────────────────────────────────────────────
+// ─── Table row ────────────────────────────────────────────────────────────────
 function MenuItemRow({ item, onEdit, onDelete, onToggle, toggling }) {
   return (
     <tr className="mn-table__row">
@@ -411,6 +400,72 @@ function MenuItemRow({ item, onEdit, onDelete, onToggle, toggling }) {
   );
 }
 
+// ─── Pagination ───────────────────────────────────────────────────────────────
+const PER_PAGE_OPTIONS = [5, 8, 10, 12, 15, 20, 50];
+
+function Pagination({ page, totalPages, total, perPage, from, to, onPage, onPerPage }) {
+  const pages = [];
+  const delta = 1;
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= page - delta && i <= page + delta)) {
+      pages.push(i);
+    } else if (pages[pages.length - 1] !== '…') {
+      pages.push('…');
+    }
+  }
+
+  return (
+    <div className="pag" role="navigation" aria-label="Pagination">
+      {/* Left: info + per-page selector */}
+      <div className="pag__left">
+        <span className="pag__info">{from}–{to} of {total}</span>
+        <label className="pag__limit-label" htmlFor="mn-per-page">
+          Show
+          <select
+            id="mn-per-page"
+            className="pag__limit-select"
+            value={perPage}
+            onChange={(e) => { onPerPage(Number(e.target.value)); onPage(1); }}
+            aria-label="Items per page"
+          >
+            {PER_PAGE_OPTIONS.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          per page
+        </label>
+      </div>
+
+      {/* Right: page buttons — hidden when only 1 page */}
+      {totalPages > 1 && (
+        <div className="pag__controls">
+          <button className="pag__btn" onClick={() => onPage(page - 1)} disabled={page === 1} aria-label="Previous page">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          {pages.map((p, i) =>
+            p === '…'
+              ? <span key={`e${i}`} className="pag__ellipsis">…</span>
+              : <button
+                  key={p}
+                  className={`pag__btn pag__btn--num${p === page ? ' pag__btn--active' : ''}`}
+                  onClick={() => onPage(p)}
+                  aria-label={`Page ${p}`}
+                  aria-current={p === page ? 'page' : undefined}
+                >{p}</button>
+          )}
+          <button className="pag__btn" onClick={() => onPage(page + 1)} disabled={page === totalPages} aria-label="Next page">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function MenuPage() {
   const [items, setItems] = useState([]);
@@ -422,9 +477,11 @@ export default function MenuPage() {
   const [filterCat, setFilterCat] = useState('all');
   const [filterAvail, setFilterAvail] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
-  const [modal, setModal] = useState(null);      // null | { mode: 'add'|'edit', item? }
+  const [modal, setModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [toggling, setToggling] = useState(null); // item id being toggled
+  const [toggling, setToggling] = useState(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(12);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchAll = useCallback(async () => {
@@ -440,7 +497,6 @@ export default function MenuPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Real-time socket sync
   useEffect(() => {
     const socket = getSocket();
     const handler = (updated) => setItems((prev) => prev.map((i) => i.id === updated.id ? { ...i, ...updated } : i));
@@ -467,14 +523,19 @@ export default function MenuPage() {
     return r;
   }, [items, search, filterCat, filterAvail]);
 
+  // Reset to page 1 when filters/search/viewMode/perPage change
+  useEffect(() => { setPage(1); }, [search, filterCat, filterAvail, viewMode, perPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const safePage   = Math.min(page, totalPages);
+  const start      = (safePage - 1) * perPage;
+  const paged      = useMemo(() => filtered.slice(start, start + perPage), [filtered, start, perPage]);
+  const from       = filtered.length === 0 ? 0 : start + 1;
+  const to         = Math.min(start + perPage, filtered.length);
+
   const handleSave = async (payload, id) => {
-    if (id) {
-      await staffMenuAPI.update(id, payload);
-      showToast('Menu item updated.');
-    } else {
-      await staffMenuAPI.create(payload);
-      showToast('Menu item added.');
-    }
+    if (id) { await staffMenuAPI.update(id, payload); showToast('Menu item updated.'); }
+    else     { await staffMenuAPI.create(payload);    showToast('Menu item added.'); }
     await fetchAll();
   };
 
@@ -562,7 +623,6 @@ export default function MenuPage() {
           </svg>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu items…" className="mn-search__input" aria-label="Search menu items" />
         </div>
-
         <div className="mn-filters__selects">
           <select className="mn-select" value={filterCat} onChange={(e) => setFilterCat(e.target.value)} aria-label="Filter by category">
             <option value="all">All categories</option>
@@ -573,8 +633,6 @@ export default function MenuPage() {
             <option value="available">Available</option>
             <option value="unavailable">Unavailable</option>
           </select>
-
-          {/* View toggle — desktop only */}
           <div className="mn-view-toggle" role="group" aria-label="View mode">
             {['grid', 'table'].map((mode) => (
               <button key={mode} onClick={() => setViewMode(mode)} className={`mn-view-toggle__btn${viewMode === mode ? ' mn-view-toggle__btn--active' : ''}`} aria-pressed={viewMode === mode} aria-label={`${mode} view`}>
@@ -589,7 +647,7 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* Content: always cards on mobile, grid or table on desktop */}
+      {/* Content */}
       {loading ? (
         <div className="mn-grid">
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="mn-skeleton-card" aria-hidden="true" />)}
@@ -608,13 +666,15 @@ export default function MenuPage() {
             </button>
           )}
         </div>
-      ) : viewMode === 'grid' || window.innerWidth < 1024 ? (
-        // Mobile always grid; desktop follows viewMode
-        <div className="mn-grid">
-          {filtered.map((item) => (
-            <MenuItemCard key={item.id} item={item} onEdit={(i) => setModal({ mode: 'edit', item: i })} onDelete={setDeleteTarget} onToggle={handleToggle} toggling={toggling} />
-          ))}
-        </div>
+      ) : viewMode === 'grid' ? (
+        <>
+          <div className="mn-grid">
+            {paged.map((item) => (
+              <MenuItemCard key={item.id} item={item} onEdit={(i) => setModal({ mode: 'edit', item: i })} onDelete={setDeleteTarget} onToggle={handleToggle} toggling={toggling} />
+            ))}
+          </div>
+          <Pagination page={safePage} totalPages={totalPages} total={filtered.length} perPage={perPage} from={from} to={to} onPage={setPage} onPerPage={setPerPage} />
+        </>
       ) : (
         <div className="mn-table-wrap">
           <table className="mn-table" aria-label="Menu items">
@@ -628,28 +688,20 @@ export default function MenuPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((item) => (
+              {paged.map((item) => (
                 <MenuItemRow key={item.id} item={item} onEdit={(i) => setModal({ mode: 'edit', item: i })} onDelete={setDeleteTarget} onToggle={handleToggle} toggling={toggling} />
               ))}
             </tbody>
           </table>
           <div className="mn-table__footer">
-            Showing <strong>{filtered.length}</strong> of <strong>{items.length}</strong> items
+            <Pagination page={safePage} totalPages={totalPages} total={filtered.length} perPage={perPage} from={from} to={to} onPage={setPage} onPerPage={setPerPage} />
           </div>
         </div>
       )}
 
-      {/* Modals */}
       {modal && (
-        <MenuItemModal
-          item={modal.item}
-          categories={categories}
-          inventoryItems={inventoryItems}
-          onClose={() => setModal(null)}
-          onSave={handleSave}
-        />
+        <MenuItemModal item={modal.item} categories={categories} inventoryItems={inventoryItems} onClose={() => setModal(null)} onSave={handleSave} />
       )}
-
       {deleteTarget && (
         <ConfirmDialog item={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} />
       )}
