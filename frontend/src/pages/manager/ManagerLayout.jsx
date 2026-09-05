@@ -3,6 +3,8 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocketEvent } from '../../context/SocketContext';
 import ToastContainer from '../../components/Toast';
+import useLiveData from '../../hooks/useLiveData';
+import { kitchenAPI, inventoryAPI, deliveryAPI } from '../../services/managerApi';
 import '../../styles/ManagerLayout.css';
 import logo from '../../assets/logo.png';
 
@@ -18,8 +20,8 @@ const SECTIONS = [
     label: 'Operational Oversight',
     links: [
       { to: '/manager/oversight', label: 'Oversight', sub: 'Live operation hub', icon: <EyeIcon /> },
-      { to: '/manager/oversight/kitchen', label: 'Kitchen', sub: 'Read-only view', icon: <KitchenIcon /> },
-      { to: '/manager/oversight/stocks', label: 'Stocks', sub: 'Read-only stock', icon: <StocksIcon /> },
+      { to: '/manager/oversight/kitchen', label: 'Kitchen', sub: 'Counter & online queues', icon: <KitchenIcon /> },
+      { to: '/manager/oversight/stocks', label: 'Stocks', sub: 'Reorder alerts', icon: <StocksIcon /> },
       { to: '/manager/oversight/delivery', label: 'Delivery', sub: 'Track progress', icon: <DeliveryIcon /> },
     ],
   },
@@ -31,6 +33,90 @@ export default function ManagerLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { payload: orderNew } = useSocketEvent('order:new');
   const [toasts, setToasts] = useState([]);
+
+  // Live counts for nav badges (kitchen queue, stock alerts, delivery).
+  const { data: live } = useLiveData({
+    fetchFn: async () => {
+      const [k, s, d] = await Promise.all([
+        kitchenAPI.getOrders(),
+        inventoryAPI.getAll(),
+        deliveryAPI.getAll(),
+      ]);
+      return { kitchen: k.data, stock: s.data.items || s.data, deliveries: d.data };
+    },
+    initial: { kitchen: [], stock: [], deliveries: [] },
+    events: [
+      {
+        name: 'order:new',
+        merge: (prev, p) => (p ? { ...prev, kitchen: [p, ...(prev.kitchen ?? [])] } : prev),
+      },
+      {
+        name: 'order:ready',
+        merge: (prev, p) => (p ? { ...prev, kitchen: (prev.kitchen ?? []).filter((o) => o.id !== p.orderId) } : prev),
+      },
+      {
+        name: 'order:status',
+        merge: (prev, p) => (p ? {
+          ...prev,
+          kitchen: (prev.kitchen ?? [])
+            .map((o) => (o.id === p.orderId ? { ...o, status: p.status } : o))
+            .filter((o) => ['confirmed', 'preparing'].includes(o.status)),
+        } : prev),
+      },
+      {
+        name: 'inventory:update',
+        merge: (prev, p) => {
+          if (!p) return prev;
+          const stock = prev.stock ?? [];
+          const idx = stock.findIndex((i) => i.id === p.itemId);
+          if (idx < 0) return prev;
+          const next = stock.slice();
+          next[idx] = { ...next[idx], current_stock: p.currentStock };
+          return { ...prev, stock: next };
+        },
+      },
+      {
+        name: 'delivery:new',
+        merge: (prev, p) => (p ? { ...prev, deliveries: [p, ...(prev.deliveries ?? [])] } : prev),
+      },
+      {
+        name: 'delivery:update',
+        merge: (prev, p) => {
+          if (!p) return prev;
+          const deliveries = prev.deliveries ?? [];
+          const idx = deliveries.findIndex((d) => d.id === p.deliveryId);
+          if (idx < 0) return prev;
+          const next = deliveries.slice();
+          next[idx] = { ...next[idx], status: p.status };
+          return { ...prev, deliveries: next };
+        },
+      },
+    ],
+  });
+
+  // Idle ticker so urgency thresholds (8 / 15 min) flip on time.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const { kitchen = [], stock = [], deliveries = [] } = live;
+  const kitchenQueue = kitchen.length;
+  const kitchenCritical = kitchen.some((o) => now - new Date(o.created_at).getTime() >= 15 * 60000);
+  const kitchenUrgent = kitchen.some((o) => now - new Date(o.created_at).getTime() >= 8 * 60000);
+  const stockAlerts = stock.filter((i) => i.current_stock <= i.reorder_level).length;
+  const outForDelivery = deliveries.filter((d) => d.status === 'out_for_delivery').length;
+
+  const badges = {
+    '/manager/oversight/kitchen': {
+      value: kitchenQueue,
+      tone: kitchenCritical ? 'critical' : kitchenUrgent ? 'urgent' : 'default',
+      showWhenZero: true,
+    },
+    '/manager/oversight/stocks': { value: stockAlerts, tone: 'critical', showWhenZero: false },
+    '/manager/oversight/delivery': { value: outForDelivery, tone: 'default', showWhenZero: false },
+  };
 
   const handleLogout = () => {
     logout();
@@ -98,7 +184,15 @@ export default function ManagerLayout() {
                         <span className="ml-nav__label">{label}</span>
                         <span className="ml-nav__sub">{sub}</span>
                       </span>
-                      {isActive && <span className="ml-nav__pip" aria-hidden="true" />}
+                      {(badges[to]?.showWhenZero || badges[to]?.value > 0) && (
+                        <span
+                          className={`ml-nav__badge ml-nav__badge--${badges[to].tone}`}
+                          role="status"
+                          aria-label={`${label}: ${badges[to].value}`}
+                        >
+                          {badges[to].value}
+                        </span>
+                      )}
                     </>
                   )}
                 </NavLink>
@@ -109,13 +203,6 @@ export default function ManagerLayout() {
       </nav>
 
       <div className="ml-user">
-        <div className="ml-readonly-note">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <rect x="3" y="11" width="18" height="11" rx="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          Read-only view
-        </div>
         <div className="ml-user__card">
           <div className="ml-user__avatar" aria-hidden="true">
             {user?.full_name?.[0]?.toUpperCase() || 'M'}
@@ -159,6 +246,15 @@ export default function ManagerLayout() {
               aria-label={label}
             >
               {icon}
+              {badges[to]?.value > 0 && (
+                badges[to].tone === 'critical' ? (
+                  <span className="ml-compact__dot" aria-hidden="true" />
+                ) : (
+                  <span className={`ml-compact__badge ml-compact__badge--${badges[to].tone}`} aria-hidden="true">
+                    {badges[to].value > 99 ? '99+' : badges[to].value}
+                  </span>
+                )
+              )}
             </NavLink>
           ))}
         </nav>
@@ -193,7 +289,7 @@ export default function ManagerLayout() {
       {drawerOpen && (
         <div className="ml-drawer-overlay" onClick={() => setDrawerOpen(false)} aria-hidden="true">
           <div className="ml-drawer" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Navigation menu">
-            <button className="ml-drawer__close" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
+            <button className="ml-drawer__close" onClick={() => setDrawerOpen(false)} aria-label="Close menu" autoFocus>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>

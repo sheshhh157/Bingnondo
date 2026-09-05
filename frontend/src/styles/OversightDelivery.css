@@ -1,8 +1,6 @@
 /* ─── OVERSIGHT DELIVERY (read-only) ──────────────────────────────────── */
 
 .odl-root { display: flex; flex-direction: column; gap: 20px; }
-.odl-title { margin: 0; font-family: var(--font-heading); font-size: 1.5rem; font-weight: 700; }
-.odl-sub { margin: 4px 0 0; color: var(--color-muted-foreground); font-size: 0.875rem; }
 
 .odl-stats {
   display: grid;
@@ -11,16 +9,6 @@
   max-width: 560px;
 }
 .odl-stat__value--ok { color: #1D4ED8; }
-
-.odl-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 80px 0;
-  color: var(--color-muted-foreground);
-  font-size: 0.875rem;
-}
 
 .odl-empty {
   text-align: center;
@@ -115,3 +103,7 @@
   line-height: 1.2;
 }
 .odl-step__label--done { color: var(--color-primary); font-weight: 600; }
+
+@media (max-width: 480px) {
+  .odl-stats { grid-template-columns: 1fr; }
+}

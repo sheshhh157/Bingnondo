@@ -132,34 +132,46 @@ button, input, textarea, select { font-family: var(--font-body); }
 ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
 
-/* ─── Manager Theme — Imperial Blue (海藍) Azure Court ───────────────── */
-/* Scoped to .mr-root so it reads as a distinct station (owner-level),  */
-/* staying within the Chinese-heritage family.                          */
-.mr-root {
-  --color-primary:          #1D4ED8;
-  --color-on-primary:       #EFF6FF;
-  --color-secondary:        #1E3A8A;
-  --color-on-secondary:     #EFF6FF;
-  --color-accent:           #B45309;
-  --color-on-accent:        #FDF6EC;
-  --color-gold:             #B45309;
-  --color-gold-light:       #FDE68A;
-  --color-background:       #F1F5F9;
-  --color-foreground:       #0F172A;
-  --color-card:             #FFFFFF;
-  --color-card-foreground:  #0F172A;
-  --color-muted:            #E2E8F0;
-  --color-muted-foreground: #475569;
-  --color-border:           #CBD5E1;
-  --color-border-strong:    #94A3B8;
-  --color-destructive:      #B91C1C;
-  --color-on-destructive:   #FDF6EC;
-  --color-ring:             #1D4ED8;
-  --color-surface:          #E8EFFB;
+/* ─── Admin Theme — Imperial Ink (墨池) Dark Heritage Variant ──────────
+ * Scoped to .al-root — the admin console keeps its dark "imperial ink"
+ * character while inheriting the heritage token vocabulary: same token
+ * names as the base :root, dark values. Mirrors .sl-root / .ml-root.
+ *
+ * Palette: Dark Xuan Ink — Roasted Lacquer + Gilded Brass on Night Paper
+ * Primary:  Roasted Cinnabar #C0392B  (vermilion family, lacquer depth)
+ * Secondary: Ember            #D94A3C (hover warmth, brighter cinnabar)
+ * Gold:     Gilded Brass     #C9963C  (imperial gold trim)
+ * Accent:   Gilded Brass     #C9963C
+ * Background: Night Paper    #0D0D0D  (墨池 — ink pool)
+ * Card:     Charcoal Card    #181510
+ * Muted:    Coal Surface     #211F18
+ * Ink:      Pale Ink         #E8E0D4  (readable pale ink text)
+ * Border:   Iron Hairline    #262218
+ * ─────────────────────────────────────────────────────────────────────── */
+.al-root {
+  --color-primary:          #C0392B;
+  --color-on-primary:       #F5EAE4;
+  --color-secondary:        #D94A3C;
+  --color-on-secondary:     #F5EAE4;
+  --color-accent:           #C9963C;
+  --color-on-accent:        #1A1410;
+  --color-gold:             #C9963C;
+  --color-gold-light:       #E8B84B;
+  --color-background:       #0D0D0D;
+  --color-foreground:       #E8E0D4;
+  --color-card:             #181510;
+  --color-card-foreground:  #E8E0D4;
+  --color-muted:            #211F18;
+  --color-muted-foreground: rgba(232,224,212,0.45);
+  --color-border:           #262218;
+  --color-border-strong:    #2E2B22;
+  --color-destructive:      #E06050;
+  --color-on-destructive:   #1A0A00;
+  --color-ring:             #C9963C;
+  --color-surface:          #1A1710;
 
-  --shadow-sm:  0 1px 4px rgba(15,23,42,0.07);
-  --shadow-md:  0 4px 16px rgba(15,23,42,0.10);
-  --shadow-lg:  0 12px 40px rgba(15,23,42,0.13);
-
-  background: var(--color-background);
+  /* Shadows — re-inked in night ink */
+  --shadow-sm:  0 1px 4px rgba(0,0,0,0.45);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.50);
+  --shadow-lg:  0 12px 40px rgba(0,0,0,0.60);
 }

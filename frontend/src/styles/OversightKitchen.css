@@ -1,16 +1,15 @@
-/* ─── OVERSIGHT KITCHEN (read-only) ───────────────────────────────────── */
+/* ─── OVERSIGHT KITCHEN (read-only) ─────────────────────────────────────
+ * Styled to match the rest of the Manager app (Azure Court grammar):
+ *   surfaces/cards via --color-* tokens, azure primary accent,
+ *   gold = warning/queued states, destructive red = overdue.
+ * Urgency always renders identically in both columns.
+ * ─────────────────────────────────────────────────────────────────────── */
 
-.ok-root { display: flex; flex-direction: column; gap: 20px; }
-
-.ok-header {
+.ok-root {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 20px;
 }
-.ok-title { margin: 0; font-family: var(--font-heading); font-size: 1.5rem; font-weight: 700; }
-.ok-sub { margin: 4px 0 0; color: var(--color-muted-foreground); font-size: 0.875rem; }
 
 .ok-conn {
   display: inline-flex;
@@ -18,9 +17,9 @@
   gap: 6px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #1D4ED8;
-  border: 1px solid #BFDBFE;
-  background: #EFF6FF;
+  color: var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, white);
+  background: color-mix(in srgb, var(--color-primary) 10%, white);
   border-radius: 99px;
   padding: 6px 12px;
   cursor: default;
@@ -33,16 +32,6 @@
   background: currentColor;
 }
 
-.ok-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 80px 0;
-  color: var(--color-muted-foreground);
-  font-size: 0.875rem;
-}
-
 .ok-split {
   display: grid;
   grid-template-columns: 1fr;
@@ -50,8 +39,16 @@
 }
 
 @media (min-width: 900px) {
-  .ok-split { grid-template-columns: 1fr 1fr; }
-  .ok-divider { width: 1px; background: var(--color-border); }
+  .ok-split {
+    grid-template-columns: 1fr 1px 1fr;
+    column-gap: 16px;
+    row-gap: 16px;
+  }
+  .ok-divider {
+    width: 1px;
+    background: var(--color-border);
+    align-self: stretch;
+  }
 }
 
 .ok-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -63,57 +60,42 @@
   padding-bottom: 10px;
   border-bottom: 1px solid var(--color-border);
 }
+
+/* Queue count — uniform soft azure pill */
 .ok-col__count {
   min-width: 26px; height: 26px;
-  border-radius: 8px;
+  border-radius: 99px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--color-on-primary);
-  background: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, white);
+  color: var(--color-primary);
 }
-.ok-col__count--online { background: #1D4ED8; }
 .ok-col__title { margin: 0; font-size: 1rem; font-weight: 600; }
-
-.ok-col__empty {
-  text-align: center;
-  color: var(--color-muted-foreground);
-  font-size: 0.85rem;
-  padding: 40px 0;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-lg);
-}
 
 .ok-col__list { display: flex; flex-direction: column; gap: 12px; }
 
 .ok-card {
   background: var(--color-card);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 14px;
   box-shadow: var(--shadow-sm);
 }
-.ok-card--urgent { border-left: 3px solid #B45309; }
+.ok-card--urgent { border-left: 3px solid var(--color-gold); }
 .ok-card--critical { border-left: 3px solid var(--color-destructive); }
 
 .ok-card__header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ok-card__header-left { display: flex; align-items: center; gap: 8px; }
-.ok-card__dot { width: 8px; height: 8px; border-radius: 50%; background: #1D4ED8; }
-.ok-card__dot--urgent { background: #B45309; }
+.ok-card__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-primary); }
+.ok-card__dot--urgent { background: var(--color-gold); }
 .ok-card__dot--critical { background: var(--color-destructive); }
-.ok-card__number { font-weight: 700; font-size: 0.9rem; }
-.ok-card__status {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 99px;
-}
-.ok-card__status--preparing { background: #E2E8F0; color: #1D4ED8; }
-.ok-card__status--confirmed { background: #E7DDC8; color: #7C5A00; }
+.ok-card__number { font-weight: 700; font-size: 0.9rem; color: var(--color-primary); }
 .ok-card__time { font-size: 0.78rem; color: var(--color-muted-foreground); }
-.ok-card__time--urgent { color: #B45309; font-weight: 600; }
+.ok-card__time--urgent { color: var(--color-gold); font-weight: 600; }
 .ok-card__time--critical { color: var(--color-destructive); font-weight: 700; }
 
 .ok-card__bar {
@@ -139,7 +121,7 @@
 .ok-card__qty { font-weight: 700; color: var(--color-primary); font-size: 0.85rem; min-width: 26px; }
 .ok-card__item-body { display: flex; flex-direction: column; }
 .ok-card__item-name { font-size: 0.875rem; }
-.ok-card__note { font-size: 0.75rem; color: #B45309; font-style: italic; }
+.ok-card__note { font-size: 0.75rem; color: var(--color-muted-foreground); font-style: italic; }
 
 .ok-card__overdue {
   margin-top: 10px;

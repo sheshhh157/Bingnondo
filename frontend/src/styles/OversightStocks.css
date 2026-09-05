@@ -1,8 +1,6 @@
 /* --- OVERSIGHT STOCKS (live, read-only) --- */
 
 .osk-root { display: flex; flex-direction: column; gap: 20px; }
-.osk-title { margin: 0; font-family: var(--font-heading); font-size: 1.5rem; font-weight: 700; }
-.osk-sub { margin: 4px 0 0; color: var(--color-muted-foreground); font-size: 0.875rem; }
 
 .osk-stats {
   display: grid;
@@ -60,16 +58,6 @@
   background: var(--color-card);
   font-size: 0.85rem;
   color: var(--color-foreground);
-}
-
-.osk-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 80px 0;
-  color: var(--color-muted-foreground);
-  font-size: 0.875rem;
 }
 
 .osk-table-wrap {

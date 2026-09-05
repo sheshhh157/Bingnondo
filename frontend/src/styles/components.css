@@ -1,7 +1,5 @@
 /* ─── SHARED COMPONENT STYLES ─────────────────────────────────────────────── */
 
-/* ─── SHARED COMPONENT STYLES ─────────────────────────────────────────────── */
-
 /* Common action button used in page headers */
 .ui-btn {
   display: inline-flex;
@@ -158,6 +156,7 @@
   font-weight: 600;
   color: var(--color-foreground);
 }
+.ui-card--wide { grid-column: span 2; }
 
 /* Toast container */
 .ui-toast-container {

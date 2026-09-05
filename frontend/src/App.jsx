@@ -10,8 +10,6 @@ import DeliveryPage from './pages/staff/DeliveryPage';
 import SupportChatPage from './pages/staff/SupportChatPage';
 import StaffPlaceholder from './pages/staff/StaffPlaceholder';
 import KitchenPage from './pages/kitchen/KitchenPage';
-import OwnerLayout from './pages/owner/OwnerLayout';
-import OwnerDashboard from './pages/owner/OwnerDashboard';
 import AdminLayout from './pages/admin/AdminLayout';
 import StaffAccounts from './pages/admin/StaffAccounts';
 import SystemSettings from './pages/admin/SystemSettings';
@@ -42,7 +40,7 @@ function RoleRedirect() {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'cashier') return <Navigate to="/cashier" replace />;
   if (user.role === 'staff') return <Navigate to="/staff/inventory" replace />;
-  if (user.role === 'owner') return <Navigate to="/owner/dashboard" replace />;
+  if (user.role === 'owner') return <Navigate to="/manager/dashboard" replace />;
   if (user.role === 'kitchen_staff') return <Navigate to="/kitchen" replace />;
   if (user.role === 'admin') return <Navigate to="/admin/accounts" replace />;
   if (user.role === 'manager') return <Navigate to="/manager/dashboard" replace />;
@@ -81,19 +79,6 @@ export default function App() {
             <Route path="menu" element={<MenuPage />} />
             <Route path="delivery" element={<DeliveryPage />} />
             <Route path="chat" element={<SupportChatPage />} />
-          </Route>
-
-          {/* Owner */}
-          <Route
-            path="/owner"
-            element={
-              <ProtectedRoute allowedRoles={['owner']}>
-                <OwnerLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/owner/dashboard" replace />} />
-            <Route path="dashboard" element={<OwnerDashboard />} />
           </Route>
 
           {/* Kitchen */}

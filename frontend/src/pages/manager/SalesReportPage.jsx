@@ -135,10 +135,10 @@ export default function SalesReportPage() {
 
   return (
     <div className="sales-root">
-      <div className="sales-header">
+      <div className="ui-pageheader">
         <div>
-          <h1 className="sales-title">Sales Reports</h1>
-          <p className="sales-sub">Revenue trends and transaction details</p>
+          <h1 className="ui-pageheader__title">Sales Reports</h1>
+          <p className="ui-pageheader__sub">Revenue trends and transaction details</p>
         </div>
         <div className="sales-period" role="group" aria-label="Filter by period">
           {PERIODS.map((p) => (

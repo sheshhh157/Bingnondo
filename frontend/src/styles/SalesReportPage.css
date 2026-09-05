@@ -2,16 +2,6 @@
 
 .sales-root { display: flex; flex-direction: column; gap: 20px; }
 
-.sales-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.sales-title { margin: 0; font-family: var(--font-heading); font-size: 1.5rem; font-weight: 700; }
-.sales-sub { margin: 4px 0 0; color: var(--color-muted-foreground); font-size: 0.875rem; }
-
 .sales-period {
   display: inline-flex;
   border: 1px solid var(--color-border-strong);
@@ -30,16 +20,6 @@
 }
 .sales-period__btn + .sales-period__btn { border-left: 1px solid var(--color-border); }
 .sales-period__btn--active { background: var(--color-primary); color: var(--color-on-primary); }
-
-.sales-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 80px 0;
-  color: var(--color-muted-foreground);
-  font-size: 0.875rem;
-}
 
 .sales-summary {
   display: grid;
@@ -82,30 +62,12 @@
 }
 .sales-date-sep { color: var(--color-muted-foreground); }
 
-.sales-loading { display: flex; align-items: center; justify-content: center; padding: 48px 0; color: var(--color-muted-foreground); }
-
 .sales-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
-.sales-card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
-}
-.sales-card__title { margin: 0 0 12px; font-size: 0.95rem; font-weight: 600; }
 .sales-chart { width: 100%; }
-
-.sales-table-card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
-}
 
 .sales-table-wrap { overflow-x: auto; }
 .sales-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -154,4 +116,10 @@
 @media (max-width: 900px) {
   .sales-grid { grid-template-columns: 1fr; }
   .sales-summary { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .sales-period { flex-wrap: wrap; overflow: visible; }
+  .sales-date-wrap { width: 100%; }
+  .sales-date { flex: 1; min-width: 0; }
 }

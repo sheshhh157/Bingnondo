@@ -210,7 +210,7 @@ events: [
 
           {/* Low-stock quick list */}
           {lowStockItems.length > 0 && (
-            <CardPanel className="dash-card">
+            <CardPanel>
               <div className="dash-low-title">
                 <span>Low / out of stock — needs attention</span>
                 <Link className="dash-low-link" to="/manager/oversight/stocks">View all →</Link>
