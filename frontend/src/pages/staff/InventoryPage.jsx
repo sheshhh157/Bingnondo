@@ -50,7 +50,9 @@ function useToast() {
 // ─── Pagination ───────────────────────────────────────────────────────────────
 const PER_PAGE_OPTIONS = [5, 8, 10, 15, 20, 50];
 
-function Pagination({ page, totalPages, total, perPage, from, to, onPage, onPerPage }) {
+function Pagination({ page, totalPages, total, from, to, onPage }) {
+  if (totalPages <= 1 && total <= 5) return null;
+
   const pages = [];
   const delta = 1;
   for (let i = 1; i <= totalPages; i++) {
@@ -63,27 +65,7 @@ function Pagination({ page, totalPages, total, perPage, from, to, onPage, onPerP
 
   return (
     <div className="pag" role="navigation" aria-label="Pagination">
-      {/* Left: info + per-page selector */}
-      <div className="pag__left">
-        <span className="pag__info">{from}–{to} of {total}</span>
-        <label className="pag__limit-label" htmlFor="inv-per-page">
-          Show
-          <select
-            id="inv-per-page"
-            className="pag__limit-select"
-            value={perPage}
-            onChange={(e) => { onPerPage(Number(e.target.value)); onPage(1); }}
-            aria-label="Items per page"
-          >
-            {PER_PAGE_OPTIONS.map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-          per page
-        </label>
-      </div>
-
-      {/* Right: page buttons — hidden when only 1 page */}
+      <span className="pag__info">{from}–{to} of {total}</span>
       {totalPages > 1 && (
         <div className="pag__controls">
           <button className="pag__btn" onClick={() => onPage(page - 1)} disabled={page === 1} aria-label="Previous page">
@@ -276,8 +258,7 @@ export default function InventoryPage() {
   const [sortBy, setSortBy] = useState('name');
   const [modal, setModal] = useState(null);
   const [page, setPage] = useState(1);
-  const [perPageTable, setPerPageTable] = useState(10);
-  const [perPageCards, setPerPageCards] = useState(8);
+  const [perPage, setPerPage] = useState(10);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchItems = useCallback(async () => {
@@ -332,27 +313,18 @@ export default function InventoryPage() {
   }, [items, search, filterStatus, sortBy]);
 
   // Reset to page 1 when filters/search/perPage change
-  useEffect(() => { setPage(1); }, [search, filterStatus, sortBy, perPageTable, perPageCards]);
+  useEffect(() => { setPage(1); }, [search, filterStatus, sortBy, perPage]);
 
-  // Paginated slices
-  const totalPagesTable = Math.max(1, Math.ceil(filtered.length / perPageTable));
-  const totalPagesCards = Math.max(1, Math.ceil(filtered.length / perPageCards));
-  const safePage = Math.min(page, Math.max(totalPagesTable, totalPagesCards));
+  // Paginated slices — single perPage for both table and cards
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const safePage   = Math.min(page, totalPages);
+  const start      = (safePage - 1) * perPage;
 
-  const pagedTable = useMemo(() => {
-    const start = (safePage - 1) * perPageTable;
-    return filtered.slice(start, start + perPageTable);
-  }, [filtered, safePage, perPageTable]);
+  const pagedTable = useMemo(() => filtered.slice(start, start + perPage), [filtered, start, perPage]);
+  const pagedCards = pagedTable; // same slice, different layout
 
-  const pagedCards = useMemo(() => {
-    const start = (safePage - 1) * perPageCards;
-    return filtered.slice(start, start + perPageCards);
-  }, [filtered, safePage, perPageCards]);
-
-  const fromTable = filtered.length === 0 ? 0 : (safePage - 1) * perPageTable + 1;
-  const toTable   = Math.min(safePage * perPageTable, filtered.length);
-  const fromCards = filtered.length === 0 ? 0 : (safePage - 1) * perPageCards + 1;
-  const toCards   = Math.min(safePage * perPageCards, filtered.length);
+  const from = filtered.length === 0 ? 0 : start + 1;
+  const to   = Math.min(start + perPage, filtered.length);
 
   if (error && !loading) return (
     <div className="inv-error">
@@ -450,6 +422,19 @@ export default function InventoryPage() {
           <option value="stock_asc">Stock: Low first</option>
           <option value="stock_desc">Stock: High first</option>
         </select>
+        <label className="pag__limit-label" htmlFor="inv-per-page">
+          Show
+          <select
+            id="inv-per-page"
+            className="pag__limit-select"
+            value={perPage}
+            onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
+            aria-label="Items per page"
+          >
+            {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+          per page
+        </label>
       </div>
 
       {/* Mobile cards */}
@@ -464,7 +449,7 @@ export default function InventoryPage() {
                 </svg>
                 <p>{search ? 'No items match your search.' : 'Inventory is empty.'}</p>
               </div>
-            : pagedCards.map((item) => (
+            : pagedTable.map((item) => (
                 <InventoryCard
                   key={item.id}
                   item={item}
@@ -475,21 +460,21 @@ export default function InventoryPage() {
         }
       </div>
 
-      {/* Mobile pagination */}
-      {!loading && filtered.length > 0 && (
-        <Pagination
-          page={safePage}
-          totalPages={totalPagesCards}
-          total={filtered.length}
-          perPage={perPageCards}
-          from={fromCards}
-          to={toCards}
-          onPage={setPage}
-          onPerPage={setPerPageCards}
-        />
-      )}
 
-      {/* Desktop table */}
+
+      {/* Mobile pagination — visible on mobile/tablet only, below cards */}
+      {!loading && filtered.length > 0 && (
+        <div className="inv-pag-mobile">
+          <Pagination
+            page={safePage}
+            totalPages={totalPages}
+            total={filtered.length}
+            from={from}
+            to={to}
+            onPage={setPage}
+          />
+        </div>
+      )}
       <div className="inv-table-wrap">
         <table className="inv-table" aria-label="Inventory table">
           <thead>
@@ -548,13 +533,11 @@ export default function InventoryPage() {
           <div className="inv-table__footer">
             <Pagination
               page={safePage}
-              totalPages={totalPagesTable}
+              totalPages={totalPages}
               total={filtered.length}
-              perPage={perPageTable}
-              from={fromTable}
-              to={toTable}
+              from={from}
+              to={to}
               onPage={setPage}
-              onPerPage={setPerPageTable}
             />
           </div>
         )}
