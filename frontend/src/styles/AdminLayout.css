@@ -2,28 +2,30 @@
 .al-root {
   display: flex;
   min-height: 100dvh;
-  background: #0D0D0D;
+  background: var(--color-background);
 }
 
 /* ─── Imperial Ink sidebar palette ──────────────────────────────────
  * Admin uses its own dark ink + vermillion palette — intentionally
  * distinct from every other module (Staff uses warm loam, Kitchen
  * uses deep slate, Cashier uses cream). Admin = imperial control.
+ * The base --color-* heritage tokens are re-inked in .al-root (see
+ * index.css); these --al-* vars stay private to the admin shell.
  * ─────────────────────────────────────────────────────────────────── */
-:root {
-  --al-sidebar-bg:        #141210;
-  --al-sidebar-surface:   #1A1710;
-  --al-sidebar-hover:     #211F18;
+.al-root {
+  --al-sidebar-bg:        var(--color-card);
+  --al-sidebar-surface:   var(--color-surface);
+  --al-sidebar-hover:     var(--color-muted);
   --al-sidebar-border:    #2A271E;
-  --al-sidebar-border-hi: #C9963C;
-  --al-sidebar-active-bg: rgba(192,57,43,0.10);
-  --al-sidebar-active-bar:#C0392B;
-  --al-sidebar-gold:      #C9963C;
-  --al-sidebar-fg:        rgba(232,224,212,0.45);
-  --al-sidebar-fg-active: #E8E0D4;
-  --al-content-bg:        #0D0D0D;
-  --al-card-bg:           #181510;
-  --al-card-border:       #262218;
+  --al-sidebar-border-hi: var(--color-gold);
+  --al-sidebar-active-bg: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  --al-sidebar-active-bar: var(--color-primary);
+  --al-sidebar-gold:      var(--color-gold);
+  --al-sidebar-fg:        var(--color-muted-foreground);
+  --al-sidebar-fg-active: var(--color-foreground);
+  --al-content-bg:        var(--color-background);
+  --al-card-bg:           var(--color-card);
+  --al-card-border:       var(--color-border);
   --al-card-border-hi:    #3A3628;
 }
 

@@ -1,5 +1,6 @@
 /* ─── Google Fonts ───────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap');
+@import './styles/components.css';
 
 /* ─── Design Tokens — Bingnondo Chinese Heritage ─────────────────────── */
 :root {
@@ -130,3 +131,47 @@ button, input, textarea, select { font-family: var(--font-body); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
+
+/* ─── Admin Theme — Imperial Ink (墨池) Dark Heritage Variant ──────────
+ * Scoped to .al-root — the admin console keeps its dark "imperial ink"
+ * character while inheriting the heritage token vocabulary: same token
+ * names as the base :root, dark values. Mirrors .sl-root / .ml-root.
+ *
+ * Palette: Dark Xuan Ink — Roasted Lacquer + Gilded Brass on Night Paper
+ * Primary:  Roasted Cinnabar #C0392B  (vermilion family, lacquer depth)
+ * Secondary: Ember            #D94A3C (hover warmth, brighter cinnabar)
+ * Gold:     Gilded Brass     #C9963C  (imperial gold trim)
+ * Accent:   Gilded Brass     #C9963C
+ * Background: Night Paper    #0D0D0D  (墨池 — ink pool)
+ * Card:     Charcoal Card    #181510
+ * Muted:    Coal Surface     #211F18
+ * Ink:      Pale Ink         #E8E0D4  (readable pale ink text)
+ * Border:   Iron Hairline    #262218
+ * ─────────────────────────────────────────────────────────────────────── */
+.al-root {
+  --color-primary:          #C0392B;
+  --color-on-primary:       #F5EAE4;
+  --color-secondary:        #D94A3C;
+  --color-on-secondary:     #F5EAE4;
+  --color-accent:           #C9963C;
+  --color-on-accent:        #1A1410;
+  --color-gold:             #C9963C;
+  --color-gold-light:       #E8B84B;
+  --color-background:       #0D0D0D;
+  --color-foreground:       #E8E0D4;
+  --color-card:             #181510;
+  --color-card-foreground:  #E8E0D4;
+  --color-muted:            #211F18;
+  --color-muted-foreground: rgba(232,224,212,0.45);
+  --color-border:           #262218;
+  --color-border-strong:    #2E2B22;
+  --color-destructive:      #E06050;
+  --color-on-destructive:   #1A0A00;
+  --color-ring:             #C9963C;
+  --color-surface:          #1A1710;
+
+  /* Shadows — re-inked in night ink */
+  --shadow-sm:  0 1px 4px rgba(0,0,0,0.45);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.50);
+  --shadow-lg:  0 12px 40px rgba(0,0,0,0.60);
+}

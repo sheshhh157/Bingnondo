@@ -1,0 +1,58 @@
+/* ─── DASHBOARD PAGE ──────────────────────────────────────────────────── */
+
+.dash-root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── KPI cards ────────────────────────────────────────────────────────── */
+.dash-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+/* ── Charts grid ──────────────────────────────────────────────────────── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.dash-chart { width: 100%; }
+
+/* ── Low / out of stock quick list ─────────────────────────────────────── */
+.dash-low-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+  margin: 0 0 12px;
+}
+.dash-low-link { font-size: 0.78rem; color: var(--color-primary); text-decoration: none; font-weight: 600; }
+.dash-low-link:hover { text-decoration: underline; }
+.dash-low { display: flex; flex-direction: column; }
+.dash-low__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+.dash-low__row:last-child { border-bottom: none; }
+.dash-low__name { flex: 1; font-weight: 500; font-size: 0.875rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-low__val { color: var(--color-muted-foreground); font-size: 0.85rem; }
+
+@media (max-width: 960px) {
+  .dash-kpis { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .dash-grid { grid-template-columns: 1fr; }
+  .ui-card--wide { grid-column: span 1; }
+  .dash-kpis { grid-template-columns: 1fr; }
+}

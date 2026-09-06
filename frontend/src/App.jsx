@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
 import Login from './pages/auth/Login';
 import CashierPage from './pages/cashier/CashierPage';
 import StaffLayout from './pages/staff/StaffLayout';
@@ -9,13 +10,18 @@ import DeliveryPage from './pages/staff/DeliveryPage';
 import SupportChatPage from './pages/staff/SupportChatPage';
 import StaffPlaceholder from './pages/staff/StaffPlaceholder';
 import KitchenPage from './pages/kitchen/KitchenPage';
-import OwnerLayout from './pages/owner/OwnerLayout';
-import OwnerDashboard from './pages/owner/OwnerDashboard';
 import AdminLayout from './pages/admin/AdminLayout';
 import StaffAccounts from './pages/admin/StaffAccounts';
 import SystemSettings from './pages/admin/SystemSettings';
 import AuditLog from './pages/admin/AuditLog';
 import CustomerRestrictions from './pages/admin/CustomerRestrictions';
+import ManagerLayout from './pages/manager/ManagerLayout';
+import DashboardPage from './pages/manager/DashboardPage';
+import SalesReportPage from './pages/manager/SalesReportPage';
+import OversightPage from './pages/manager/OversightPage';
+import OversightKitchen from './pages/manager/OversightKitchen';
+import OversightStocks from './pages/manager/OversightStocks';
+import OversightDelivery from './pages/manager/OversightDelivery';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -34,17 +40,19 @@ function RoleRedirect() {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'cashier') return <Navigate to="/cashier" replace />;
   if (user.role === 'staff') return <Navigate to="/staff/inventory" replace />;
-  if (user.role === 'owner') return <Navigate to="/owner/dashboard" replace />;
+  if (user.role === 'owner') return <Navigate to="/manager/dashboard" replace />;
   if (user.role === 'kitchen_staff') return <Navigate to="/kitchen" replace />;
   if (user.role === 'admin') return <Navigate to="/admin/accounts" replace />;
+  if (user.role === 'manager') return <Navigate to="/manager/dashboard" replace />;
   return <Navigate to="/login" replace />;
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+      <SocketProvider>
+        <BrowserRouter>
+          <Routes>
           <Route path="/login" element={<Login />} />
 
           {/* Cashier */}
@@ -73,19 +81,6 @@ export default function App() {
             <Route path="chat" element={<SupportChatPage />} />
           </Route>
 
-          {/* Owner */}
-          <Route
-            path="/owner"
-            element={
-              <ProtectedRoute allowedRoles={['owner']}>
-                <OwnerLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/owner/dashboard" replace />} />
-            <Route path="dashboard" element={<OwnerDashboard />} />
-          </Route>
-
           {/* Kitchen */}
           <Route
             path="/kitchen"
@@ -112,10 +107,29 @@ export default function App() {
             <Route path="restrictions" element={<CustomerRestrictions />} />
           </Route>
 
+          {/* Manager */}
+          <Route
+            path="/manager"
+            element={
+              <ProtectedRoute allowedRoles={['manager', 'owner']}>
+                <ManagerLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/manager/dashboard" replace />} />
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="sales" element={<SalesReportPage />} />
+            <Route path="oversight" element={<OversightPage />} />
+            <Route path="oversight/kitchen" element={<OversightKitchen />} />
+            <Route path="oversight/stocks" element={<OversightStocks />} />
+            <Route path="oversight/delivery" element={<OversightDelivery />} />
+          </Route>
+
           <Route path="/" element={<RoleRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </SocketProvider>
     </AuthProvider>
   );
 }
