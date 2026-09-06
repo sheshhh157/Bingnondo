@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ordersAPI } from '../../../services/api';
+import { useSocketEvent } from '../../../context/SocketContext';
 import '../../../styles/TransactionHistory.css';
 
 const STATUS_LABEL = {
@@ -28,6 +29,16 @@ export default function TransactionHistory() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('today'); // 'today' | 'week'
   const [expanded, setExpanded] = useState(null);
+
+  // Live refresh — order lifecycle events update the shared store
+  const { payload: liveNew } = useSocketEvent('order:new');
+  const { payload: liveStatus } = useSocketEvent('order:status');
+  const { payload: liveReady } = useSocketEvent('order:ready');
+
+  useEffect(() => {
+    if (liveNew || liveStatus || liveReady) fetchOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveNew, liveStatus, liveReady]);
 
   const fetchOrders = async () => {
     setLoading(true);

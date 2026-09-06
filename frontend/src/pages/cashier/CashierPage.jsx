@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { menuAPI, ordersAPI, paymentsAPI } from '../../services/api';
-import { connectSocket, disconnectSocket } from '../../services/socket';
+import { menuAPI, ordersAPI } from '../../services/api';
+import { connectSocket } from '../../services/socket';
 import MenuGrid from './components/MenuGrid';
 import OrderDraft from './components/OrderDraft';
 import PaymentModal from './components/PaymentModal';
@@ -40,32 +40,27 @@ export default function CashierPage() {
       const items = data.items || (Array.isArray(data) ? data : []);
       setCategories(cats);
       setMenuItems(items);
-      if (cats.length > 0 && !activeCategory) setActiveCategory(cats[0].id);
+      if (cats.length > 0) setActiveCategory((prev) => prev ?? cats[0].id);
     } catch {
       setMenuError('Failed to load menu. Please refresh.');
     } finally {
       setMenuLoading(false);
     }
-  }, [activeCategory]);
+  }, []);
 
   useEffect(() => {
     fetchMenu();
-  }, []);
+  }, [fetchMenu]);
 
   // ─── Socket: real-time menu updates ──────────────────────────────
   useEffect(() => {
     const socket = connectSocket();
-    socket.on('menu_update', (updated) => {
-      setMenuItems((prev) =>
-        prev.map((item) =>
-          item.id === updated.id ? { ...item, is_available: updated.is_available } : item
-        )
-      );
-    });
+    // Staff menu edits (create/update/availability/remove) refresh the POS live
+    socket.on('menu_update', () => { fetchMenu(); });
     return () => {
       socket.off('menu_update');
     };
-  }, []);
+  }, [fetchMenu]);
 
   // ─── Toast helper ──────────────────────────────────────────────────
   const showToast = (msg) => {

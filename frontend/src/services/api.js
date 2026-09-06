@@ -1,6 +1,19 @@
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 // Pansamantala lang ito habang wala pang backend.
 // Palitan mo ito ng tunay na API calls pag ready na ang backend.
+//
+// Since the live backend landed, the order/kitchen/inventory/delivery APIs
+// below try the real Express backend first (shared store + socket events) and
+// fall back to these local mocks when the backend is offline.
+
+import { httpGet, httpPost, httpPatch, httpDelete, orMock } from './http';
+
+// Build a query string from defined (non-empty) params
+const qs = (o = {}) => {
+  const p = new URLSearchParams(Object.entries(o).filter(([, v]) => v !== undefined && v !== ''));
+  const s = p.toString();
+  return s ? `?${s}` : '';
+};
 
 const MOCK_CATEGORIES = [
   { id: 1, name: 'Silog Meals' },
@@ -149,156 +162,168 @@ export const authAPI = {
 
 // ─── MENU (cashier read) ──────────────────────────────────────────────────────
 export const menuAPI = {
-  getAll: async () => {
-    await delay(400);
-    return { data: { categories: MOCK_CATEGORIES, items: MOCK_MENU_ITEMS } };
-  },
+  getAll: () => orMock(
+    () => httpGet('/menu'),
+    async () => {
+      await delay(400);
+      return { data: { categories: MOCK_CATEGORIES, items: MOCK_MENU_ITEMS } };
+    },
+  ),
 };
 
 // ─── ORDERS ───────────────────────────────────────────────────────────────────
 export const ordersAPI = {
-  create: async (payload) => {
-    await delay(500);
-    const newOrder = {
-      id: orderCounter,
-      order_number: `ORD-${orderCounter}`,
-      status: 'confirmed',
-      payment_method: null,
-      total_amount: payload.items.reduce((sum, i) => {
-        const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
-        return sum + (menuItem?.price || 0) * i.quantity;
-      }, 0),
-      created_at: new Date().toISOString(),
-      items: payload.items.map((i) => {
-        const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
-        return { name: menuItem?.name || 'Unknown', quantity: i.quantity, unit_price: menuItem?.price || 0 };
-      }),
-    };
-    MOCK_ORDERS = [newOrder, ...MOCK_ORDERS];
-    orderCounter++;
-    return { data: newOrder };
-  },
+  create: (payload) => orMock(
+    () => httpPost('/orders', payload),
+    async () => {
+      await delay(500);
+      const newOrder = {
+        id: orderCounter,
+        order_number: `ORD-${orderCounter}`,
+        status: 'confirmed',
+        payment_method: null,
+        total_amount: payload.items.reduce((sum, i) => {
+          const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
+          return sum + (menuItem?.price || 0) * i.quantity;
+        }, 0),
+        created_at: new Date().toISOString(),
+        items: payload.items.map((i) => {
+          const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
+          return { name: menuItem?.name || 'Unknown', quantity: i.quantity, unit_price: menuItem?.price || 0 };
+        }),
+      };
+      MOCK_ORDERS = [newOrder, ...MOCK_ORDERS];
+      orderCounter++;
+      return { data: newOrder };
+    },
+  ),
 
-  getMyTransactions: async () => {
-    await delay(400);
-    return { data: MOCK_ORDERS };
-  },
-
-  getAll: async () => {
-    await delay(400);
-    return { data: MOCK_ORDERS };
-  },
-
-  getById: async (id) => {
-    await delay(200);
-    const order = MOCK_ORDERS.find((o) => o.id === Number(id));
-    if (!order) throw { response: { status: 404, data: { message: 'Order not found.' } } };
-    return { data: order };
-  },
+  getMyTransactions: () => orMock(
+    () => httpGet('/orders'),
+    async () => {
+      await delay(400);
+      return { data: MOCK_ORDERS };
+    },
+  ),
 };
 
 // ─── PAYMENTS ─────────────────────────────────────────────────────────────────
 export const paymentsAPI = {
-  process: async ({ order_id, method }) => {
-    await delay(600);
-    const order = MOCK_ORDERS.find((o) => o.id === Number(order_id));
-    if (order) {
-      order.status = 'completed';
-      order.payment_method = method || 'cash';
-    }
-    return { data: { success: true, message: 'Payment processed.' } };
-  },
+  process: (payload) => orMock(
+    () => httpPost(`/orders/${payload.order_id}/payment`, { method: payload.method, amount: payload.amount }),
+    async () => {
+      await delay(600);
+      const order = MOCK_ORDERS.find((o) => o.id === Number(payload.order_id));
+      if (order) {
+        order.status = 'completed';
+        order.payment_method = payload.method || 'cash';
+      }
+      return { data: { success: true, message: 'Payment processed.' } };
+    },
+  ),
 };
 
 // ─── INVENTORY (§4.1) ─────────────────────────────────────────────────────────
 export const inventoryAPI = {
-  getAll: async () => {
-    await delay(350);
-    return { data: { items: [...MOCK_INVENTORY] } };
-  },
+  getAll: () => orMock(
+    () => httpGet('/inventory'),
+    async () => {
+      await delay(350);
+      return { data: { items: [...MOCK_INVENTORY] } };
+    },
+  ),
 
-  transaction: async (id, { change_type, quantity, note }) => {
-    await delay(400);
-    const item = MOCK_INVENTORY.find((i) => i.id === id);
-    if (!item) throw { response: { data: { message: 'Item not found.' } } };
-    if (change_type === 'restock') {
-      item.current_stock += Number(quantity);
-    } else if (change_type === 'adjustment') {
-      item.current_stock = Number(quantity);
-    }
-    return { data: { ...item } };
-  },
+  transaction: (id, payload) => orMock(
+    () => httpPatch(`/inventory/${id}`, { change_type: payload.change_type, quantity: payload.quantity, note: payload.note }),
+    async () => {
+      await delay(400);
+      const item = MOCK_INVENTORY.find((i) => i.id === id);
+      if (!item) throw { response: { data: { message: 'Item not found.' } } };
+      if (payload.change_type === 'restock') {
+        item.current_stock += Number(payload.quantity);
+      } else if (payload.change_type === 'adjustment') {
+        item.current_stock = Number(payload.quantity);
+      }
+      return { data: { ...item } };
+    },
+  ),
 };
 
 // ─── STAFF MENU (§4.2) — full CRUD, separate from cashier read-only ───────────
 export const staffMenuAPI = {
-  getAll: async () => {
-    await delay(350);
-    // Enrich items with category_name
-    const enriched = MOCK_MENU_ITEMS.map((item) => ({
-      ...item,
-      category_name: MOCK_CATEGORIES.find((c) => c.id === item.category_id)?.name || '—',
-    }));
-    return { data: { categories: MOCK_CATEGORIES, items: enriched } };
-  },
+  getAll: () => orMock(
+    () => httpGet('/menu'),
+    async () => {
+      await delay(350);
+      // Enrich items with category_name
+      const enriched = MOCK_MENU_ITEMS.map((item) => ({
+        ...item,
+        category_name: MOCK_CATEGORIES.find((c) => c.id === item.category_id)?.name || '—',
+      }));
+      return { data: { categories: MOCK_CATEGORIES, items: enriched } };
+    },
+  ),
 
-  create: async (payload) => {
-    await delay(500);
-    const cat = MOCK_CATEGORIES.find((c) => c.id === Number(payload.category_id));
-    const newItem = {
-      id: menuItemCounter++,
-      category_id: Number(payload.category_id),
-      category_name: cat?.name || '—',
-      name: payload.name,
-      description: payload.description || '',
-      price: Number(payload.price),
-      is_available: payload.is_available ?? true,
-      image_url: payload.image_url || null,
-    };
-    MOCK_MENU_ITEMS = [...MOCK_MENU_ITEMS, newItem];
-    return { data: newItem };
-  },
+  create: (payload) => orMock(
+    () => httpPost('/menu/items', payload),
+    async () => {
+      await delay(500);
+      const cat = MOCK_CATEGORIES.find((c) => c.id === Number(payload.category_id));
+      const newItem = {
+        id: menuItemCounter++,
+        category_id: Number(payload.category_id),
+        category_name: cat?.name || '—',
+        name: payload.name,
+        description: payload.description || '',
+        price: Number(payload.price),
+        is_available: payload.is_available ?? true,
+        image_url: payload.image_url || null,
+      };
+      MOCK_MENU_ITEMS = [...MOCK_MENU_ITEMS, newItem];
+      return { data: newItem };
+    },
+  ),
 
-  update: async (id, payload) => {
-    await delay(450);
-    const idx = MOCK_MENU_ITEMS.findIndex((i) => i.id === id);
-    if (idx === -1) throw { response: { data: { message: 'Item not found.' } } };
-    const cat = MOCK_CATEGORIES.find((c) => c.id === Number(payload.category_id));
-    const updated = {
-      ...MOCK_MENU_ITEMS[idx],
-      ...payload,
-      category_id: Number(payload.category_id),
-      category_name: cat?.name || '—',
-      price: Number(payload.price),
-    };
-    MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.map((i) => (i.id === id ? updated : i));
-    return { data: updated };
-  },
+  update: (id, payload) => orMock(
+    () => httpPatch(`/menu/items/${id}`, payload),
+    async () => {
+      await delay(450);
+      const idx = MOCK_MENU_ITEMS.findIndex((i) => i.id === id);
+      if (idx === -1) throw { response: { data: { message: 'Item not found.' } } };
+      const cat = MOCK_CATEGORIES.find((c) => c.id === Number(payload.category_id));
+      const updated = {
+        ...MOCK_MENU_ITEMS[idx],
+        ...payload,
+        category_id: Number(payload.category_id),
+        category_name: cat?.name || '—',
+        price: Number(payload.price),
+      };
+      MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.map((i) => (i.id === id ? updated : i));
+      return { data: updated };
+    },
+  ),
 
-  setAvailability: async (id, is_available) => {
-    await delay(250);
-    MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.map((i) =>
-      i.id === id ? { ...i, is_available } : i
-    );
-    return { data: { id, is_available } };
-  },
+  setAvailability: (id, is_available) => orMock(
+    () => httpPatch(`/menu/items/${id}/availability`, { is_available }),
+    async () => {
+      await delay(250);
+      MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.map((i) =>
+        i.id === id ? { ...i, is_available } : i
+      );
+      return { data: { id, is_available } };
+    },
+  ),
 
-  remove: async (id) => {
-    await delay(350);
-    MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.filter((i) => i.id !== id);
-    return { data: { success: true } };
-  },
+  remove: (id) => orMock(
+    () => httpDelete(`/menu/items/${id}`),
+    async () => {
+      await delay(350);
+      MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.filter((i) => i.id !== id);
+      return { data: { success: true } };
+    },
+  ),
 };
 
-// ─── CATEGORIES (§4.2) ────────────────────────────────────────────────────────
-export const categoriesAPI = {
-  getAll: async () => {
-    await delay(200);
-    return { data: { categories: [...MOCK_CATEGORIES] } };
-  },
-};
-
-export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMenuAPI, categoriesAPI };
 // ─── KITCHEN ──────────────────────────────────────────────────────────────────
 const minsAgo = (m) => new Date(Date.now() - m * 60 * 1000).toISOString();
 
@@ -421,29 +446,41 @@ let MOCK_ALERTS = [
   },
 ];
 export const kitchenAPI = {
-  getOrders: async () => {
-    await delay(400);
-    return { data: MOCK_KITCHEN_ORDERS.filter((o) => ['confirmed', 'preparing'].includes(o.status)) };
-  },
+  getOrders: () => orMock(
+    () => httpGet('/kitchen'),
+    async () => {
+      await delay(400);
+      return { data: MOCK_KITCHEN_ORDERS.filter((o) => ['confirmed', 'preparing'].includes(o.status)) };
+    },
+  ),
 
-  updateOrderStatus: async (orderId, status) => {
-    await delay(300);
-    const order = MOCK_KITCHEN_ORDERS.find((o) => o.id === Number(orderId));
-    if (order) order.status = status;
-    return { data: { success: true } };
-  },
+  updateOrderStatus: (orderId, status) => orMock(
+    () => httpPatch(`/kitchen/orders/${orderId}/status`, { status }),
+    async () => {
+      await delay(300);
+      const order = MOCK_KITCHEN_ORDERS.find((o) => o.id === Number(orderId));
+      if (order) order.status = status;
+      return { data: { success: true } };
+    },
+  ),
 
-  getAlerts: async () => {
-    await delay(200);
-    return { data: MOCK_ALERTS };
-  },
+  getAlerts: () => orMock(
+    () => httpGet('/kitchen/alerts'),
+    async () => {
+      await delay(200);
+      return { data: MOCK_ALERTS };
+    },
+  ),
 
-  acknowledgeAlert: async (alertId) => {
-    await delay(200);
-    const alert = MOCK_ALERTS.find((a) => a.id === Number(alertId));
-    if (alert) alert.acknowledged_at = new Date().toISOString();
-    return { data: { success: true } };
-  },
+  acknowledgeAlert: (alertId) => orMock(
+    () => httpPatch(`/kitchen/alerts/${alertId}/acknowledge`),
+    async () => {
+      await delay(200);
+      const alert = MOCK_ALERTS.find((a) => a.id === Number(alertId));
+      if (alert) alert.acknowledged_at = new Date().toISOString();
+      return { data: { success: true } };
+    },
+  ),
 };
 
 // ─── ADMIN API ─────────────────────────────────────────────────────────────────
@@ -504,83 +541,115 @@ function paginate(arr, page=1, limit=10) {
 
 export const adminAPI = {
   // ── Staff Accounts ──────────────────────────────────────────────────
-  listStaffAccounts: async ({ page=1, limit=10, search, role, status } = {}) => {
-    await delay(350);
-    let result = [...MOCK_STAFF_ACCOUNTS];
-    if (search) result = result.filter(a => a.full_name.toLowerCase().includes(search.toLowerCase()) || a.email.toLowerCase().includes(search.toLowerCase()));
-    if (role)   result = result.filter(a => a.role   === role);
-    if (status) result = result.filter(a => a.status === status);
-    return { data: paginate(result, page, limit) };
-  },
+  listStaffAccounts: (opts = {}) => orMock(
+    () => httpGet(`/accounts${qs(opts)}`),
+    async () => {
+      await delay(350);
+      const { page = 1, limit = 10, search, role, status } = opts;
+      let result = [...MOCK_STAFF_ACCOUNTS];
+      if (search) result = result.filter(a => a.full_name.toLowerCase().includes(search.toLowerCase()) || a.email.toLowerCase().includes(search.toLowerCase()));
+      if (role)   result = result.filter(a => a.role   === role);
+      if (status) result = result.filter(a => a.status === status);
+      return { data: paginate(result, page, limit) };
+    },
+  ),
 
-  createStaffAccount: async (data) => {
-    await delay(400);
-    const account = { id: ++staffAccountCounter, ...data, status:'active', created_at: new Date().toISOString() };
-    MOCK_STAFF_ACCOUNTS.push(account);
-    addAuditEntry('create', 'staff_account', account.id, { role: data.role });
-    return { data: account };
-  },
+  createStaffAccount: (data) => orMock(
+    () => httpPost('/accounts', data),
+    async () => {
+      await delay(400);
+      const account = { id: ++staffAccountCounter, ...data, status: 'active', created_at: new Date().toISOString() };
+      MOCK_STAFF_ACCOUNTS.push(account);
+      addAuditEntry('create', 'staff_account', account.id, { role: data.role });
+      return { data: account };
+    },
+  ),
 
-  updateStaffStatus: async (id, status) => {
-    await delay(300);
-    const account = MOCK_STAFF_ACCOUNTS.find(a => a.id === Number(id));
-    if (account) account.status = status;
-    addAuditEntry(status==='active'?'reactivate':'deactivate', 'staff_account', Number(id), {});
-    return { data: { success: true } };
-  },
+  updateStaffStatus: (id, status) => orMock(
+    () => httpPatch(`/accounts/${id}/status`, { status }),
+    async () => {
+      await delay(300);
+      const account = MOCK_STAFF_ACCOUNTS.find(a => a.id === Number(id));
+      if (account) account.status = status;
+      addAuditEntry(status === 'active' ? 'reactivate' : 'deactivate', 'staff_account', Number(id), {});
+      return { data: { success: true } };
+    },
+  ),
 
-  resetStaffPassword: async (id) => {
-    await delay(300);
-    addAuditEntry('reset_password', 'staff_account', Number(id), {});
-    return { data: { success: true } };
-  },
+  resetStaffPassword: (id) => orMock(
+    () => httpPost(`/accounts/${id}/reset-password`),
+    async () => {
+      await delay(300);
+      addAuditEntry('reset_password', 'staff_account', Number(id), {});
+      return { data: { success: true } };
+    },
+  ),
 
   // ── Settings ────────────────────────────────────────────────────────
-  getSettings: async () => {
-    await delay(300);
-    return { data: { ...MOCK_SETTINGS } };
-  },
+  getSettings: () => orMock(
+    () => httpGet('/settings'),
+    async () => {
+      await delay(300);
+      return { data: { ...MOCK_SETTINGS } };
+    },
+  ),
 
-  updateSettings: async (updates) => {
-    await delay(300);
-    Object.assign(MOCK_SETTINGS, updates);
-    const field = Object.keys(updates)[0];
-    addAuditEntry('update_settings', 'settings', null, { field });
-    return { data: { success: true } };
-  },
+  updateSettings: (updates) => orMock(
+    () => httpPatch('/settings', updates),
+    async () => {
+      await delay(300);
+      Object.assign(MOCK_SETTINGS, updates);
+      const field = Object.keys(updates)[0];
+      addAuditEntry('update_settings', 'settings', null, { field });
+      return { data: { success: true } };
+    },
+  ),
 
   // ── ESP32 Devices ────────────────────────────────────────────────────
-  listDevices: async () => {
-    await delay(250);
-    return { data: [...MOCK_DEVICES] };
-  },
+  listDevices: () => orMock(
+    () => httpGet('/devices'),
+    async () => {
+      await delay(250);
+      return { data: [...MOCK_DEVICES] };
+    },
+  ),
 
-  registerDevice: async (data) => {
-    await delay(350);
-    const device = { id: ++deviceCounter, ...data, is_online: false };
-    MOCK_DEVICES.push(device);
-    addAuditEntry('register_device', 'esp32_device', device.id, { label: data.location_label });
-    return { data: device };
-  },
+  registerDevice: (data) => orMock(
+    () => httpPost('/devices', data),
+    async () => {
+      await delay(350);
+      const device = { id: ++deviceCounter, ...data, is_online: false };
+      MOCK_DEVICES.push(device);
+      addAuditEntry('register_device', 'esp32_device', device.id, { label: data.location_label });
+      return { data: device };
+    },
+  ),
 
-  removeDevice: async (id) => {
-    await delay(300);
-    const device = MOCK_DEVICES.find(d => d.id === Number(id));
-    MOCK_DEVICES = MOCK_DEVICES.filter(d => d.id !== Number(id));
-    addAuditEntry('remove_device', 'esp32_device', Number(id), { label: device?.location_label });
-    return { data: { success: true } };
-  },
+  removeDevice: (id) => orMock(
+    () => httpDelete(`/devices/${id}`),
+    async () => {
+      await delay(300);
+      const device = MOCK_DEVICES.find(d => d.id === Number(id));
+      MOCK_DEVICES = MOCK_DEVICES.filter(d => d.id !== Number(id));
+      addAuditEntry('remove_device', 'esp32_device', Number(id), { label: device?.location_label });
+      return { data: { success: true } };
+    },
+  ),
 
   // ── Audit Log ────────────────────────────────────────────────────────
-  getAuditLog: async ({ page=1, limit=20, actor_id, action, from, to } = {}) => {
-    await delay(350);
-    let result = [...MOCK_AUDIT_LOG];
-    if (actor_id) result = result.filter(e => String(e.actor_id) === String(actor_id));
-    if (action)   result = result.filter(e => e.action === action);
-    if (from)     result = result.filter(e => new Date(e.created_at) >= new Date(from));
-    if (to)       result = result.filter(e => new Date(e.created_at) <= new Date(to + 'T23:59:59'));
-    return { data: paginate(result, page, limit) };
-  },
+  getAuditLog: (opts = {}) => orMock(
+    () => httpGet(`/audit-log${qs(opts)}`),
+    async () => {
+      await delay(350);
+      const { page = 1, limit = 20, actor_id, action, from, to } = opts;
+      let result = [...MOCK_AUDIT_LOG];
+      if (actor_id) result = result.filter(e => String(e.actor_id) === String(actor_id));
+      if (action)   result = result.filter(e => e.action === action);
+      if (from)     result = result.filter(e => new Date(e.created_at) >= new Date(from));
+      if (to)       result = result.filter(e => new Date(e.created_at) <= new Date(to + 'T23:59:59'));
+      return { data: paginate(result, page, limit) };
+    },
+  ),
 };
 // ─── CUSTOMER RESTRICTIONS (6.4) ───────────────────────────────────────────────
 
@@ -649,39 +718,49 @@ const MOCK_VIOLATIONS = {
 };
 
 export const customerRestrictionsAPI = {
-  listCustomerRestrictions: async ({ page = 1, limit = 12, search, restriction_level } = {}) => {
-    await delay(350);
-    let result = [...MOCK_CUSTOMER_RESTRICTIONS];
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(c =>
-        c.customer_name.toLowerCase().includes(q) ||
-        c.customer_email.toLowerCase().includes(q)
-      );
-    }
-    if (restriction_level) result = result.filter(c => c.restriction_level === restriction_level);
-    return { data: paginate(result, page, limit) };
-  },
+  listCustomerRestrictions: (opts = {}) => orMock(
+    () => httpGet(`/customer-restrictions${qs(opts)}`),
+    async () => {
+      await delay(350);
+      const { page = 1, limit = 12, search, restriction_level } = opts;
+      let result = [...MOCK_CUSTOMER_RESTRICTIONS];
+      if (search) {
+        const q = search.toLowerCase();
+        result = result.filter(c =>
+          c.customer_name.toLowerCase().includes(q) ||
+          c.customer_email.toLowerCase().includes(q)
+        );
+      }
+      if (restriction_level) result = result.filter(c => c.restriction_level === restriction_level);
+      return { data: paginate(result, page, limit) };
+    },
+  ),
 
-  getCustomerViolations: async (customerId) => {
-    await delay(250);
-    const viols = MOCK_VIOLATIONS[Number(customerId)] || [];
-    return { data: viols };
-  },
+  getCustomerViolations: (customerId) => orMock(
+    () => httpGet(`/customer-restrictions/${customerId}/violations`),
+    async () => {
+      await delay(250);
+      const viols = MOCK_VIOLATIONS[Number(customerId)] || [];
+      return { data: viols };
+    },
+  ),
 
-  overrideCustomerRestriction: async (customerId, { restriction_level, reason }) => {
-    await delay(400);
-    const customer = MOCK_CUSTOMER_RESTRICTIONS.find(c => c.customer_id === Number(customerId));
-    if (customer) {
-      customer.restriction_level = restriction_level;
-      customer.reason            = reason;
-      customer.updated_by        = 1;
-      customer.updated_by_name   = 'System Admin';
-      customer.updated_at        = new Date().toISOString();
-    }
-    addAuditEntry('override_restriction', 'customer', Number(customerId), { restriction_level, reason });
-    return { data: { success: true } };
-  },
+  overrideCustomerRestriction: (customerId, { restriction_level, reason } = {}) => orMock(
+    () => httpPatch(`/customer-restrictions/${customerId}/override`, { restriction_level, reason }),
+    async () => {
+      await delay(400);
+      const customer = MOCK_CUSTOMER_RESTRICTIONS.find(c => c.customer_id === Number(customerId));
+      if (customer) {
+        customer.restriction_level = restriction_level;
+        customer.reason            = reason;
+        customer.updated_by        = 1;
+        customer.updated_by_name   = 'System Admin';
+        customer.updated_at        = new Date().toISOString();
+      }
+      addAuditEntry('override_restriction', 'customer', Number(customerId), { restriction_level, reason });
+      return { data: { success: true } };
+    },
+  ),
 };
 
 // Re-export customerRestrictionsAPI methods on adminAPI for convenience
@@ -827,44 +906,50 @@ let MOCK_DELIVERIES = [
   },
 ];
 
-let deliveryCounter = 8;
-
 // ─── DELIVERY API (§4.3) ──────────────────────────────────────────────────────
 export const deliveryAPI = {
   /** GET /api/deliveries — all deliveries for staff view */
-  getAll: async () => {
-    await delay(400);
-    return { data: { deliveries: [...MOCK_DELIVERIES] } };
-  },
+  getAll: () => orMock(
+    () => httpGet('/deliveries'),
+    async () => {
+      await delay(400);
+      return { data: { deliveries: [...MOCK_DELIVERIES] } };
+    },
+  ),
 
   /** POST /api/deliveries/:id/assign — assign rider or book Lalamove */
-  assign: async (id, payload) => {
-    await delay(500);
-    const delivery = MOCK_DELIVERIES.find((d) => d.id === id);
-    if (!delivery) throw { response: { data: { message: 'Delivery not found.' } } };
+  assign: (id, payload) => orMock(
+    () => httpPost(`/deliveries/${id}/assign`, payload),
+    async () => {
+      await delay(500);
+      const delivery = MOCK_DELIVERIES.find((d) => d.id === id);
+      if (!delivery) throw { response: { data: { message: 'Delivery not found.' } } };
 
-    delivery.status = 'assigned';
-    delivery.delivery_preference = payload.delivery_preference;
+      delivery.status = 'assigned';
+      delivery.delivery_preference = payload.delivery_preference;
 
-    if (payload.delivery_preference === 'lalamove') {
-      // Simulate Lalamove booking ID
-      delivery.lalamove_booking_id = `LLM-${Date.now().toString().slice(-8)}`;
-    } else {
-      delivery.rider_name    = payload.rider_name;
-      delivery.rider_contact = payload.rider_contact;
-    }
+      if (payload.delivery_preference === 'lalamove') {
+        delivery.lalamove_booking_id = `LLM-${Date.now().toString().slice(-8)}`;
+      } else {
+        delivery.rider_name    = payload.rider_name;
+        delivery.rider_contact = payload.rider_contact;
+      }
 
-    return { data: { ...delivery } };
-  },
+      return { data: { ...delivery } };
+    },
+  ),
 
   /** PATCH /api/deliveries/:id/status — update delivery status */
-  updateStatus: async (id, status) => {
-    await delay(350);
-    const delivery = MOCK_DELIVERIES.find((d) => d.id === id);
-    if (!delivery) throw { response: { data: { message: 'Delivery not found.' } } };
-    delivery.status = status;
-    return { data: { ...delivery } };
-  },
+  updateStatus: (id, status) => orMock(
+    () => httpPatch(`/deliveries/${id}/status`, { status }),
+    async () => {
+      await delay(350);
+      const delivery = MOCK_DELIVERIES.find((d) => d.id === id);
+      if (!delivery) throw { response: { data: { message: 'Delivery not found.' } } };
+      delivery.status = status;
+      return { data: { ...delivery } };
+    },
+  ),
 };
 // ─── SUPPORT CHAT MOCK DATA (§4.4) ────────────────────────────────────────────
 let MOCK_CHAT_THREADS = [
@@ -980,46 +1065,55 @@ let msgCounter = 17;
 // ─── SUPPORT CHAT API (§4.4) ──────────────────────────────────────────────────
 export const supportChatAPI = {
   /** GET /api/support-chat/threads — all threads (staff view) */
-  getThreads: async () => {
-    await delay(400);
-    return { data: { threads: [...MOCK_CHAT_THREADS] } };
-  },
+  getThreads: () => orMock(
+    () => httpGet('/support-chat/threads'),
+    async () => {
+      await delay(400);
+      return { data: { threads: [...MOCK_CHAT_THREADS] } };
+    },
+  ),
 
   /** GET /api/support-chat/:chatId/messages */
-  getMessages: async (chatId) => {
-    await delay(350);
-    const messages = MOCK_CHAT_MESSAGES[chatId] || [];
-    return { data: { messages: [...messages] } };
-  },
+  getMessages: (chatId) => orMock(
+    () => httpGet(`/support-chat/${chatId}/messages`),
+    async () => {
+      await delay(350);
+      const messages = MOCK_CHAT_MESSAGES[chatId] || [];
+      return { data: { messages: [...messages] } };
+    },
+  ),
 
   /** POST /api/support-chat/message */
-  sendMessage: async (payload) => {
-    await delay(300);
-    const { chat_id, message_text, sender_type, related_order_id } = payload;
+  sendMessage: (payload) => orMock(
+    () => httpPost('/support-chat/message', payload),
+    async () => {
+      await delay(300);
+      const { chat_id, message_text, sender_type, related_order_id } = payload;
 
-    const thread = MOCK_CHAT_THREADS.find((t) => t.id === chat_id);
-    if (!thread) throw { response: { data: { message: 'Thread not found.' } } };
-    if (thread.status === 'locked') throw { response: { data: { message: 'Thread is locked.' } } };
+      const thread = MOCK_CHAT_THREADS.find((t) => t.id === chat_id);
+      if (!thread) throw { response: { data: { message: 'Thread not found.' } } };
+      if (thread.status === 'locked') throw { response: { data: { message: 'Thread is locked.' } } };
 
-    const newMsg = {
-      id: msgCounter++,
-      chat_id,
-      sender_type: sender_type || 'staff',
-      sender_name: sender_type === 'customer' ? thread.customer_name : 'Staff',
-      message_text,
-      related_order_number: related_order_id
-        ? thread.active_orders?.find((o) => o.id === related_order_id)?.order_number || null
-        : null,
-      sent_at: new Date().toISOString(),
-    };
+      const newMsg = {
+        id: msgCounter++,
+        chat_id,
+        sender_type: sender_type || 'staff',
+        sender_name: sender_type === 'customer' ? thread.customer_name : 'Staff',
+        message_text,
+        related_order_number: related_order_id
+          ? thread.active_orders?.find((o) => o.id === related_order_id)?.order_number || null
+          : null,
+        sent_at: new Date().toISOString(),
+      };
 
-    if (!MOCK_CHAT_MESSAGES[chat_id]) MOCK_CHAT_MESSAGES[chat_id] = [];
-    MOCK_CHAT_MESSAGES[chat_id] = [...MOCK_CHAT_MESSAGES[chat_id], newMsg];
+      if (!MOCK_CHAT_MESSAGES[chat_id]) MOCK_CHAT_MESSAGES[chat_id] = [];
+      MOCK_CHAT_MESSAGES[chat_id] = [...MOCK_CHAT_MESSAGES[chat_id], newMsg];
 
-    // Update thread preview
-    thread.last_message_text = message_text;
-    thread.last_message_at   = newMsg.sent_at;
+      // Update thread preview
+      thread.last_message_text = message_text;
+      thread.last_message_at   = newMsg.sent_at;
 
-    return { data: { message: newMsg } };
-  },
+      return { data: { message: newMsg } };
+    },
+  ),
 };

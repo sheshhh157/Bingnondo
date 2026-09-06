@@ -1,6 +1,6 @@
 import { useState, useEffect, useReducer, useCallback } from 'react';
 import { kitchenAPI } from '../../services/api';
-import { getSocket, KITCHEN_EVENTS } from '../../services/socket';
+import { getSocket } from '../../services/socket';
 import KitchenHeader from './components/KitchenHeader';
 import OrderColumn from './components/OrderColumn';
 import AlertPanel from './components/AlertPanel';
@@ -19,6 +19,8 @@ function ordersReducer(state, action) {
       return state
         .map((o) => o.id === action.id ? { ...o, status: action.status } : o)
         .filter((o) => ['confirmed', 'preparing'].includes(o.status));
+    case 'REMOVE':
+      return state.filter((o) => o.id !== action.id);
     default: return state;
   }
 }
@@ -52,7 +54,7 @@ function playAlert() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.5);
-  } catch (_) {}
+  } catch {}
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -94,22 +96,23 @@ export default function KitchenPage() {
     socket.on('disconnect',       () => setConnected(false));
     socket.on('reconnecting',     () => setReconnecting(true));
     socket.on('reconnect_failed', () => setReconnecting(false));
-    socket.on(KITCHEN_EVENTS.NEW_ORDER, (order) => {
+    // Backend events (shared Express store) — cashier-created orders arrive here
+    socket.on('order:new', (order) => {
       dispatchOrders({ type: 'ADD', payload: order });
       playAlert();
     });
-    socket.on(KITCHEN_EVENTS.KITCHEN_ALERT, (alert) => {
-      dispatchAlerts({ type: 'ADD', payload: alert });
-    });
-    socket.on(KITCHEN_EVENTS.ORDER_STATUS_UPDATE, ({ orderId, status }) => {
+    socket.on('order:status', ({ orderId, status }) => {
       dispatchOrders({ type: 'UPDATE_STATUS', id: orderId, status });
+    });
+    socket.on('order:ready', ({ orderId }) => {
+      dispatchOrders({ type: 'REMOVE', id: orderId });
     });
     return () => {
       socket.off('connect'); socket.off('disconnect');
       socket.off('reconnecting'); socket.off('reconnect_failed');
-      socket.off(KITCHEN_EVENTS.NEW_ORDER);
-      socket.off(KITCHEN_EVENTS.KITCHEN_ALERT);
-      socket.off(KITCHEN_EVENTS.ORDER_STATUS_UPDATE);
+      socket.off('order:new');
+      socket.off('order:status');
+      socket.off('order:ready');
     };
   }, []);
 

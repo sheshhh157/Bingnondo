@@ -151,35 +151,6 @@ function NoChatSelected() {
   );
 }
 
-// ─── Order context side panel ─────────────────────────────────────────────────
-function OrderContext({ orders }) {
-  if (!orders || orders.length === 0) return null;
-  return (
-    <div className="sc-order-ctx">
-      <p className="sc-order-ctx__label">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        Active Orders
-      </p>
-      {orders.map((order) => (
-        <div key={order.id} className="sc-order-ctx__card">
-          <div className="sc-order-ctx__row">
-            <span className="sc-order-ctx__num">{order.order_number}</span>
-            <span className={`sc-order-ctx__status sc-order-ctx__status--${order.status}`}>
-              {order.status.replace(/_/g, ' ')}
-            </span>
-          </div>
-          <p className="sc-order-ctx__items">
-            {order.items?.map((i) => `${i.quantity}× ${i.name}`).join(' · ')}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ─── Order Drawer ─────────────────────────────────────────────────────────────
 function OrderDrawer({ order, onClose }) {
   const DELIVERY_FEE = 50;
@@ -345,38 +316,17 @@ export default function SupportChatPage() {
   useEffect(() => {
     const socket = getSocket();
 
-    const onNewMessage = (message) => {
-      // If this chat is active — add to messages
-      if (message.chat_id === activeThread?.id) {
-        setMessages((prev) => [...prev, message]);
-      } else {
-        // Mark thread as unread
-        setUnreadIds((prev) => new Set([...prev, message.chat_id]));
-      }
-
-      // Update thread preview
-      setThreads((prev) =>
-        prev.map((t) =>
-          t.id === message.chat_id
-            ? { ...t, last_message_text: message.message_text, last_message_at: message.sent_at }
-            : t
-        )
-      );
+    // Backend broadcasts after any new message — refetch (replace, no dups)
+    const onChatUpdate = () => {
+      fetchThreads();
+      if (activeThread) fetchMessages(activeThread.id);
     };
 
-    const onThreadLocked = ({ chatId }) => {
-      setThreads((prev) =>
-        prev.map((t) => (t.id === chatId ? { ...t, status: 'locked' } : t))
-      );
-    };
-
-    socket.on('new_support_message', onNewMessage);
-    socket.on('chat_thread_locked',  onThreadLocked);
+    socket.on('chat:update', onChatUpdate);
     return () => {
-      socket.off('new_support_message', onNewMessage);
-      socket.off('chat_thread_locked',  onThreadLocked);
+      socket.off('chat:update', onChatUpdate);
     };
-  }, [activeThread]);
+  }, [activeThread, fetchThreads, fetchMessages]);
 
   // ── Send reply ───────────────────────────────────────────────────────────────
   const handleSend = async () => {
