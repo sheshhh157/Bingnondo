@@ -481,10 +481,11 @@ export default function MenuPage() {
 
   useEffect(() => {
     const socket = getSocket();
-    const handler = (updated) => setItems((prev) => prev.map((i) => i.id === updated.id ? { ...i, ...updated } : i));
+    // Live: any menu change (from any staff/admin client) refreshes this view
+    const handler = () => fetchAll();
     socket.on('menu_update', handler);
     return () => socket.off('menu_update', handler);
-  }, []);
+  }, [fetchAll]);
 
   const stats = useMemo(() => ({
     total: items.length,

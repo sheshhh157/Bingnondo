@@ -54,7 +54,6 @@ export const authAPI = {
     return { data: { accessToken: 'mock-access-token', refreshToken: 'mock-refresh-token', user: userData } };
   },
   logout: async () => ({ data: { message: 'Logged out.' } }),
-  backendAvailable: () => backendUp,
 };
 
 // ─── Fallback mock data (bundled copy of the backend store) ─────────────────

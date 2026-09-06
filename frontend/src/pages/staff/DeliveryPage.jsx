@@ -392,13 +392,9 @@ export default function DeliveryPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Real-time socket — order cancelled by customer removes from queue
+  // Real-time socket — backend broadcasts rich delivery events
   useEffect(() => {
     const socket = getSocket();
-
-    const onOrderCancelled = ({ orderId }) => {
-      setDeliveries((prev) => prev.filter((d) => d.order_id !== orderId));
-    };
 
     const onDeliveryUpdate = (updated) => {
       setDeliveries((prev) =>
@@ -406,11 +402,17 @@ export default function DeliveryPage() {
       );
     };
 
-    socket.on('order_cancelled', onOrderCancelled);
+    const onDeliveryNew = (delivery) => {
+      setDeliveries((prev) =>
+        prev.some((d) => d.id === delivery.id) ? prev : [delivery, ...prev]
+      );
+    };
+
     socket.on('delivery_update', onDeliveryUpdate);
+    socket.on('delivery_new', onDeliveryNew);
     return () => {
-      socket.off('order_cancelled', onOrderCancelled);
       socket.off('delivery_update', onDeliveryUpdate);
+      socket.off('delivery_new', onDeliveryNew);
     };
   }, []);
 

@@ -321,7 +321,6 @@ export default function InventoryPage() {
   const start      = (safePage - 1) * perPage;
 
   const pagedTable = useMemo(() => filtered.slice(start, start + perPage), [filtered, start, perPage]);
-  const pagedCards = pagedTable; // same slice, different layout
 
   const from = filtered.length === 0 ? 0 : start + 1;
   const to   = Math.min(start + perPage, filtered.length);

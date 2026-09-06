@@ -202,7 +202,7 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
   );
 }
 
-function PayMethodCard({ id, value, label, description, selected, onSelect, icon }) {
+function PayMethodCard({ id, label, description, selected, onSelect, icon }) {
   return (
     <button
       id={id}
