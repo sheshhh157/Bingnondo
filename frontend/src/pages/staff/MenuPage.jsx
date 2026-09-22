@@ -85,66 +85,207 @@ function ImageUpload({ value, onChange }) {
 
 // ─── Ingredient linker ────────────────────────────────────────────────────────
 function IngredientLinker({ inventoryItems, linked, onChange }) {
-  const [adding, setAdding] = useState(false);
-  const [selId, setSelId] = useState('');
-  const [qty, setQty] = useState('');
+  const [adding, setAdding]     = useState(false);
+  const [selId, setSelId]       = useState('');
+  const [qty, setQty]           = useState('');
+  const [addError, setAddError] = useState('');
+  // editing: index of the linked item whose qty is being edited inline
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [editQty, setEditQty]       = useState('');
+  const selectRef = useRef(null);
 
-  const available = inventoryItems.filter((i) => !linked.find((l) => l.inventory_item_id === i.id));
+  // IDs from DB are numbers; compare as numbers throughout
+  const available = inventoryItems.filter(
+    (inv) => !linked.find((l) => l.inventory_item_id === inv.id)
+  );
+
+  const selectedInv = inventoryItems.find((i) => i.id === Number(selId));
+
+  const openAdding = () => {
+    setAdding(true);
+    setSelId('');
+    setQty('');
+    setAddError('');
+    setEditingIdx(null);
+    setTimeout(() => selectRef.current?.focus(), 50);
+  };
 
   const handleAdd = () => {
-    if (!selId || !qty || Number(qty) <= 0) return;
-    const item = inventoryItems.find((i) => i.id === Number(selId));
-    onChange([...linked, { inventory_item_id: Number(selId), quantity_required: Number(qty), name: item.name, unit: item.unit }]);
-    setSelId(''); setQty(''); setAdding(false);
+    if (!selId) { setAddError('Select an ingredient.'); return; }
+    if (!qty || Number(qty) <= 0) { setAddError('Enter a valid quantity.'); return; }
+    const inv = inventoryItems.find((i) => i.id === Number(selId));
+    onChange([
+      ...linked,
+      {
+        inventory_item_id: inv.id,
+        quantity_required: Number(qty),
+        name: inv.name,
+        unit: inv.unit,
+      },
+    ]);
+    setSelId(''); setQty(''); setAddError(''); setAdding(false);
+  };
+
+  const handleRemove = (idx) => {
+    onChange(linked.filter((_, i) => i !== idx));
+    if (editingIdx === idx) setEditingIdx(null);
+  };
+
+  const startEdit = (idx) => {
+    setEditingIdx(idx);
+    setEditQty(String(linked[idx].quantity_required));
+    setAdding(false);
+  };
+
+  const confirmEdit = (idx) => {
+    const q = Number(editQty);
+    if (!q || q <= 0) return;
+    onChange(linked.map((l, i) => i === idx ? { ...l, quantity_required: q } : l));
+    setEditingIdx(null);
   };
 
   return (
     <div className="mn-linker">
+      {/* Linked ingredients list */}
       <div className="mn-linker__list">
-        {linked.length === 0
-          ? <p className="mn-linker__empty">No ingredients linked yet.</p>
-          : linked.map((l, i) => (
-              <div key={l.inventory_item_id} className="mn-linker__item">
-                <div>
-                  <p className="mn-linker__item-name">{l.name}</p>
-                  <p className="mn-linker__item-qty">{l.quantity_required} {l.unit} per serving</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onChange(linked.filter((_, idx) => idx !== i))}
-                  className="mn-linker__remove"
-                  aria-label={`Remove ${l.name}`}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
+        {linked.length === 0 ? (
+          <div className="mn-linker__empty-state">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2Z"/><path d="M12 12v10"/><path d="M8 16H4a2 2 0 0 0-2 2v2h20v-2a2 2 0 0 0-2-2h-4"/>
+            </svg>
+            <p className="mn-linker__empty">No ingredients linked yet.</p>
+            <p className="mn-linker__empty-hint">Link ingredients to auto-deduct stock when this item is ordered.</p>
+          </div>
+        ) : (
+          linked.map((l, idx) => (
+            <div key={`${l.inventory_item_id}-${idx}`} className="mn-linker__item">
+              <div className="mn-linker__item-info">
+                <p className="mn-linker__item-name">{l.name}</p>
+                {editingIdx === idx ? (
+                  <div className="mn-linker__edit-row">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={editQty}
+                      onChange={(e) => setEditQty(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); confirmEdit(idx); }
+                        if (e.key === 'Escape') setEditingIdx(null);
+                      }}
+                      className="mn-field__input mn-linker__edit-input"
+                      autoFocus
+                      aria-label={`Quantity for ${l.name}`}
+                    />
+                    <span className="mn-linker__edit-unit">{l.unit}</span>
+                    <button type="button" onClick={() => confirmEdit(idx)} className="mn-btn mn-btn--primary mn-btn--xs" aria-label="Save quantity">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                    <button type="button" onClick={() => setEditingIdx(null)} className="mn-btn mn-btn--ghost mn-btn--xs" aria-label="Cancel edit">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="mn-linker__item-qty-btn"
+                    onClick={() => startEdit(idx)}
+                    title="Click to edit quantity"
+                    aria-label={`Edit quantity for ${l.name}: currently ${l.quantity_required} ${l.unit}`}
+                  >
+                    {l.quantity_required} {l.unit} per serving
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                )}
               </div>
-            ))
-        }
+              <button
+                type="button"
+                onClick={() => handleRemove(idx)}
+                className="mn-linker__remove"
+                aria-label={`Remove ${l.name}`}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          ))
+        )}
       </div>
 
-      {adding
-        ? <div className="mn-linker__add-row">
-            <select value={selId} onChange={(e) => setSelId(e.target.value)} className="mn-field__input" autoFocus>
-              <option value="">Select ingredient</option>
-              {available.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
-            </select>
-            <input type="number" min="0.01" step="0.01" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="Qty" className="mn-field__input mn-linker__qty" />
-            <button type="button" onClick={handleAdd} className="mn-btn mn-btn--primary mn-btn--xs" aria-label="Confirm">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+      {/* Add row */}
+      {adding ? (
+        <div className="mn-linker__add-panel">
+          <div className="mn-linker__add-fields">
+            <div className="mn-linker__add-field">
+              <label className="mn-linker__add-label" htmlFor="linker-select">Ingredient</label>
+              <select
+                id="linker-select"
+                ref={selectRef}
+                value={selId}
+                onChange={(e) => { setSelId(e.target.value); setAddError(''); }}
+                className="mn-field__input"
+              >
+                <option value="">Select ingredient…</option>
+                {available.map((i) => (
+                  <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
+                ))}
+              </select>
+            </div>
+            <div className="mn-linker__add-field mn-linker__add-field--qty">
+              <label className="mn-linker__add-label" htmlFor="linker-qty">
+                Qty {selectedInv ? `(${selectedInv.unit})` : ''}
+              </label>
+              <input
+                id="linker-qty"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={qty}
+                onChange={(e) => { setQty(e.target.value); setAddError(''); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
+                className="mn-field__input"
+                placeholder="e.g. 0.25"
+              />
+            </div>
+          </div>
+          {addError && (
+            <p className="mn-linker__add-error" role="alert">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              {addError}
+            </p>
+          )}
+          <div className="mn-linker__add-actions">
+            <button type="button" onClick={() => { setAdding(false); setAddError(''); }} className="mn-btn mn-btn--ghost mn-btn--sm">
+              Cancel
             </button>
-            <button type="button" onClick={() => setAdding(false)} className="mn-btn mn-btn--ghost mn-btn--xs" aria-label="Cancel">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <button type="button" onClick={handleAdd} className="mn-btn mn-btn--primary mn-btn--sm">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add
             </button>
           </div>
-        : <button type="button" onClick={() => setAdding(true)} className="mn-linker__trigger" disabled={available.length === 0}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Link ingredient
-          </button>
-      }
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={openAdding}
+          className="mn-linker__trigger"
+          disabled={available.length === 0}
+          title={available.length === 0 ? 'All ingredients are already linked' : undefined}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          {available.length === 0 ? 'All ingredients linked' : 'Link ingredient'}
+        </button>
+      )}
     </div>
   );
 }

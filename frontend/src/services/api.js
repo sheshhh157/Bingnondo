@@ -292,90 +292,59 @@ export const paymentsAPI = {
 
 // ─── INVENTORY (§4.1) ─────────────────────────────────────────────────────────
 export const inventoryAPI = {
-  getAll: async () => {
-    await delay(350);
-    return { data: { items: [...MOCK_INVENTORY] } };
-  },
+  /** GET /api/inventory — all items with is_low_stock flag */
+  getAll: () => apiRequest('/inventory'),
 
-  transaction: async (id, { change_type, quantity, note }) => {
-    await delay(400);
-    const item = MOCK_INVENTORY.find((i) => i.id === id);
-    if (!item) throw { response: { data: { message: 'Item not found.' } } };
-    if (change_type === 'restock') {
-      item.current_stock += Number(quantity);
-    } else if (change_type === 'adjustment') {
-      item.current_stock = Number(quantity);
-    }
-    return { data: { ...item } };
-  },
+  /** POST /api/inventory/:id/transaction — restock / adjustment / deduction */
+  transaction: (id, payload) =>
+    apiRequest(`/inventory/${id}/transaction`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /** GET /api/inventory/:id/transactions — movement history */
+  getTransactions: (id) => apiRequest(`/inventory/${id}/transactions`),
+
+  /** POST /api/inventory — create a new ingredient */
+  create: (payload) =>
+    apiRequest('/inventory', { method: 'POST', body: JSON.stringify(payload) }),
 };
 
 // ─── STAFF MENU (§4.2) — full CRUD, separate from cashier read-only ───────────
 export const staffMenuAPI = {
-  getAll: async () => {
-    await delay(350);
-    // Enrich items with category_name
-    const enriched = MOCK_MENU_ITEMS.map((item) => ({
-      ...item,
-      category_name: MOCK_CATEGORIES.find((c) => c.id === item.category_id)?.name || '—',
-    }));
-    return { data: { categories: MOCK_CATEGORIES, items: enriched } };
-  },
+  /** GET /api/menu/staff — enriched with category_name + ingredients[] */
+  getAll: () => apiRequest('/menu/staff'),
 
-  create: async (payload) => {
-    await delay(500);
-    const cat = MOCK_CATEGORIES.find((c) => c.id === Number(payload.category_id));
-    const newItem = {
-      id: menuItemCounter++,
-      category_id: Number(payload.category_id),
-      category_name: cat?.name || '—',
-      name: payload.name,
-      description: payload.description || '',
-      price: Number(payload.price),
-      is_available: payload.is_available ?? true,
-      image_url: payload.image_url || null,
-    };
-    MOCK_MENU_ITEMS = [...MOCK_MENU_ITEMS, newItem];
-    return { data: newItem };
-  },
+  /** POST /api/menu — create item + optional ingredient links */
+  create: (payload) =>
+    apiRequest('/menu', { method: 'POST', body: JSON.stringify(payload) }),
 
-  update: async (id, payload) => {
-    await delay(450);
-    const idx = MOCK_MENU_ITEMS.findIndex((i) => i.id === id);
-    if (idx === -1) throw { response: { data: { message: 'Item not found.' } } };
-    const cat = MOCK_CATEGORIES.find((c) => c.id === Number(payload.category_id));
-    const updated = {
-      ...MOCK_MENU_ITEMS[idx],
-      ...payload,
-      category_id: Number(payload.category_id),
-      category_name: cat?.name || '—',
-      price: Number(payload.price),
-    };
-    MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.map((i) => (i.id === id ? updated : i));
-    return { data: updated };
-  },
+  /** PUT /api/menu/:id — full update; replaces ingredient list if provided */
+  update: (id, payload) =>
+    apiRequest(`/menu/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
 
-  setAvailability: async (id, is_available) => {
-    await delay(250);
-    MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.map((i) =>
-      i.id === id ? { ...i, is_available } : i
-    );
-    return { data: { id, is_available } };
-  },
+  /** PATCH /api/menu/:id/availability — manual toggle, independent of stock */
+  setAvailability: (id, is_available) =>
+    apiRequest(`/menu/${id}/availability`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_available }),
+    }),
 
-  remove: async (id) => {
-    await delay(350);
-    MOCK_MENU_ITEMS = MOCK_MENU_ITEMS.filter((i) => i.id !== id);
-    return { data: { success: true } };
-  },
+  /** DELETE /api/menu/:id */
+  remove: (id) => apiRequest(`/menu/${id}`, { method: 'DELETE' }),
 };
 
 // ─── CATEGORIES (§4.2) ────────────────────────────────────────────────────────
 export const categoriesAPI = {
-  getAll: async () => {
-    await delay(200);
-    return { data: { categories: [...MOCK_CATEGORIES] } };
-  },
+  /** GET /api/menu/categories */
+  getAll: () => apiRequest('/menu/categories'),
+
+  /** POST /api/menu/categories — Body: { name } */
+  create: (name) =>
+    apiRequest('/menu/categories', { method: 'POST', body: JSON.stringify({ name }) }),
+
+  /** DELETE /api/menu/categories/:id */
+  remove: (id) => apiRequest(`/menu/categories/${id}`, { method: 'DELETE' }),
 };
 
 export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMenuAPI, categoriesAPI };
