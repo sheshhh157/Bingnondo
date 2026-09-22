@@ -15,15 +15,6 @@ function urgency(dateStr) {
   return 'normal';
 }
 
-function UrgencyDot({ level }) {
-  return (
-    <span
-      className={`kp-card__dot kp-card__dot--${level}`}
-      aria-label={level === 'critical' ? 'Overdue' : level === 'urgent' ? 'Getting late' : 'On time'}
-    />
-  );
-}
-
 export default function OrderCard({ order, lane, onStatusChange }) {
   const [loading, setLoading] = useState(false);
   const u = urgency(order.created_at);
@@ -50,7 +41,6 @@ export default function OrderCard({ order, lane, onStatusChange }) {
       {/* Header row */}
       <div className="kp-card__header">
         <div className="kp-card__header-left">
-          <UrgencyDot level={u} />
           <span className="kp-card__number">#{order.order_number}</span>
           <span className={`kp-card__status kp-card__status--${order.status}`}>
             {order.status === 'preparing' ? 'Preparing' : 'Incoming'}
@@ -97,12 +87,13 @@ export default function OrderCard({ order, lane, onStatusChange }) {
       {/* Footer */}
       <div className="kp-card__footer">
         {u === 'critical' && (
-          <span className="kp-card__overdue" role="alert">
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
-              <path d="M5.5 1L10 9.5H1L5.5 1Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
-              <path d="M5.5 4.5v2M5.5 8h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-            Overdue
+          <span className="kp-card__urgency-label kp-card__urgency-label--critical" role="alert">
+            OVERDUE
+          </span>
+        )}
+        {u === 'urgent' && (
+          <span className="kp-card__urgency-label kp-card__urgency-label--urgent">
+            URGENT
           </span>
         )}
         <button
