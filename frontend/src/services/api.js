@@ -128,23 +128,103 @@ let MOCK_INVENTORY = [
 const delay = (ms = 300) => new Promise((res) => setTimeout(res, ms));
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+// Token helpers — keys match AuthContext and socket.js
+export const tokenStorage = {
+  getAccess:   () => localStorage.getItem('bingnondo_access_token'),
+  getRefresh:  () => localStorage.getItem('bingnondo_refresh_token'),
+  setTokens:   (access, refresh) => {
+    localStorage.setItem('bingnondo_access_token', access);
+    localStorage.setItem('bingnondo_refresh_token', refresh);
+  },
+  clearTokens: () => localStorage.clear(),
+  saveUser:    (user) => localStorage.setItem('bingnondo_user', JSON.stringify(user)),
+  getUser:     () => { try { return JSON.parse(localStorage.getItem('bingnondo_user')); } catch { return null; } },
+};
+
+// Core fetch wrapper with auto-refresh on 401
+let _isRefreshing = false;
+let _refreshQueue = [];
+
+async function apiRequest(endpoint, options = {}, retry = true) {
+  const accessToken = tokenStorage.getAccess();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...options.headers,
+  };
+
+  const res = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
+
+  if (res.status === 401 && retry) {
+    const refreshToken = tokenStorage.getRefresh();
+    if (!refreshToken) { tokenStorage.clearTokens(); window.location.href = '/login'; return; }
+
+    if (_isRefreshing) {
+      return new Promise((resolve, reject) => { _refreshQueue.push({ resolve, reject, endpoint, options }); });
+    }
+    _isRefreshing = true;
+    try {
+      const rRes = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!rRes.ok) throw new Error('Refresh failed');
+      const { accessToken: newAccess, refreshToken: newRefresh } = await rRes.json();
+      tokenStorage.setTokens(newAccess, newRefresh);
+      _refreshQueue.forEach(({ resolve, reject, endpoint: ep, options: opts }) => {
+        apiRequest(ep, opts, false).then(resolve).catch(reject);
+      });
+      _refreshQueue = [];
+      return apiRequest(endpoint, options, false);
+    } catch {
+      tokenStorage.clearTokens();
+      _refreshQueue.forEach(({ reject }) => reject(new Error('Session expired')));
+      _refreshQueue = [];
+      window.location.href = '/login';
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    // Match the error shape the existing pages expect: err.response.data.message
+    const error = new Error(data.message || 'Something went wrong.');
+    error.response = { data, status: res.status };
+    throw error;
+  }
+  // Wrap in { data } to match the shape the existing pages expect
+  return { data };
+}
+
 export const authAPI = {
   staffLogin: async ({ email, password }) => {
-    await delay();
-    const accounts = [
-      { id: 1, full_name: 'Cashier One',  email: 'cashier@bingnondo.com', password: 'cashier123', role: 'cashier' },
-      { id: 2, full_name: 'Staff Member', email: 'staff@bingnondo.com',   password: 'staff123',   role: 'staff'   },
-      { id: 3, full_name: 'Owner',        email: 'owner@bingnondo.com',   password: 'owner123',   role: 'owner'   },
-      { id: 4, full_name: 'Kitchen Staff', email: 'kitchen@bingnondo.com', password: 'kitchen123', role: 'kitchen_staff' },
-      { id: 5, email: 'admin@bingnondo.com', password: 'admin123', full_name: 'System Admin', role: 'admin' },
-      { id: 6, full_name: 'Manager', email: 'manager@bingnondo.com', password: 'manager123', role: 'manager' }
-    ];
-    const user = accounts.find((a) => a.email === email && a.password === password);
-    if (!user) throw { response: { data: { message: 'Invalid credentials. Try again.' } } };
-    const { password: _, ...userData } = user;
-    return { data: { accessToken: 'mock-access-token', refreshToken: 'mock-refresh-token', user: userData } };
+    const res = await apiRequest('/auth/staff/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    // Store tokens on successful login
+    tokenStorage.setTokens(res.data.accessToken, res.data.refreshToken);
+    tokenStorage.saveUser(res.data.user);
+    return res;
   },
-  logout: async () => { await delay(100); return { data: { message: 'Logged out.' } }; },
+
+  forgotPassword: (email) =>
+    apiRequest('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  resetPassword: (data) =>
+    apiRequest('/auth/reset-password', { method: 'POST', body: JSON.stringify(data) }),
+
+  me: () => apiRequest('/auth/me'),
+
+  logout: async () => {
+    try { await apiRequest('/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+    tokenStorage.clearTokens();
+    return { data: { message: 'Logged out.' } };
+  },
 };
 
 // ─── MENU (cashier read) ──────────────────────────────────────────────────────

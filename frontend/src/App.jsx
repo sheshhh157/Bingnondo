@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import Login from './pages/auth/Login';
@@ -31,8 +32,14 @@ function ProtectedRoute({ children, allowedRoles }) {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/login" replace />;
+  if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
   return children;
+}
+
+function LogoutRoute() {
+  const { logout } = useAuth();
+  useEffect(() => { logout(); }, []);
+  return <Navigate to="/login" replace />;
 }
 
 function RoleRedirect() {
@@ -125,6 +132,7 @@ export default function App() {
             <Route path="oversight/delivery" element={<OversightDelivery />} />
           </Route>
 
+          <Route path="/logout" element={<LogoutRoute />} />
           <Route path="/" element={<RoleRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

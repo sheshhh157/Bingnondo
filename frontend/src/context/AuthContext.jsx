@@ -5,7 +5,7 @@ import { connectSocket, disconnectSocket } from '../services/socket';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,6 +32,9 @@ export function AuthProvider({ children }) {
     localStorage.clear();
     disconnectSocket();
     setUser(null);
+    // Replace the entire history stack with /login so the back button
+    // can never return to a protected page after logout.
+    window.location.replace('/login');
   }, []);
 
   return (
