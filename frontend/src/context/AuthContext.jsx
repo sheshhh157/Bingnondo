@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authAPI } from '../services/api';
+import { authClient } from '../services/apiClient';
 import { connectSocket, disconnectSocket } from '../services/socket';
 
 const AuthContext = createContext(null);
@@ -14,26 +14,48 @@ export function AuthProvider({ children }) {
       try { setUser(JSON.parse(stored)); } catch { localStorage.clear(); }
     }
     setLoading(false);
+
+    // Listen for silent token-refresh failures from apiClient
+    const onExpired = () => {
+      localStorage.clear();
+      disconnectSocket();
+      setUser(null);
+      window.location.replace('/login');
+    };
+    window.addEventListener('auth:expired', onExpired);
+    return () => window.removeEventListener('auth:expired', onExpired);
   }, []);
 
   const login = useCallback(async (credentials) => {
-    const { data } = await authAPI.staffLogin(credentials);
-    const { accessToken, refreshToken, user: userData } = data;
-    localStorage.setItem('bingnondo_access_token', accessToken);
-    localStorage.setItem('bingnondo_refresh_token', refreshToken);
+    // authClient.staffLogin returns the raw backend response:
+    // { accessToken, refreshToken, user, message }
+    // (no { data: ... } wrapper — backend sends these at top level)
+    const res = await authClient.staffLogin(credentials);
+    const userData = res.user;
+
+    // Persist user for page reloads
     localStorage.setItem('bingnondo_user', JSON.stringify(userData));
     setUser(userData);
-    connectSocket();
+
+    // Join the correct socket room for this role
+    const roomMap = {
+      cashier:       'cashier',
+      kitchen_staff: 'kitchen',
+      staff:         'staff',
+      owner:         'manager',
+      admin:         'manager',
+    };
+    connectSocket(roomMap[userData.role]);
+
     return userData;
   }, []);
 
   const logout = useCallback(() => {
-    authAPI.logout().catch(() => {});
+    authClient.logout().catch(() => {});
     localStorage.clear();
     disconnectSocket();
     setUser(null);
-    // Replace the entire history stack with /login so the back button
-    // can never return to a protected page after logout.
+    // Replace the entire history stack so back button can't return to protected pages
     window.location.replace('/login');
   }, []);
 

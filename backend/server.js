@@ -11,9 +11,12 @@ const { generalApiLimiter, loginLimiter, otpLimiter } = require('./src/middlewar
 const authRoutes      = require('./src/modules/auth/auth.routes');
 const menuRoutes      = require('./src/modules/menu/menu.routes');
 const inventoryRoutes = require('./src/modules/inventory/inventory.routes');
+const ordersRoutes    = require('./src/modules/orders/orders.routes');
+const paymentsRoutes  = require('./src/modules/payments/payments.routes');
 
 // ── Controllers that need the io instance ──────────────────────────────────────
-const menuCtrl = require('./src/modules/menu/menu.controller');
+const menuCtrl   = require('./src/modules/menu/menu.controller');
+const socketHub  = require('./src/sockets');
 
 // ── Legacy mock data (Manager dashboard — keep until full backend is ready) ────
 const db = require('./data');
@@ -27,6 +30,7 @@ const io     = new Server(server, {
 
 // Share io with controllers that emit real-time events
 menuCtrl.setIO(io);
+socketHub.setIO(io);   // NEW: socket hub for orders, kitchen alerts, etc.
 
 // ─── Global Middleware ─────────────────────────────────────────────────────────
 app.use(cors({
@@ -44,6 +48,14 @@ app.use('/api/auth', authRoutes);
 // ─── Menu & Inventory Routes ───────────────────────────────────────────────────
 app.use('/api/menu',      menuRoutes);
 app.use('/api/inventory', inventoryRoutes);
+
+// ─── Orders & Payments Routes (NEW) ───────────────────────────────────────────
+app.use('/api/orders',   ordersRoutes);
+app.use('/api/payments', paymentsRoutes);
+
+// PayMongo webhook — no auth middleware (signed by PayMongo header)
+const paymentsCtrl = require('./src/modules/payments/payments.controller');
+app.post('/api/webhooks/paymongo', paymentsCtrl.paymongoWebhook);
 
 // ─── Health / test ─────────────────────────────────────────────────────────────
 app.get('/api/test', (_req, res) => {
@@ -83,14 +95,6 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Something went wrong. Please try again.' });
 });
 
-// ─── Socket.io ─────────────────────────────────────────────────────────────────
-io.on('connection', (socket) => {
-  console.log(`[socket] Client connected: ${socket.id} (total: ${io.engine.clientsCount})`);
-  socket.on('disconnect', () => {
-    console.log(`[socket] Client disconnected: ${socket.id}`);
-  });
-});
-
 // ─── Simulated live events (Manager dashboard) ─────────────────────────────────
 function runSimulatedEvent() {
   const events = [
@@ -112,8 +116,10 @@ setTimeout(runSimulatedEvent, 5000);
 // ─── Start Server ───────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Bingnondo backend running on http://localhost:${PORT}`);
+  console.log(`\nBingnondo backend running on http://localhost:${PORT}`);
   console.log(`Auth:      POST /api/auth/staff/login`);
   console.log(`Menu:      GET /api/menu  |  GET /api/menu/staff  |  POST/PUT/DELETE /api/menu/:id`);
   console.log(`Inventory: GET /api/inventory  |  POST /api/inventory/:id/transaction`);
+  console.log(`Orders:    POST /api/orders  |  GET /api/orders  |  PATCH /api/orders/:id/status`);
+  console.log(`Payments:  POST /api/payments  |  GET /api/payments/:orderId`);
 });

@@ -16,9 +16,14 @@ export const getSocket = () => {
   return socket;
 };
 
-export const connectSocket = () => {
+export const connectSocket = (room) => {
   const s = getSocket();
-  if (!s.connected) s.connect();
+  if (!s.connected) {
+    s.connect();
+    if (room) {
+      s.once('connect', () => s.emit('join', { room }));
+    }
+  }
   return s;
 };
 

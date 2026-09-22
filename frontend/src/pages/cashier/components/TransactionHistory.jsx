@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ordersAPI } from '../../../services/api';
+import { ordersAPI } from '../../../services/cashierApi';
 import '../../../styles/TransactionHistory.css';
 
 const STATUS_LABEL = {
@@ -33,7 +33,7 @@ export default function TransactionHistory() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await ordersAPI.getMyTransactions();
+      const { data } = await ordersAPI.getMyTransactions({ range: filter });
       const list = Array.isArray(data) ? data : data.orders || [];
       setOrders(list);
     } catch {
@@ -43,18 +43,9 @@ export default function TransactionHistory() {
     }
   };
 
-  useEffect(() => { fetchOrders(); }, []);
+  useEffect(() => { fetchOrders(); }, [filter]);
 
-  // Client-side filter
-  const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfWeek = new Date(startOfDay);
-  startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
-
-  const filtered = orders.filter((o) => {
-    const d = new Date(o.created_at);
-    return filter === 'today' ? d >= startOfDay : d >= startOfWeek;
-  });
+  const filtered = orders;
 
   const todayTotal = filtered.reduce((s, o) => s + Number(o.total_amount || 0), 0);
 

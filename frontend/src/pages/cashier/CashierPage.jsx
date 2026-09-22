@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { menuAPI, ordersAPI, paymentsAPI } from '../../services/api';
+import { menuAPI, ordersAPI, paymentsAPI } from '../../services/cashierApi';
 import { connectSocket, disconnectSocket } from '../../services/socket';
 import MenuGrid from './components/MenuGrid';
 import OrderDraft from './components/OrderDraft';
