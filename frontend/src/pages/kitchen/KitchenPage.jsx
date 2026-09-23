@@ -69,13 +69,15 @@ export default function KitchenPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [{ data: ordersData }, { data: alertsData }] = await Promise.all([
+        const [ordersRes, alertsRes] = await Promise.all([
           kitchenAPI.getOrders(),
           kitchenAPI.getAlerts(),
         ]);
+        const ordersData = ordersRes?.data ?? ordersRes ?? [];
+        const alertsData = alertsRes?.data ?? alertsRes ?? [];
         if (!cancelled) {
-          dispatchOrders({ type: 'LOAD', payload: ordersData });
-          dispatchAlerts({ type: 'LOAD', payload: alertsData });
+          dispatchOrders({ type: 'LOAD', payload: Array.isArray(ordersData) ? ordersData : [] });
+          dispatchAlerts({ type: 'LOAD', payload: Array.isArray(alertsData) ? alertsData : [] });
         }
       } catch (err) {
         if (!cancelled) setError(err?.response?.data?.message || 'Failed to load orders.');

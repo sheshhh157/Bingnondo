@@ -19,7 +19,6 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
         <div className="kp-header__brand-text">
           <span className="kp-header__name">Bingnondo</span>
           <span className="kp-header__role">
-            <span className="kp-header__role-dot" aria-hidden="true" />
             Kitchen Display
           </span>
         </div>

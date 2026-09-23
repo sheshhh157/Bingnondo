@@ -13,6 +13,7 @@ const menuRoutes      = require('./src/modules/menu/menu.routes');
 const inventoryRoutes = require('./src/modules/inventory/inventory.routes');
 const ordersRoutes    = require('./src/modules/orders/orders.routes');
 const paymentsRoutes  = require('./src/modules/payments/payments.routes');
+const kitchenRoutes   = require('./src/modules/kitchen/kitchen.routes');
 
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
@@ -52,6 +53,7 @@ app.use('/api/inventory', inventoryRoutes);
 // ─── Orders & Payments Routes (NEW) ───────────────────────────────────────────
 app.use('/api/orders',   ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
+app.use('/api/kitchen',  kitchenRoutes);
 
 // PayMongo webhook — no auth middleware (signed by PayMongo header)
 const paymentsCtrl = require('./src/modules/payments/payments.controller');
@@ -122,4 +124,5 @@ server.listen(PORT, () => {
   console.log(`Inventory: GET /api/inventory  |  POST /api/inventory/:id/transaction`);
   console.log(`Orders:    POST /api/orders  |  GET /api/orders  |  PATCH /api/orders/:id/status`);
   console.log(`Payments:  POST /api/payments  |  GET /api/payments/:orderId`);
+  console.log(`Kitchen:   GET /api/kitchen/orders  |  PATCH /api/kitchen/orders/:id/status  |  GET /api/kitchen/alerts  |  POST /api/kitchen/alerts/:id/acknowledge`);
 });
