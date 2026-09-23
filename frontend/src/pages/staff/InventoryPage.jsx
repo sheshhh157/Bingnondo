@@ -248,6 +248,148 @@ function InventoryCard({ item, onRestock, onAdjust }) {
   );
 }
 
+// ─── Add Ingredient Modal ─────────────────────────────────────────────────────
+function AddIngredientModal({ onClose, onSubmit }) {
+  const [name, setName]               = useState('');
+  const [unit, setUnit]               = useState('');
+  const [currentStock, setCurrentStock] = useState('');
+  const [reorderLevel, setReorderLevel] = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState('');
+  const nameRef = useRef(null);
+
+  useEffect(() => {
+    nameRef.current?.focus();
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim())  { setError('Ingredient name is required.'); return; }
+    if (!unit.trim())  { setError('Unit is required (e.g. kg, pcs, liters).'); return; }
+    setLoading(true); setError('');
+    try {
+      await onSubmit({
+        name:          name.trim(),
+        unit:          unit.trim(),
+        current_stock: Number(currentStock) || 0,
+        reorder_level: Number(reorderLevel) || 0,
+      });
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to add ingredient.');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="inv-modal-overlay" onClick={onClose} aria-hidden="true">
+      <div
+        className="inv-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-ing-title"
+      >
+        <div className="inv-modal__header">
+          <h2 id="add-ing-title" className="inv-modal__title">Add Ingredient</h2>
+          <button className="inv-modal__close" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className="inv-modal__body">
+          <form id="add-ing-form" onSubmit={handleSubmit} noValidate>
+            <div className="inv-field">
+              <label htmlFor="ing-name" className="inv-field__label">Ingredient name <span className="inv-field__required">*</span></label>
+              <input
+                id="ing-name"
+                ref={nameRef}
+                type="text"
+                value={name}
+                onChange={(e) => { setName(e.target.value); setError(''); }}
+                className="inv-field__input"
+                placeholder="e.g. Pork belly"
+                required
+              />
+            </div>
+
+            <div className="inv-field">
+              <label htmlFor="ing-unit" className="inv-field__label">Unit <span className="inv-field__required">*</span></label>
+              <input
+                id="ing-unit"
+                type="text"
+                value={unit}
+                onChange={(e) => { setUnit(e.target.value); setError(''); }}
+                className="inv-field__input"
+                placeholder="e.g. kg, pcs, liters"
+                required
+              />
+            </div>
+
+            <div className="inv-field-row">
+              <div className="inv-field">
+                <label htmlFor="ing-stock" className="inv-field__label">
+                  Starting stock <span className="inv-field__optional">(optional)</span>
+                </label>
+                <input
+                  id="ing-stock"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={currentStock}
+                  onChange={(e) => setCurrentStock(e.target.value)}
+                  className="inv-field__input"
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="inv-field">
+                <label htmlFor="ing-reorder" className="inv-field__label">
+                  Reorder level <span className="inv-field__optional">(optional)</span>
+                </label>
+                <input
+                  id="ing-reorder"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={reorderLevel}
+                  onChange={(e) => setReorderLevel(e.target.value)}
+                  className="inv-field__input"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            {error && (
+              <p className="inv-modal__error" role="alert">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                {error}
+              </p>
+            )}
+          </form>
+        </div>
+
+        <div className="inv-modal__footer">
+          <button className="inv-btn inv-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="inv-btn inv-btn--primary" form="add-ing-form" type="submit" disabled={loading} aria-busy={loading}>
+            {loading ? <span className="inv-spinner" aria-label="Saving…" /> : 'Add Ingredient'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function InventoryPage() {
   const [items, setItems] = useState([]);
@@ -257,6 +399,7 @@ export default function InventoryPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [modal, setModal] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
@@ -286,6 +429,12 @@ export default function InventoryPage() {
   const handleTransaction = async (id, payload) => {
     await inventoryAPI.transaction(id, payload);
     showToast(payload.change_type === 'restock' ? 'Restocked successfully.' : 'Stock adjusted.');
+    await fetchItems();
+  };
+
+  const handleAddIngredient = async (payload) => {
+    await inventoryAPI.create(payload);
+    showToast(`"${payload.name}" added to inventory.`);
     await fetchItems();
   };
 
@@ -352,15 +501,23 @@ export default function InventoryPage() {
           <h1 className="inv-page-title">Inventory</h1>
           <p className="inv-page-sub">Track ingredient stock and reorder thresholds</p>
         </div>
-        <button className="inv-btn inv-btn--ghost inv-btn--icon" onClick={fetchItems} aria-label="Refresh">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-            <path d="M21 3v5h-5"/>
-            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-            <path d="M8 16H3v5"/>
-          </svg>
-          Refresh
-        </button>
+        <div className="inv-header-actions">
+          <button className="inv-btn inv-btn--primary" onClick={() => setShowAddModal(true)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Ingredient
+          </button>
+          <button className="inv-btn inv-btn--ghost inv-btn--icon" onClick={fetchItems} aria-label="Refresh">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+              <path d="M21 3v5h-5"/>
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+              <path d="M8 16H3v5"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -543,13 +700,21 @@ export default function InventoryPage() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Transaction modal (restock / adjust) */}
       {modal && (
         <TransactionModal
           item={modal.item}
           type={modal.type}
           onClose={() => setModal(null)}
           onSubmit={handleTransaction}
+        />
+      )}
+
+      {/* Add ingredient modal */}
+      {showAddModal && (
+        <AddIngredientModal
+          onClose={() => setShowAddModal(false)}
+          onSubmit={handleAddIngredient}
         />
       )}
     </div>

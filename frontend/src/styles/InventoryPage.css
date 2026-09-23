@@ -16,6 +16,14 @@
   flex-wrap: wrap;
 }
 
+
+.inv-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .inv-page-title {
   font-family: var(--font-heading);
   font-size: clamp(1.375rem, 3vw, 1.875rem);
@@ -566,6 +574,21 @@
 .inv-field__optional {
   font-weight: 400;
   color: var(--color-muted-foreground);
+}
+
+.inv-field__required {
+  color: var(--color-primary);
+  margin-left: 2px;
+}
+
+.inv-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 400px) {
+  .inv-field-row { grid-template-columns: 1fr; }
 }
 
 .inv-field__input {
