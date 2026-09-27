@@ -950,3 +950,67 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   KitchenPage.additions.css
+   Append these rules to your existing KitchenPage.css — do not replace the file.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Three-column split layout */
+.kp-split--three {
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+}
+
+/* Pending lane column accent */
+.kp-col--pending .kp-col__header {
+  border-bottom-color: var(--color-warning, #f59e0b);
+}
+
+.kp-col--pending .kp-col__count--pending {
+  background: var(--color-warning, #f59e0b);
+  color: #000;
+}
+
+/* Pending card — distinct visual treatment */
+.kp-card--pending {
+  border-left: 3px solid var(--color-warning, #f59e0b);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 6%, var(--color-surface, #fff));
+}
+
+/* Status badge: "New" */
+.kp-card__status--pending {
+  background: var(--color-warning, #f59e0b);
+  color: #000;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* Progress bar: pending state (very early) */
+.kp-card__bar--pending .kp-card__bar-fill {
+  width: 15%;
+  background: var(--color-warning, #f59e0b);
+}
+
+/* Acknowledge button */
+.kp-btn--acknowledge {
+  background: var(--color-warning, #f59e0b);
+  color: #000;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.kp-btn--acknowledge:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+/* Special request note on card */
+.kp-card__special-request {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #6b7280);
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  padding-top: 6px;
+  margin-top: 4px;
+  font-style: italic;
+}
