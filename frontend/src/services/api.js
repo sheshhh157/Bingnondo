@@ -308,6 +308,10 @@ export const inventoryAPI = {
   /** POST /api/inventory — create a new ingredient */
   create: (payload) =>
     apiRequest('/inventory', { method: 'POST', body: JSON.stringify(payload) }),
+
+  /** POST /api/inventory/:id/out-of-stock — force to 0 + cascade menu unavailability */
+  outOfStock: (id) =>
+    apiRequest(`/inventory/${id}/out-of-stock`, { method: 'POST' }),
 };
 
 // ─── STAFF MENU (§4.2) — full CRUD, separate from cashier read-only ───────────

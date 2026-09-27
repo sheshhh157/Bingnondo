@@ -191,7 +191,11 @@ async function createMenuItem(req, res, next) {
 
     if (ingredients.length > 0) {
       const values = ingredients.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(', ');
-      const params = ingredients.flatMap((ing) => [newId, ing.inventory_item_id, ing.quantity_required]);
+      const params = ingredients.flatMap((ing) => [
+        newId,
+        ing.inventory_item_id,
+        ing.quantity_required != null && Number(ing.quantity_required) > 0 ? Number(ing.quantity_required) : null,
+      ]);
       await client.query(
         `INSERT INTO menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required) VALUES ${values}`,
         params
@@ -249,7 +253,11 @@ async function updateMenuItem(req, res, next) {
       await client.query('DELETE FROM menu_item_ingredients WHERE menu_item_id = $1', [id]);
       if (ingredients.length > 0) {
         const values = ingredients.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(', ');
-        const params2 = ingredients.flatMap((ing) => [id, ing.inventory_item_id, ing.quantity_required]);
+        const params2 = ingredients.flatMap((ing) => [
+          id,
+          ing.inventory_item_id,
+          ing.quantity_required != null && Number(ing.quantity_required) > 0 ? Number(ing.quantity_required) : null,
+        ]);
         await client.query(
           `INSERT INTO menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required) VALUES ${values}`,
           params2

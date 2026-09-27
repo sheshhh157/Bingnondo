@@ -147,6 +147,66 @@ async function createTransaction(req, res, next) {
   }
 }
 
+// ─── POST /api/inventory/:id/out-of-stock ────────────────────────────────────
+// Staff: force stock to 0, then cascade is_available = false on all menu items
+// that use this ingredient.
+async function outOfStock(req, res, next) {
+  const client = await db.getClient();
+  try {
+    const { id } = req.params;
+
+    await client.query('BEGIN');
+
+    // Lock + verify exists
+    const itemRes = await client.query(
+      'SELECT id, name, current_stock FROM inventory_items WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+    if (itemRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Inventory item not found.' });
+    }
+
+    // Set stock to 0
+    await client.query(
+      'UPDATE inventory_items SET current_stock = 0, updated_at = NOW() WHERE id = $1',
+      [id]
+    );
+
+    // Log the transaction
+    await client.query(
+      `INSERT INTO inventory_transactions (inventory_item_id, change_type, quantity, performed_by)
+       VALUES ($1, 'adjustment', $2, $3)`,
+      [id, itemRes.rows[0].current_stock, req.user?.sub || null]
+    );
+
+    // Cascade: mark linked menu items as unavailable
+    const cascadeRes = await client.query(
+      `UPDATE menu_items
+       SET is_available = false, updated_at = NOW()
+       WHERE id IN (
+         SELECT menu_item_id FROM menu_item_ingredients WHERE inventory_item_id = $1
+       )
+       RETURNING id, name`,
+      [id]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      id: Number(id),
+      name: itemRes.rows[0].name,
+      current_stock: 0,
+      affected_menu_items: cascadeRes.rows,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
 // ─── GET /api/inventory/:id/transactions ─────────────────────────────────────
 // Staff: transaction history for one ingredient (last 100)
 async function getTransactions(req, res, next) {
@@ -171,4 +231,4 @@ async function getTransactions(req, res, next) {
   }
 }
 
-module.exports = { getAll, getById, createItem, createTransaction, getTransactions };
+module.exports = { getAll, getById, createItem, createTransaction, outOfStock, getTransactions };
