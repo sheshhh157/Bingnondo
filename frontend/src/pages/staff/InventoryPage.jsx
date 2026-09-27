@@ -3,6 +3,22 @@ import { inventoryAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import '../../styles/InventoryPage.css';
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+const UNIT_OPTIONS = [
+  { value: 'pcs',      label: 'Pieces (pcs)' },
+  { value: 'kilogram', label: 'Kilogram (kg)' },
+  { value: 'gram',     label: 'Gram (g)' },
+  { value: 'liter',    label: 'Liter (L)' },
+  { value: 'ml',       label: 'Milliliter (ml)' },
+  { value: 'pack',     label: 'Pack' },
+  { value: 'tub',      label: 'Tub' },
+  { value: 'bottle',   label: 'Bottle' },
+  { value: 'sachet',   label: 'Sachet' },
+  { value: 'cup',      label: 'Cup' },
+  { value: 'tbsp',     label: 'Tablespoon (tbsp)' },
+  { value: 'tsp',      label: 'Teaspoon (tsp)' },
+];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function stockStatus(current, reorder) {
   if (current <= 0) return 'out';
@@ -219,7 +235,7 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
 }
 
 // ─── Mobile card ──────────────────────────────────────────────────────────────
-function InventoryCard({ item, onRestock, onAdjust }) {
+function InventoryCard({ item, onRestock, onAdjust, onOutOfStock }) {
   const s = stockStatus(item.current_stock, item.reorder_level);
   return (
     <article className={`inv-card${s !== 'ok' ? ` inv-card--${s}` : ''}`}>
@@ -243,6 +259,9 @@ function InventoryCard({ item, onRestock, onAdjust }) {
       <div className="inv-card__actions">
         <button className="inv-btn inv-btn--primary inv-btn--sm" onClick={() => onRestock(item)}>+ Restock</button>
         <button className="inv-btn inv-btn--secondary inv-btn--sm" onClick={() => onAdjust(item)}>Adjust</button>
+        {item.current_stock > 0 && (
+          <button className="inv-btn inv-btn--danger inv-btn--sm" onClick={() => onOutOfStock(item)}>Out of stock</button>
+        )}
       </div>
     </article>
   );
@@ -271,8 +290,8 @@ function AddIngredientModal({ onClose, onSubmit }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim())  { setError('Ingredient name is required.'); return; }
-    if (!unit.trim())  { setError('Unit is required (e.g. kg, pcs, liters).'); return; }
+    if (!name.trim()) { setError('Ingredient name is required.'); return; }
+    if (!unit)        { setError('Please select a unit.'); return; }
     setLoading(true); setError('');
     try {
       await onSubmit({
@@ -323,15 +342,18 @@ function AddIngredientModal({ onClose, onSubmit }) {
 
             <div className="inv-field">
               <label htmlFor="ing-unit" className="inv-field__label">Unit <span className="inv-field__required">*</span></label>
-              <input
+              <select
                 id="ing-unit"
-                type="text"
                 value={unit}
                 onChange={(e) => { setUnit(e.target.value); setError(''); }}
                 className="inv-field__input"
-                placeholder="e.g. kg, pcs, liters"
                 required
-              />
+              >
+                <option value="">Select unit…</option>
+                {UNIT_OPTIONS.map((u) => (
+                  <option key={u.value} value={u.value}>{u.label}</option>
+                ))}
+              </select>
             </div>
 
             <div className="inv-field-row">
@@ -427,8 +449,16 @@ export default function InventoryPage() {
   }, []);
 
   const handleTransaction = async (id, payload) => {
-    await inventoryAPI.transaction(id, payload);
-    showToast(payload.change_type === 'restock' ? 'Restocked successfully.' : 'Stock adjusted.');
+    const { data } = await inventoryAPI.transaction(id, payload);
+    const autoEnabled = data.auto_enabled_menu_items?.length || 0;
+    if (autoEnabled > 0) {
+      showToast(
+        `Restocked! ${autoEnabled} menu item${autoEnabled > 1 ? 's' : ''} automatically marked available.`,
+        'success'
+      );
+    } else {
+      showToast(payload.change_type === 'restock' ? 'Restocked successfully.' : 'Stock adjusted.');
+    }
     await fetchItems();
   };
 
@@ -436,6 +466,22 @@ export default function InventoryPage() {
     await inventoryAPI.create(payload);
     showToast(`"${payload.name}" added to inventory.`);
     await fetchItems();
+  };
+
+  const handleOutOfStock = async (item) => {
+    try {
+      const { data } = await inventoryAPI.outOfStock(item.id);
+      const affected = data.affected_menu_items?.length || 0;
+      showToast(
+        affected > 0
+          ? `"${item.name}" set to out of stock. ${affected} menu item${affected > 1 ? 's' : ''} marked unavailable.`
+          : `"${item.name}" set to out of stock.`,
+        'warning'
+      );
+      await fetchItems();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to update stock.', 'error');
+    }
   };
 
   const stats = useMemo(() => {
@@ -612,6 +658,7 @@ export default function InventoryPage() {
                   item={item}
                   onRestock={(i) => setModal({ item: i, type: 'restock' })}
                   onAdjust={(i) => setModal({ item: i, type: 'adjustment' })}
+                  onOutOfStock={handleOutOfStock}
                 />
               ))
         }
@@ -678,6 +725,9 @@ export default function InventoryPage() {
                         <div className="inv-table__actions">
                           <button className="inv-btn inv-btn--primary inv-btn--xs" onClick={() => setModal({ item, type: 'restock' })}>+ Restock</button>
                           <button className="inv-btn inv-btn--secondary inv-btn--xs" onClick={() => setModal({ item, type: 'adjustment' })}>Adjust</button>
+                          {item.current_stock > 0 && (
+                            <button className="inv-btn inv-btn--danger inv-btn--xs" onClick={() => handleOutOfStock(item)}>Out of stock</button>
+                          )}
                         </div>
                       </td>
                     </tr>

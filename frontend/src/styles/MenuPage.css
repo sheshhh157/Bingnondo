@@ -439,6 +439,33 @@
 
 .mn-badge--ok  { background: #DCFCE7; color: #15803D; }
 .mn-badge--off { background: #FEE2E2; color: var(--color-destructive); }
+
+/* Availability cell helpers */
+.mn-card__avail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mn-table__avail-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.mn-lock-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #B45309;
+  cursor: help;
+}
+
+.mn-lock-hint svg { flex-shrink: 0; }
 .mn-badge--cat { background: var(--color-surface); color: var(--color-accent); border: 1px solid var(--color-border); }
 
 /* ─── Toggle switch ─────────────────────────────────────────────────── */

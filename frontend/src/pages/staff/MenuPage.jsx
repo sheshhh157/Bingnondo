@@ -17,13 +17,14 @@ function useToast() {
 }
 
 // ─── Toggle switch ────────────────────────────────────────────────────────────
-function Toggle({ checked, onChange, disabled, label }) {
+function Toggle({ checked, onChange, disabled, label, title }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      title={title}
       onClick={() => !disabled && onChange(!checked)}
       disabled={disabled}
       className={`mn-toggle${checked ? ' mn-toggle--on' : ''}${disabled ? ' mn-toggle--disabled' : ''}`}
@@ -83,6 +84,18 @@ function ImageUpload({ value, onChange }) {
   );
 }
 
+// ─── Toggle lock helper ───────────────────────────────────────────────────────
+// Returns the names of out-of-stock ingredients blocking this item from being
+// marked available. Empty array = no blockers = toggle is free.
+function getOutOfStockBlockers(item) {
+  if (!item.ingredients || item.ingredients.length === 0) return [];
+  // ingredients come from getStaffMenu — each has { inventory_item_id, name, quantity_required, unit, current_stock }
+  // current_stock is included when the backend enriches the ingredient list
+  return item.ingredients
+    .filter((ing) => ing.current_stock != null && ing.current_stock <= 0)
+    .map((ing) => ing.name);
+}
+
 // ─── Ingredient linker ────────────────────────────────────────────────────────
 function IngredientLinker({ inventoryItems, linked, onChange }) {
   const [adding, setAdding]     = useState(false);
@@ -112,13 +125,13 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
 
   const handleAdd = () => {
     if (!selId) { setAddError('Select an ingredient.'); return; }
-    if (!qty || Number(qty) <= 0) { setAddError('Enter a valid quantity.'); return; }
     const inv = inventoryItems.find((i) => i.id === Number(selId));
+    const parsedQty = qty && Number(qty) > 0 ? Number(qty) : null;
     onChange([
       ...linked,
       {
         inventory_item_id: inv.id,
-        quantity_required: Number(qty),
+        quantity_required: parsedQty,
         name: inv.name,
         unit: inv.unit,
       },
@@ -138,8 +151,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   };
 
   const confirmEdit = (idx) => {
-    const q = Number(editQty);
-    if (!q || q <= 0) return;
+    const q = editQty && Number(editQty) > 0 ? Number(editQty) : null;
     onChange(linked.map((l, i) => i === idx ? { ...l, quantity_required: q } : l));
     setEditingIdx(null);
   };
@@ -190,10 +202,10 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
                     type="button"
                     className="mn-linker__item-qty-btn"
                     onClick={() => startEdit(idx)}
-                    title="Click to edit quantity"
-                    aria-label={`Edit quantity for ${l.name}: currently ${l.quantity_required} ${l.unit}`}
+                    title="Click to set quantity"
+                    aria-label={`Edit quantity for ${l.name}${l.quantity_required ? `: currently ${l.quantity_required} ${l.unit}` : ''}`}
                   >
-                    {l.quantity_required} {l.unit} per serving
+                    {l.quantity_required ? `${l.quantity_required} ${l.unit} per serving` : 'No qty set — click to add'}
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -237,7 +249,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
             </div>
             <div className="mn-linker__add-field mn-linker__add-field--qty">
               <label className="mn-linker__add-label" htmlFor="linker-qty">
-                Qty {selectedInv ? `(${selectedInv.unit})` : ''}
+                Qty {selectedInv ? `(${selectedInv.unit})` : ''} <span style={{ fontWeight: 400, opacity: 0.6 }}>optional</span>
               </label>
               <input
                 id="linker-qty"
@@ -468,10 +480,37 @@ function MenuItemCard({ item, onEdit, onDelete, onToggle, toggling }) {
         </div>
         {item.description && <p className="mn-card__desc">{item.description}</p>}
         <div className="mn-card__footer">
-          <span className={`mn-badge${item.is_available ? ' mn-badge--ok' : ' mn-badge--off'}`}>
-            {item.is_available ? 'Available' : 'Unavailable'}
-          </span>
-          <Toggle checked={item.is_available} onChange={() => onToggle(item.id, item.is_available)} disabled={toggling === item.id} label="Toggle availability" />
+          {(() => {
+            const blockers = getOutOfStockBlockers(item);
+            const isLocked = !item.is_available && blockers.length > 0;
+            const lockTitle = isLocked
+              ? `Cannot mark available — out of stock: ${blockers.join(', ')}`
+              : undefined;
+            return (
+              <>
+                <div className="mn-card__avail-info">
+                  <span className={`mn-badge${item.is_available ? ' mn-badge--ok' : ' mn-badge--off'}`}>
+                    {item.is_available ? 'Available' : 'Unavailable'}
+                  </span>
+                  {isLocked && (
+                    <span className="mn-lock-hint" title={lockTitle}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                      Restock needed
+                    </span>
+                  )}
+                </div>
+                <Toggle
+                  checked={item.is_available}
+                  onChange={() => onToggle(item.id, item.is_available)}
+                  disabled={toggling === item.id || isLocked}
+                  label="Toggle availability"
+                  title={lockTitle}
+                />
+              </>
+            );
+          })()}
         </div>
         <div className="mn-card__actions">
           <button className="mn-btn mn-btn--secondary mn-btn--sm mn-card__edit" onClick={() => onEdit(item)}>
@@ -518,7 +557,32 @@ function MenuItemRow({ item, onEdit, onDelete, onToggle, toggling }) {
       </td>
       <td className="mn-table__td mn-table__td--bold">₱{Number(item.price).toFixed(0)}</td>
       <td className="mn-table__td">
-        <Toggle checked={item.is_available} onChange={() => onToggle(item.id, item.is_available)} disabled={toggling === item.id} label="Toggle availability" />
+        {(() => {
+          const blockers = getOutOfStockBlockers(item);
+          const isLocked = !item.is_available && blockers.length > 0;
+          const lockTitle = isLocked
+            ? `Cannot mark available — out of stock: ${blockers.join(', ')}`
+            : undefined;
+          return (
+            <div className="mn-table__avail-cell">
+              <Toggle
+                checked={item.is_available}
+                onChange={() => onToggle(item.id, item.is_available)}
+                disabled={toggling === item.id || isLocked}
+                label="Toggle availability"
+                title={lockTitle}
+              />
+              {isLocked && (
+                <span className="mn-lock-hint" title={lockTitle}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  Restock needed
+                </span>
+              )}
+            </div>
+          );
+        })()}
       </td>
       <td className="mn-table__td mn-table__td--right">
         <div className="mn-table__actions">
@@ -664,13 +728,20 @@ export default function MenuPage() {
 
   const handleToggle = async (id, current) => {
     setToggling(id);
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, is_available: !current } : i));
+    // Optimistic update only when toggling OFF (toggling ON may be blocked by backend)
+    if (current) {
+      setItems((prev) => prev.map((i) => i.id === id ? { ...i, is_available: false } : i));
+    }
     try {
       await staffMenuAPI.setAvailability(id, !current);
+      // Confirm the optimistic update or apply the ON state
+      setItems((prev) => prev.map((i) => i.id === id ? { ...i, is_available: !current } : i));
       showToast(!current ? 'Item marked available.' : 'Item marked unavailable.');
-    } catch {
+    } catch (err) {
+      // Revert optimistic update
       setItems((prev) => prev.map((i) => i.id === id ? { ...i, is_available: current } : i));
-      showToast('Failed to update availability.', 'error');
+      const msg = err.response?.data?.message || 'Failed to update availability.';
+      showToast(msg, 'error');
     } finally { setToggling(null); }
   };
 

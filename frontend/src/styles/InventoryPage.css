@@ -412,6 +412,15 @@
 }
 .inv-btn--secondary:hover:not(:disabled) { background: var(--color-muted); }
 
+.inv-btn--danger {
+  background: var(--color-card);
+  color: var(--color-destructive);
+  border: 1.5px solid var(--color-destructive);
+  padding: 8px 16px;
+  font-size: 0.875rem;
+}
+.inv-btn--danger:hover:not(:disabled) { background: rgba(185,28,28,0.06); }
+
 .inv-btn--ghost {
   background: transparent;
   color: var(--color-muted-foreground);
@@ -673,6 +682,7 @@
 }
 
 .inv-toast--success { background: #F0FDF4; color: #15803D; border: 1px solid #BBF7D0; }
+.inv-toast--warning { background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
 .inv-toast--error   { background: #FEF2F2; color: var(--color-destructive); border: 1px solid #FECACA; }
 
 /* ─── Skeletons ─────────────────────────────────────────────────────── */

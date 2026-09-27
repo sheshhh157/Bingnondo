@@ -7,6 +7,9 @@ const ctrl = require('./inventory.controller');
 const staffAccess = [authenticateToken, requireStaff];
 const staffWrite  = [authenticateToken, requireStaff, requireRoles('staff', 'owner', 'admin')];
 
+// POST /api/inventory/:id/out-of-stock  — force to 0 + cascade menu unavailability
+router.post('/:id/out-of-stock', ...staffWrite, ctrl.outOfStock);
+
 // GET  /api/inventory                     — list all items + low-stock flag
 router.get('/', ...staffAccess, ctrl.getAll);
 
