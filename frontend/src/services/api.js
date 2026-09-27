@@ -353,6 +353,9 @@ export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMe
 export const kitchenAPI = {
   getOrders: () => apiClient.get('/api/kitchen/orders'),
 
+  acknowledgeOrder: (orderId) =>
+    apiClient.patch(`/api/kitchen/orders/${orderId}/acknowledge`),
+
   updateOrderStatus: (orderId, status) =>
     apiClient.patch(`/api/kitchen/orders/${orderId}/status`, { status }),
 
