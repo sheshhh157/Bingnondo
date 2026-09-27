@@ -449,8 +449,16 @@ export default function InventoryPage() {
   }, []);
 
   const handleTransaction = async (id, payload) => {
-    await inventoryAPI.transaction(id, payload);
-    showToast(payload.change_type === 'restock' ? 'Restocked successfully.' : 'Stock adjusted.');
+    const { data } = await inventoryAPI.transaction(id, payload);
+    const autoEnabled = data.auto_enabled_menu_items?.length || 0;
+    if (autoEnabled > 0) {
+      showToast(
+        `Restocked! ${autoEnabled} menu item${autoEnabled > 1 ? 's' : ''} automatically marked available.`,
+        'success'
+      );
+    } else {
+      showToast(payload.change_type === 'restock' ? 'Restocked successfully.' : 'Stock adjusted.');
+    }
     await fetchItems();
   };
 

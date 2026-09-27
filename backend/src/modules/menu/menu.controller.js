@@ -33,7 +33,8 @@ async function _getEnrichedItem(id) {
          mii.inventory_item_id,
          mii.quantity_required,
          inv.name,
-         inv.unit
+         inv.unit,
+         inv.current_stock
        FROM menu_item_ingredients mii
        JOIN inventory_items inv ON inv.id = mii.inventory_item_id
        WHERE mii.menu_item_id = $1
@@ -50,9 +51,10 @@ async function _getEnrichedItem(id) {
     price: parseFloat(item.price),
     ingredients: ingRes.rows.map((r) => ({
       inventory_item_id: r.inventory_item_id,
-      quantity_required: parseFloat(r.quantity_required),
+      quantity_required: r.quantity_required != null ? parseFloat(r.quantity_required) : null,
       name: r.name,
       unit: r.unit,
+      current_stock: parseFloat(r.current_stock),
     })),
   };
 }
@@ -116,7 +118,8 @@ async function getStaffMenu(req, res, next) {
           mii.inventory_item_id,
           mii.quantity_required,
           inv.name,
-          inv.unit
+          inv.unit,
+          inv.current_stock
         FROM menu_item_ingredients mii
         JOIN inventory_items inv ON inv.id = mii.inventory_item_id
         ORDER BY inv.name ASC
@@ -129,9 +132,10 @@ async function getStaffMenu(req, res, next) {
       if (!ingMap[row.menu_item_id]) ingMap[row.menu_item_id] = [];
       ingMap[row.menu_item_id].push({
         inventory_item_id: row.inventory_item_id,
-        quantity_required: parseFloat(row.quantity_required),
+        quantity_required: row.quantity_required != null ? parseFloat(row.quantity_required) : null,
         name: row.name,
         unit: row.unit,
+        current_stock: parseFloat(row.current_stock),
       });
     }
 
@@ -279,7 +283,8 @@ async function updateMenuItem(req, res, next) {
 }
 
 // ─── PATCH /api/menu/:id/availability ────────────────────────────────────────
-// Staff: manual availability toggle — independent of stock
+// Staff: manual availability toggle.
+// Blocked from toggling ON if any linked ingredient has current_stock = 0.
 async function setAvailability(req, res, next) {
   try {
     const { id } = req.params;
@@ -287,6 +292,24 @@ async function setAvailability(req, res, next) {
 
     if (is_available === undefined || typeof is_available !== 'boolean') {
       return res.status(400).json({ message: 'is_available (boolean) is required.' });
+    }
+
+    // If trying to set available, check for out-of-stock linked ingredients
+    if (is_available) {
+      const blockers = await db.query(
+        `SELECT inv.name
+         FROM menu_item_ingredients mii
+         JOIN inventory_items inv ON inv.id = mii.inventory_item_id
+         WHERE mii.menu_item_id = $1 AND inv.current_stock <= 0`,
+        [id]
+      );
+      if (blockers.rows.length > 0) {
+        const names = blockers.rows.map((r) => r.name).join(', ');
+        return res.status(409).json({
+          message: `Cannot mark as available — the following ingredients are out of stock: ${names}.`,
+          out_of_stock_ingredients: blockers.rows.map((r) => r.name),
+        });
+      }
     }
 
     const result = await db.query(

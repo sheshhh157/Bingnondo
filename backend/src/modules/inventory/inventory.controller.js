@@ -130,6 +130,34 @@ async function createTransaction(req, res, next) {
       [id, change_type, Number(quantity), req.user?.sub || null]
     );
 
+    // Auto-cascade: if this restock brought the ingredient above 0,
+    // re-enable any menu items where ALL linked ingredients now have stock.
+    let autoEnabled = [];
+    if (newStock > 0 && (change_type === 'restock' || change_type === 'adjustment')) {
+      const cascadeRes = await client.query(
+        `UPDATE menu_items
+         SET is_available = true, updated_at = NOW()
+         WHERE id IN (
+           -- Menu items linked to this ingredient
+           SELECT mii.menu_item_id
+           FROM menu_item_ingredients mii
+           WHERE mii.inventory_item_id = $1
+         )
+         AND id NOT IN (
+           -- Exclude those that still have at least one other out-of-stock ingredient
+           SELECT mii2.menu_item_id
+           FROM menu_item_ingredients mii2
+           JOIN inventory_items inv2 ON inv2.id = mii2.inventory_item_id
+           WHERE inv2.current_stock <= 0
+             AND inv2.id != $1
+         )
+         AND is_available = false
+         RETURNING id, name`,
+        [id]
+      );
+      autoEnabled = cascadeRes.rows;
+    }
+
     await client.query('COMMIT');
 
     res.json({
@@ -138,6 +166,7 @@ async function createTransaction(req, res, next) {
       current_stock: newStock,
       change_type,
       quantity: Number(quantity),
+      auto_enabled_menu_items: autoEnabled,
     });
   } catch (err) {
     await client.query('ROLLBACK');
