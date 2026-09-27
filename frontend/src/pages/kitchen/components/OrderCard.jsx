@@ -18,14 +18,38 @@ function urgency(dateStr) {
 export default function OrderCard({ order, lane, onStatusChange }) {
   const [loading, setLoading] = useState(false);
   const u = urgency(order.created_at);
+
+  const isPending   = order.status === 'pending';
   const isPreparing = order.status === 'preparing';
+
+  // Label shown inside the status badge
+  const statusLabel =
+    order.status === 'pending'   ? 'New' :
+    order.status === 'preparing' ? 'Preparing' :
+    'Incoming';
+
+  // Progress bar value per status
+  const progressValue =
+    order.status === 'pending'   ? 15 :
+    order.status === 'preparing' ? 66 :
+    33;
 
   async function handleAction() {
     setLoading(true);
     try {
-      const next = isPreparing ? 'ready' : 'preparing';
-      await kitchenAPI.updateOrderStatus(order.id, next);
-      onStatusChange(order.id, next);
+      if (isPending) {
+        // Acknowledge: pending → confirmed
+        await kitchenAPI.acknowledgeOrder(order.id);
+        onStatusChange(order.id, 'confirmed');
+      } else if (isPreparing) {
+        // Mark ready: preparing → ready
+        await kitchenAPI.updateOrderStatus(order.id, 'ready');
+        onStatusChange(order.id, 'ready');
+      } else {
+        // Start preparing: confirmed → preparing
+        await kitchenAPI.updateOrderStatus(order.id, 'preparing');
+        onStatusChange(order.id, 'preparing');
+      }
     } catch (err) {
       console.error('Status update failed:', err);
     } finally {
@@ -35,7 +59,7 @@ export default function OrderCard({ order, lane, onStatusChange }) {
 
   return (
     <article
-      className={`kp-card kp-card--${u} kp-card--${lane}`}
+      className={`kp-card kp-card--${u} kp-card--${lane}${isPending ? ' kp-card--pending' : ''}`}
       aria-label={`Order ${order.order_number}, ${u === 'critical' ? 'overdue' : u}`}
     >
       {/* Header row */}
@@ -43,7 +67,7 @@ export default function OrderCard({ order, lane, onStatusChange }) {
         <div className="kp-card__header-left">
           <span className="kp-card__number">#{order.order_number}</span>
           <span className={`kp-card__status kp-card__status--${order.status}`}>
-            {order.status === 'preparing' ? 'Preparing' : 'Incoming'}
+            {statusLabel}
           </span>
         </div>
         <time
@@ -59,7 +83,7 @@ export default function OrderCard({ order, lane, onStatusChange }) {
       <div
         className={`kp-card__bar kp-card__bar--${order.status}`}
         role="progressbar"
-        aria-valuenow={order.status === 'preparing' ? 66 : 33}
+        aria-valuenow={progressValue}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={`Order status: ${order.status}`}
@@ -84,6 +108,13 @@ export default function OrderCard({ order, lane, onStatusChange }) {
         ))}
       </ul>
 
+      {/* Special request */}
+      {order.special_request && (
+        <p className="kp-card__special-request" aria-label={`Special request: ${order.special_request}`}>
+          {order.special_request}
+        </p>
+      )}
+
       {/* Footer */}
       <div className="kp-card__footer">
         {u === 'critical' && (
@@ -96,14 +127,29 @@ export default function OrderCard({ order, lane, onStatusChange }) {
             URGENT
           </span>
         )}
+
         <button
-          className={`kp-btn kp-btn--${isPreparing ? 'ready' : 'start'}`}
+          className={`kp-btn kp-btn--${isPending ? 'acknowledge' : isPreparing ? 'ready' : 'start'}`}
           onClick={handleAction}
           disabled={loading}
-          aria-label={isPreparing ? `Mark order ${order.order_number} as ready` : `Start preparing order ${order.order_number}`}
+          aria-label={
+            isPending   ? `Acknowledge order ${order.order_number}` :
+            isPreparing ? `Mark order ${order.order_number} as ready` :
+                          `Start preparing order ${order.order_number}`
+          }
         >
           {loading ? (
             <span className="kp-spin-sm" aria-hidden="true" />
+          ) : isPending ? (
+            <>
+              {/* Bell check icon */}
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <path d="M6.5 1a4 4 0 014 4v2.5l1 1.5H1.5L2.5 7V5a4 4 0 014-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                <path d="M5 10.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M4 6l1.5 1.5L8.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Acknowledge
+            </>
           ) : isPreparing ? (
             <>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">

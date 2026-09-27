@@ -950,3 +950,124 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   KitchenPage.additions.css
+   Append these rules to your existing KitchenPage.css — do not replace the file.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Display wrapper: banner on top, split below ── */
+.kp-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── New Orders banner ── */
+.kp-banner {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 6%, var(--color-surface, #fff));
+  padding: 10px 16px 12px;
+}
+
+.kp-banner__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--color-warning, #f59e0b);
+}
+
+.kp-banner__label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text, #111);
+}
+
+.kp-banner__count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--color-warning, #f59e0b);
+  color: #000;
+  border-radius: 10px;
+  padding: 1px 7px;
+  line-height: 1.6;
+}
+
+.kp-banner__empty {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #6b7280);
+  margin: 0;
+}
+
+/* Cards scroll horizontally in the banner */
+.kp-banner__cards {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.kp-banner__cards .kp-card {
+  min-width: 220px;
+  max-width: 260px;
+  flex-shrink: 0;
+}
+
+/* ── Bottom two-column split ── */
+.kp-split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  overflow: hidden;
+}
+
+/* Pending card — distinct visual treatment */
+.kp-card--pending {
+  border-left: 3px solid var(--color-warning, #f59e0b);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 6%, var(--color-surface, #fff));
+}
+
+/* Status badge: "New" */
+.kp-card__status--pending {
+  background: var(--color-warning, #f59e0b);
+  color: #000;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* Progress bar: pending state (very early) */
+.kp-card__bar--pending .kp-card__bar-fill {
+  width: 15%;
+  background: var(--color-warning, #f59e0b);
+}
+
+/* Acknowledge button */
+.kp-btn--acknowledge {
+  background: var(--color-warning, #f59e0b);
+  color: #000;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.kp-btn--acknowledge:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+/* Special request note on card */
+.kp-card__special-request {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #6b7280);
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  padding-top: 6px;
+  margin-top: 4px;
+  font-style: italic;
+}

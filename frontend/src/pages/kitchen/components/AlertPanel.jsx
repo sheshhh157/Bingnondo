@@ -26,17 +26,17 @@ export default function AlertPanel({ alerts, onAcknowledge }) {
       aria-live="assertive"
     >
       <div className="kp-alerts__header">
+        <div className="kp-alerts__pulse" aria-hidden="true" />
         <span className="kp-alerts__title">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
             <path d="M6.5 1a4 4 0 00-4 4v2.5L1 9.5h11L10.5 7.5V5a4 4 0 00-4-4zM5 10.5a1.5 1.5 0 003 0"
               stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
           </svg>
           Incoming Alerts
-          <span className="kp-alerts__count">{active.length}</span>
         </span>
+        <span className="kp-alerts__count">{active.length}</span>
       </div>
 
-      {/* Column layout — each alert is a card stacked vertically */}
       <ul className="kp-alerts__list">
         {active.map((alert) => (
           <li key={alert.id} className="kp-alerts__item">
@@ -45,7 +45,9 @@ export default function AlertPanel({ alerts, onAcknowledge }) {
               #{alert.order?.order_number || alert.order_id}
             </p>
             {alert.esp32_device && (
-              <p className="kp-alerts__item-device">{alert.esp32_device.location_label}</p>
+              <p className="kp-alerts__item-device">
+                {alert.esp32_device.location_label}
+              </p>
             )}
             <button
               className="kp-btn kp-btn--ack"

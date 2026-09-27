@@ -3,6 +3,7 @@ import { kitchenAPI } from '../../services/api';
 import { getSocket, KITCHEN_EVENTS } from '../../services/socket';
 import KitchenHeader from './components/KitchenHeader';
 import OrderColumn from './components/OrderColumn';
+import OrderCard from './components/OrderCard';
 import AlertPanel from './components/AlertPanel';
 import ConnectionStatus from './components/ConnectionStatus';
 import '../../styles/KitchenPage.css';
@@ -18,7 +19,8 @@ function ordersReducer(state, action) {
     case 'UPDATE_STATUS':
       return state
         .map((o) => o.id === action.id ? { ...o, status: action.status } : o)
-        .filter((o) => ['confirmed', 'preparing'].includes(o.status));
+        // Keep order visible while it's still active; drop once ready/cancelled/completed
+        .filter((o) => ['pending', 'confirmed', 'preparing'].includes(o.status));
     default: return state;
   }
 }
@@ -96,16 +98,21 @@ export default function KitchenPage() {
     socket.on('disconnect',       () => setConnected(false));
     socket.on('reconnecting',     () => setReconnecting(true));
     socket.on('reconnect_failed', () => setReconnecting(false));
+
+    // New order arrives as 'pending' — play alert so kitchen notices
     socket.on(KITCHEN_EVENTS.NEW_ORDER, (order) => {
       dispatchOrders({ type: 'ADD', payload: order });
       playAlert();
     });
+
     socket.on(KITCHEN_EVENTS.KITCHEN_ALERT, (alert) => {
       dispatchAlerts({ type: 'ADD', payload: alert });
     });
+
     socket.on(KITCHEN_EVENTS.ORDER_STATUS_UPDATE, ({ orderId, status }) => {
       dispatchOrders({ type: 'UPDATE_STATUS', id: orderId, status });
     });
+
     return () => {
       socket.off('connect'); socket.off('disconnect');
       socket.off('reconnecting'); socket.off('reconnect_failed');
@@ -123,15 +130,26 @@ export default function KitchenPage() {
     dispatchAlerts({ type: 'ACKNOWLEDGE', id: alertId });
   }, []);
 
-  // Split orders by channel
-  const counterOrders = orders.filter((o) => o.order_channel !== 'mobile_app');
-  const onlineOrders  = orders.filter((o) => o.order_channel === 'mobile_app');
+  // ─── Split orders into lanes ──────────────────────────────────────────────
+  // Pending: all unacknowledged orders regardless of channel — needs kitchen attention first
+  const pendingOrders  = orders.filter((o) => o.status === 'pending');
+
+  // Counter: acknowledged counter orders in progress
+  const counterOrders  = orders.filter(
+    (o) => o.order_channel !== 'mobile_app' && o.status !== 'pending'
+  );
+
+  // Online: acknowledged online orders in progress
+  const onlineOrders   = orders.filter(
+    (o) => o.order_channel === 'mobile_app' && o.status !== 'pending'
+  );
 
   return (
     <div className="kp-root">
       <ConnectionStatus connected={connected} reconnecting={reconnecting} />
 
       <KitchenHeader
+        pendingCount={pendingOrders.length}
         counterCount={counterOrders.length}
         onlineCount={onlineOrders.length}
       />
@@ -158,45 +176,84 @@ export default function KitchenPage() {
             </button>
           </div>
         ) : (
-          <div className="kp-split">
-            {/* LEFT — Counter */}
-            <OrderColumn
-              lane="counter"
-              label="Counter Orders"
-              icon={
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <rect x="1" y="5" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M4 5V4a4 4 0 018 0v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  <path d="M6 10h4M8 8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              }
-              orders={counterOrders}
-              onStatusChange={handleStatusChange}
-            />
+          <div className="kp-display">
 
-            {/* Divider */}
-            <div className="kp-divider" aria-hidden="true" />
-
-            {/* RIGHT — Online */}
-            <OrderColumn
-              lane="online"
-              label="Online Orders"
-              icon={
+            {/* TOP — New Orders banner (pending, all channels) */}
+            <section className="kp-banner" aria-label="New Orders">
+              <div className="kp-banner__header">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <ellipse cx="8" cy="8" rx="2.5" ry="6.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M1.5 8h13M2 5h12M2 11h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                  <path d="M8 1.5a5 5 0 015 5V9l1 2H2L3 9V6.5a5 5 0 015-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                  <path d="M6.5 12.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  {pendingOrders.length > 0 && (
+                    <circle cx="12" cy="3" r="2.5" fill="currentColor"/>
+                  )}
                 </svg>
-              }
-              orders={onlineOrders}
-              onStatusChange={handleStatusChange}
-            />
+                <span className="kp-banner__label">New Orders</span>
+                {pendingOrders.length > 0 && (
+                  <span className="kp-banner__count" aria-label={`${pendingOrders.length} new orders`}>
+                    {pendingOrders.length}
+                  </span>
+                )}
+              </div>
+
+              {pendingOrders.length === 0 ? (
+                <p className="kp-banner__empty">No new orders</p>
+              ) : (
+                <div className="kp-banner__cards">
+                  {pendingOrders.map((order) => (
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      lane="pending"
+                      onStatusChange={handleStatusChange}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* BOTTOM — Counter | Online two-column split */}
+            <div className="kp-split">
+
+              {/* LEFT — Counter */}
+              <OrderColumn
+                lane="counter"
+                label="Counter Orders"
+                icon={
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="1" y="5" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M4 5V4a4 4 0 018 0v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M6 10h4M8 8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                }
+                orders={counterOrders}
+                onStatusChange={handleStatusChange}
+              />
+
+              <div className="kp-divider" aria-hidden="true" />
+
+              {/* RIGHT — Online */}
+              <OrderColumn
+                lane="online"
+                label="Online Orders"
+                icon={
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <ellipse cx="8" cy="8" rx="2.5" ry="6.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M1.5 8h13M2 5h12M2 11h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                  </svg>
+                }
+                orders={onlineOrders}
+                onStatusChange={handleStatusChange}
+              />
+
+            </div>
           </div>
         )}
       </main>
 
       <div className="kp-sr-only" role="status" aria-live="polite" aria-atomic="true">
-        {`${counterOrders.length} counter, ${onlineOrders.length} online orders in queue`}
+        {`${pendingOrders.length} new, ${counterOrders.length} counter, ${onlineOrders.length} online orders in queue`}
       </div>
     </div>
   );

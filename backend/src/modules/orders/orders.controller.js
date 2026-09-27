@@ -9,7 +9,7 @@ function orderNumber(id) {
 // ─── POST /api/orders ─────────────────────────────────────────────────────────
 // Cashier creates a counter order.
 // Body: { items: [{ menu_item_id, quantity, notes? }], special_request? }
-// Status is immediately 'confirmed' — kitchen gets the socket event right away.
+// Status starts as 'pending' — kitchen must acknowledge before it becomes 'confirmed'.
 // A 'pending' payment row is created; cashier confirms payment via POST /api/payments.
 async function createOrder(req, res, next) {
   const client = await db.getClient();
@@ -49,11 +49,11 @@ async function createOrder(req, res, next) {
 
     await client.query('BEGIN');
 
-    // 2. Insert order — status 'confirmed' immediately for counter orders
+    // 2. Insert order — status 'pending', kitchen must acknowledge first
     const orderRes = await client.query(
       `INSERT INTO orders
          (order_type, cashier_id, status, order_channel, total_amount, special_request)
-       VALUES ('counter', $1, 'confirmed', 'web_counter', $2, $3)
+       VALUES ('counter', $1, 'pending', 'web_counter', $2, $3)
        RETURNING *`,
       [req.user.sub, totalAmount, special_request || null]
     );
@@ -71,7 +71,7 @@ async function createOrder(req, res, next) {
 
     // 4. Log status in history
     await client.query(
-      `INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'confirmed', $2)`,
+      `INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'pending', $2)`,
       [order.id, req.user.sub]
     );
 
@@ -87,6 +87,7 @@ async function createOrder(req, res, next) {
     order.items = validated;
     order.total_amount = parseFloat(order.total_amount);
 
+    // Emit new order to kitchen — status is 'pending', kitchen must acknowledge
     socketHub.emitNewOrder(order);
 
     res.status(201).json(order);
@@ -241,7 +242,6 @@ async function updateOrderStatus(req, res, next) {
     order.order_number = orderNumber(order.id);
     order.total_amount = parseFloat(order.total_amount);
 
-    // Emit status update to all relevant rooms
     socketHub.emitOrderStatus({ orderId: order.id, orderNumber: order.order_number, status });
     if (status === 'ready') {
       socketHub.emitOrderReady({ orderId: order.id, orderNumber: order.order_number });

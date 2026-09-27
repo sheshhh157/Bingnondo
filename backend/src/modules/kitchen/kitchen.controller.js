@@ -2,8 +2,7 @@ const db = require('../../config/db');
 const socketHub = require('../../sockets');
 
 // ─── GET /api/kitchen/orders ──────────────────────────────────────────────────
-// Returns all orders with status 'confirmed' or 'preparing'.
-// Shape matches the frontend mock: order_items[].menu_item.name
+// Returns all orders with status 'pending', 'confirmed', or 'preparing'.
 async function getKitchenOrders(req, res, next) {
   try {
     const { rows } = await db.query(
@@ -26,20 +25,76 @@ async function getKitchenOrders(req, res, next) {
        FROM orders o
        JOIN order_items oi ON oi.order_id = o.id
        JOIN menu_items  mi ON mi.id = oi.menu_item_id
-       WHERE o.status IN ('confirmed', 'preparing')
+       WHERE o.status IN ('pending', 'confirmed', 'preparing')
        GROUP BY o.id
        ORDER BY o.created_at ASC`
     );
 
-    res.json({data : rows});
+    res.json({ data: rows });
   } catch (err) {
     next(err);
   }
 }
 
+// ─── PATCH /api/kitchen/orders/:id/acknowledge ───────────────────────────────
+// Kitchen acknowledges a pending order → moves it to 'confirmed'.
+// This is the step that validates the ESP32 buzzer alert had an effect.
+async function acknowledgeOrder(req, res, next) {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: current } = await client.query(
+      `SELECT id, status FROM orders WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!current[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+    if (current[0].status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: `Cannot acknowledge. Order status is "${current[0].status}", expected "pending".`,
+      });
+    }
+
+    const { rows } = await client.query(
+      `UPDATE orders SET status = 'confirmed', updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, status, order_channel,
+                 'ORD-' || LPAD(id::text, 4, '0') AS order_number`,
+      [req.params.id]
+    );
+
+    await client.query(
+      `INSERT INTO order_status_history (order_id, status, changed_by)
+       VALUES ($1, 'confirmed', $2)`,
+      [req.params.id, req.user.sub]
+    );
+
+    await client.query('COMMIT');
+
+    const order = rows[0];
+
+    // Notify all rooms that this order is now confirmed
+    socketHub.emitOrderStatus({
+      orderId: order.id,
+      orderNumber: order.order_number,
+      status: 'confirmed',
+    });
+
+    res.json(order);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
 // ─── PATCH /api/kitchen/orders/:id/status ────────────────────────────────────
 // Kitchen staff can only move: confirmed → preparing → ready.
-// No other transitions allowed from this endpoint.
 async function updateKitchenOrderStatus(req, res, next) {
   const client = await db.getClient();
   try {
@@ -54,7 +109,6 @@ async function updateKitchenOrderStatus(req, res, next) {
 
     await client.query('BEGIN');
 
-    // Fetch current order
     const { rows: current } = await client.query(
       `SELECT id, status FROM orders WHERE id = $1`,
       [req.params.id]
@@ -64,7 +118,6 @@ async function updateKitchenOrderStatus(req, res, next) {
       return res.status(404).json({ message: 'Order not found.' });
     }
 
-    // Enforce valid transitions
     const from = current[0].status;
     if (status === 'preparing' && from !== 'confirmed') {
       await client.query('ROLLBACK');
@@ -79,7 +132,6 @@ async function updateKitchenOrderStatus(req, res, next) {
       });
     }
 
-    // Update order
     const { rows } = await client.query(
       `UPDATE orders SET status = $1, updated_at = NOW()
        WHERE id = $2
@@ -88,7 +140,6 @@ async function updateKitchenOrderStatus(req, res, next) {
       [status, req.params.id]
     );
 
-    // Log status history
     await client.query(
       `INSERT INTO order_status_history (order_id, status, changed_by)
        VALUES ($1, $2, $3)`,
@@ -99,14 +150,12 @@ async function updateKitchenOrderStatus(req, res, next) {
 
     const order = rows[0];
 
-    // Emit to all rooms
     socketHub.emitOrderStatus({
       orderId: order.id,
       orderNumber: order.order_number,
       status,
     });
 
-    // When ready: notify staff for delivery assignment (online orders)
     if (status === 'ready') {
       socketHub.emitOrderReady({
         orderId: order.id,
@@ -124,8 +173,6 @@ async function updateKitchenOrderStatus(req, res, next) {
 }
 
 // ─── GET /api/kitchen/alerts ─────────────────────────────────────────────────
-// Returns unacknowledged kitchen alerts.
-// Shape: { id, order_id, acknowledged_at, order: { order_number }, esp32_device: { location_label } }
 async function getKitchenAlerts(req, res, next) {
   try {
     const { rows } = await db.query(
@@ -178,7 +225,6 @@ async function acknowledgeAlert(req, res, next) {
 
     if (!rows[0]) {
       await client.query('ROLLBACK');
-      // Either already acknowledged or not found — treat both the same way
       return res.status(404).json({
         message: 'Alert not found or already acknowledged.',
       });
@@ -188,7 +234,6 @@ async function acknowledgeAlert(req, res, next) {
 
     const { id: alertId, device_id: deviceId } = rows[0];
 
-    // Stop the ESP32 buzzer
     if (deviceId) {
       socketHub.emitKitchenAlertAck({ alertId, deviceId });
     }
@@ -204,6 +249,7 @@ async function acknowledgeAlert(req, res, next) {
 
 module.exports = {
   getKitchenOrders,
+  acknowledgeOrder,
   updateKitchenOrderStatus,
   getKitchenAlerts,
   acknowledgeAlert,
