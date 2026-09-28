@@ -260,6 +260,18 @@ export const ordersAPI = {
     return { data: newOrder };
   },
 
+  updateItems: async (orderId, items) => {
+    await delay(350);
+    const order = MOCK_ORDERS.find((o) => o.id === orderId);
+    if (!order) throw { response: { data: { message: 'Order not found.' } } };
+    order.items = items.map((i) => {
+      const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
+      return { name: menuItem?.name || 'Unknown', quantity: i.quantity, unit_price: menuItem?.price || 0 };
+    });
+    order.total_amount = order.items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
+    return { data: order };
+  },
+
   getMyTransactions: async () => {
     await delay(400);
     return { data: MOCK_ORDERS };

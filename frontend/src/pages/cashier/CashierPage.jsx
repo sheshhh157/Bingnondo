@@ -15,18 +15,23 @@ export default function CashierPage() {
   const { user, logout } = useAuth();
 
   // ─── State ────────────────────────────────────────────────────────
-  const [view, setView] = useState(VIEWS.ORDER);
-  const [categories, setCategories] = useState([]);
-  const [menuItems, setMenuItems] = useState([]);
+  const [view, setView]                   = useState(VIEWS.ORDER);
+  const [categories, setCategories]       = useState([]);
+  const [menuItems, setMenuItems]         = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
-  const [draft, setDraft] = useState([]);          // [{...item, qty, note}]
-  const [search, setSearch] = useState('');
-  const [menuLoading, setMenuLoading] = useState(true);
-  const [menuError, setMenuError] = useState('');
-  const [paymentModal, setPaymentModal] = useState(null); // { orderId } | null
-  const [placingOrder, setPlacingOrder] = useState(false);
-  const [toastMsg, setToastMsg] = useState('');
+  const [draft, setDraft]                 = useState([]);        // [{ ...item, qty, note }]
+  const [search, setSearch]               = useState('');
+  const [menuLoading, setMenuLoading]     = useState(true);
+  const [menuError, setMenuError]         = useState('');
+  const [paymentModal, setPaymentModal]   = useState(null);      // { orderId, orderNumber, total, draft } | null
+  const [placingOrder, setPlacingOrder]   = useState(false);
+  const [toastMsg, setToastMsg]           = useState('');
   const toastRef = useRef(null);
+
+  // Track the last confirmed order so we can PATCH it instead of creating a new one
+  const [confirmedOrder, setConfirmedOrder] = useState(null); // { id, orderNumber, snapshotDraft }
+  // snapshotDraft = the draft at the moment the order was last sent to backend,
+  // used to detect whether the cashier changed anything before re-confirming.
 
   // ─── Fetch menu ───────────────────────────────────────────────────
   const fetchMenu = useCallback(async () => {
@@ -34,9 +39,7 @@ export default function CashierPage() {
     setMenuError('');
     try {
       const { data } = await menuAPI.getAll();
-      // data expected: { categories: [...], items: [...] }
-      // or flat array — handle both shapes
-      const cats = data.categories || [];
+      const cats  = data.categories || [];
       const items = data.items || (Array.isArray(data) ? data : []);
       setCategories(cats);
       setMenuItems(items);
@@ -48,9 +51,7 @@ export default function CashierPage() {
     }
   }, [activeCategory]);
 
-  useEffect(() => {
-    fetchMenu();
-  }, []);
+  useEffect(() => { fetchMenu(); }, []);
 
   // ─── Socket: real-time menu updates ──────────────────────────────
   useEffect(() => {
@@ -62,12 +63,10 @@ export default function CashierPage() {
         )
       );
     });
-    return () => {
-      socket.off('menu_update');
-    };
+    return () => { socket.off('menu_update'); };
   }, []);
 
-  // ─── Toast helper ──────────────────────────────────────────────────
+  // ─── Toast helper ─────────────────────────────────────────────────
   const showToast = (msg) => {
     setToastMsg(msg);
     if (toastRef.current) clearTimeout(toastRef.current);
@@ -84,47 +83,103 @@ export default function CashierPage() {
     });
   };
 
-  const removeItem = (id) => setDraft((prev) => prev.filter((d) => d.id !== id));
+  const removeItem    = (id) => setDraft((prev) => prev.filter((d) => d.id !== id));
+  const updateQty     = (id, qty) => { if (qty < 1) { removeItem(id); return; } setDraft((prev) => prev.map((d) => d.id === id ? { ...d, qty } : d)); };
+  const updateNote    = (id, note) => setDraft((prev) => prev.map((d) => d.id === id ? { ...d, note } : d));
+  const clearDraft    = () => { setDraft([]); setConfirmedOrder(null); };
+  const draftTotal    = draft.reduce((sum, d) => sum + d.price * d.qty, 0);
 
-  const updateQty = (id, qty) => {
-    if (qty < 1) { removeItem(id); return; }
-    setDraft((prev) => prev.map((d) => d.id === id ? { ...d, qty } : d));
+  // ─── Draft changed since last confirm? ───────────────────────────
+  // Simple check: compare sorted item ids+qty+note against the snapshot.
+  const draftChangedSinceConfirm = () => {
+    if (!confirmedOrder) return true; // never confirmed yet → treat as changed
+    const snap  = confirmedOrder.snapshotDraft;
+    if (snap.length !== draft.length) return true;
+    return draft.some((d) => {
+      const s = snap.find((x) => x.id === d.id);
+      return !s || s.qty !== d.qty || s.note !== d.note;
+    });
   };
 
-  const updateNote = (id, note) => setDraft((prev) => prev.map((d) => d.id === id ? { ...d, note } : d));
-
-  const clearDraft = () => setDraft([]);
-
-  const draftTotal = draft.reduce((sum, d) => sum + d.price * d.qty, 0);
-
-  // ─── Place Order (§2.2) ────────────────────────────────────────────
+  // ─── Place / Update Order ─────────────────────────────────────────
   const placeOrder = async () => {
     if (draft.length === 0) return;
     setPlacingOrder(true);
     try {
-      const payload = {
-        order_type: 'counter',
-        cashier_id: user.id,
-        items: draft.map(({ id, qty, note }) => ({ menu_item_id: id, quantity: qty, notes: note })),
-      };
-      const { data } = await ordersAPI.create(payload);
-      showToast(`Order #${data.order_number || data.id} sent to kitchen!`);
-      setPaymentModal({ orderId: data.id, orderNumber: data.order_number || data.id, total: draftTotal, draft: [...draft] });
-      clearDraft();
+      const items = draft.map(({ id, qty, note }) => ({ menu_item_id: id, quantity: qty, notes: note }));
+
+      let orderId, orderNumber;
+
+      if (confirmedOrder && !draftChangedSinceConfirm()) {
+        // Nothing changed — just re-open the payment modal for the same order
+        orderId     = confirmedOrder.id;
+        orderNumber = confirmedOrder.orderNumber;
+      } else if (confirmedOrder && draftChangedSinceConfirm()) {
+        // Draft was edited — PATCH the existing order's items
+        try {
+          await ordersAPI.updateItems(confirmedOrder.id, items);
+          orderId     = confirmedOrder.id;
+          orderNumber = confirmedOrder.orderNumber;
+          setConfirmedOrder({ id: orderId, orderNumber, snapshotDraft: [...draft] });
+          showToast(`Order #${orderNumber} updated!`);
+        } catch (patchErr) {
+          // 409 = kitchen already acknowledged, items are locked
+          if (patchErr?.status === 409) {
+            showToast(`Kitchen already started #${confirmedOrder.orderNumber} — items are locked. Proceed to payment.`);
+            orderId     = confirmedOrder.id;
+            orderNumber = confirmedOrder.orderNumber;
+            // Revert draft to the last confirmed snapshot so totals match
+            setDraft(confirmedOrder.snapshotDraft);
+          } else {
+            throw patchErr;
+          }
+        }
+      } else {
+        // Brand new order — POST
+        const { data } = await ordersAPI.create({ order_type: 'counter', cashier_id: user?.sub || user?.id, items });
+        orderId     = data.id;
+        orderNumber = data.order_number || data.id;
+        setConfirmedOrder({ id: orderId, orderNumber, snapshotDraft: [...draft] });
+        showToast(`Order #${orderNumber} sent to kitchen!`);
+      }
+
+      // Open the payment modal — draft stays intact so cashier can come back
+      setPaymentModal({ orderId, orderNumber, total: draftTotal, draft: [...draft] });
+
     } catch (err) {
-      const msg = err.response?.data?.message || 'Failed to place order. Try again.';
-      showToast(msg);
+      showToast(err.response?.data?.message || 'Failed to place order. Try again.');
     } finally {
       setPlacingOrder(false);
     }
   };
 
+  // ─── Payment success → clear everything ──────────────────────────
+  const handlePaymentSuccess = (method) => {
+    showToast(`Payment via ${method} confirmed. `);
+    setPaymentModal(null);
+    clearDraft(); // now we clear — payment is done
+  };
+
+  // ─── Close modal without paying → keep draft & confirmedOrder ────
+  const handleModalClose = () => {
+    setPaymentModal(null);
+    // draft and confirmedOrder are intentionally left intact
+  };
+
   // ─── Filtered items ───────────────────────────────────────────────
   const visibleItems = menuItems.filter((item) => {
-    const matchCat = activeCategory ? item.category_id === activeCategory : true;
+    const matchCat    = activeCategory ? item.category_id === activeCategory : true;
     const matchSearch = search ? item.name.toLowerCase().includes(search.toLowerCase()) : true;
     return matchCat && matchSearch;
   });
+
+  // ─── Confirm button label ─────────────────────────────────────────
+  // Give the cashier a visual hint about what will happen on press.
+  const confirmLabel = (() => {
+    if (!confirmedOrder) return 'Confirm Order';
+    if (draftChangedSinceConfirm()) return 'Update Order';
+    return 'Open Payment'; // nothing changed, just reopen
+  })();
 
   return (
     <div className="cashier-root">
@@ -192,6 +247,8 @@ export default function CashierPage() {
                 onUpdateNote={updateNote}
                 onClear={clearDraft}
                 onConfirm={placeOrder}
+                confirmLabel={confirmLabel}
+                isConfirmed={!!confirmedOrder}
                 loading={placingOrder}
               />
             </aside>
@@ -201,18 +258,15 @@ export default function CashierPage() {
         )}
       </main>
 
-      {/* Payment Modal (§2.3) */}
+      {/* Payment Modal */}
       {paymentModal && (
         <PaymentModal
           orderId={paymentModal.orderId}
           orderNumber={paymentModal.orderNumber}
           total={paymentModal.total}
           draft={paymentModal.draft}
-          onClose={() => setPaymentModal(null)}
-          onSuccess={(method) => {
-            showToast(`Payment via ${method} confirmed.`);
-            setPaymentModal(null);
-          }}
+          onClose={handleModalClose}
+          onSuccess={handlePaymentSuccess}
         />
       )}
 

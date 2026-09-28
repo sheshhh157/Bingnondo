@@ -22,7 +22,7 @@
  * working without changes to its existing destructuring patterns.
  */
 
-import { get, post } from './apiClient';
+import { get, post, patch } from './apiClient';
 
 // ─── Menu ──────────────────────────────────────────────────────────────────────
 export const menuAPI = {
@@ -62,6 +62,16 @@ export const ordersAPI = {
     const res = await get(`/api/orders?range=${range}`);
     // Backend returns { orders: [...] }
     return { data: res.orders || [] };
+  },
+
+  /**
+   * Update items of an existing confirmed order (customer added/removed something).
+   * PATCH /api/orders/:id/items
+   * items: [{ menu_item_id, quantity, notes? }]
+   */
+  updateItems: async (orderId, items) => {
+    const res = await patch(`/api/orders/${orderId}/items`, { items });
+    return { data: res };
   },
 
   /**
