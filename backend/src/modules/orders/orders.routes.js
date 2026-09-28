@@ -27,4 +27,7 @@ router.patch('/:id/status', ...canUpdateStatus, ctrl.updateOrderStatus);
 // POST /api/orders/:id/cancel — cancel an order
 router.post('/:id/cancel', ...staffAuth, ctrl.cancelOrder);
 
+// PATCH /api/orders/:id/items — replace order items (cashier edited draft after confirm)
+router.patch('/:id/items', ...canOrder, ctrl.updateOrderItems);
+
 module.exports = router;

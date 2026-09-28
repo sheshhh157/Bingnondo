@@ -9,8 +9,9 @@ function orderNumber(id) {
 // ─── POST /api/orders ─────────────────────────────────────────────────────────
 // Cashier creates a counter order.
 // Body: { items: [{ menu_item_id, quantity, notes? }], special_request? }
-// Status starts as 'pending' — kitchen must acknowledge before it becomes 'confirmed'.
-// A 'pending' payment row is created; cashier confirms payment via POST /api/payments.
+// Status starts as 'pending' so it lands in kitchen's New Orders tab first.
+// Kitchen acknowledges → 'confirmed' → 'preparing' → 'ready'.
+// A 'pending' payment row is created; cashier marks paid via POST /api/payments.
 async function createOrder(req, res, next) {
   const client = await db.getClient();
   try {
@@ -49,7 +50,8 @@ async function createOrder(req, res, next) {
 
     await client.query('BEGIN');
 
-    // 2. Insert order — status 'pending', kitchen must acknowledge first
+    // 2. Insert order — status 'pending' so kitchen sees it in New Orders first.
+    //    Kitchen acknowledges → 'confirmed' → 'preparing' → 'ready'.
     const orderRes = await client.query(
       `INSERT INTO orders
          (order_type, cashier_id, status, order_channel, total_amount, special_request)
@@ -69,7 +71,7 @@ async function createOrder(req, res, next) {
       );
     }
 
-    // 4. Log status in history
+    // 4. Log initial status in history
     await client.query(
       `INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'pending', $2)`,
       [order.id, req.user.sub]
@@ -87,7 +89,6 @@ async function createOrder(req, res, next) {
     order.items = validated;
     order.total_amount = parseFloat(order.total_amount);
 
-    // Emit new order to kitchen — status is 'pending', kitchen must acknowledge
     socketHub.emitNewOrder(order);
 
     res.status(201).json(order);
@@ -242,6 +243,7 @@ async function updateOrderStatus(req, res, next) {
     order.order_number = orderNumber(order.id);
     order.total_amount = parseFloat(order.total_amount);
 
+    // Emit status update to all relevant rooms
     socketHub.emitOrderStatus({ orderId: order.id, orderNumber: order.order_number, status });
     if (status === 'ready') {
       socketHub.emitOrderReady({ orderId: order.id, orderNumber: order.order_number });
@@ -299,4 +301,105 @@ async function cancelOrder(req, res, next) {
   }
 }
 
-module.exports = { createOrder, getOrders, getOrderById, updateOrderStatus, cancelOrder };
+// ─── PATCH /api/orders/:id/items ──────────────────────────────────────────────
+// Cashier edited the draft after initial confirm (customer added/removed items).
+// Replaces all order_items and recalculates total_amount.
+// Only allowed while order is still 'confirmed' (not yet preparing/ready).
+async function updateOrderItems(req, res, next) {
+  const client = await db.getClient();
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    const { items } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: 'items array is required and must not be empty.' });
+    }
+
+    await client.query('BEGIN');
+
+    // 1. Check order exists and is still editable
+    const { rows: orderRows } = await client.query(
+      'SELECT id, status FROM orders WHERE id = $1 FOR UPDATE',
+      [orderId]
+    );
+    if (!orderRows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+    // Only editable while still 'pending' (before kitchen acknowledges).
+    // Once kitchen hits Acknowledge → 'confirmed', items are locked.
+    if (orderRows[0].status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: `Cannot edit items — kitchen has already acknowledged this order (status: "${orderRows[0].status}").`,
+      });
+    }
+
+    // 2. Validate all items
+    const menuIds = items.map((i) => Number(i.menu_item_id));
+    const menuRes = await client.query(
+      'SELECT id, name, price, is_available FROM menu_items WHERE id = ANY($1)',
+      [menuIds]
+    );
+    const menuMap = Object.fromEntries(menuRes.rows.map((r) => [r.id, r]));
+
+    let totalAmount = 0;
+    const validated = [];
+
+    for (const item of items) {
+      const mi = menuMap[Number(item.menu_item_id)];
+      if (!mi) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: `Menu item ${item.menu_item_id} not found.` });
+      }
+      if (!mi.is_available) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: `"${mi.name}" is currently unavailable.` });
+      }
+      const qty = Number(item.quantity);
+      if (!qty || qty < 1) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Quantity must be at least 1.' });
+      }
+      totalAmount += parseFloat(mi.price) * qty;
+      validated.push({ menu_item_id: mi.id, name: mi.name, unit_price: parseFloat(mi.price), quantity: qty, notes: item.notes || null });
+    }
+
+    // 3. Delete old items, insert new ones
+    await client.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
+    for (const item of validated) {
+      await client.query(
+        'INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes) VALUES ($1, $2, $3, $4, $5)',
+        [orderId, item.menu_item_id, item.quantity, item.unit_price, item.notes]
+      );
+    }
+
+    // 4. Update total on the order
+    const { rows } = await client.query(
+      'UPDATE orders SET total_amount = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [totalAmount, orderId]
+    );
+
+    // 5. Update the pending payment amount to match
+    await client.query(
+      "UPDATE payments SET amount = $1 WHERE order_id = $2 AND status = 'pending'",
+      [totalAmount, orderId]
+    );
+
+    await client.query('COMMIT');
+
+    const order = rows[0];
+    order.order_number = `ORD-${String(order.id).padStart(4, '0')}`;
+    order.total_amount = parseFloat(order.total_amount);
+    order.items = validated;
+
+    res.json(order);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { createOrder, getOrders, getOrderById, updateOrderStatus, cancelOrder, updateOrderItems };

@@ -296,6 +296,15 @@
 .od-confirm-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .od-confirm-btn:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
 
+/* Order already confirmed — show a subtler teal/green tone */
+.od-confirm-btn--confirmed {
+  background: #0f766e;
+}
+.od-confirm-btn--confirmed:hover:not(:disabled) {
+  background: #0d6460;
+  box-shadow: 0 4px 16px rgba(15,118,110,0.3);
+}
+
 .od-spinner {
   display: inline-block;
   width: 18px;
