@@ -117,16 +117,6 @@ export default function OrderCard({ order, lane, onStatusChange }) {
 
       {/* Footer */}
       <div className="kp-card__footer">
-        {u === 'critical' && (
-          <span className="kp-card__urgency-label kp-card__urgency-label--critical" role="alert">
-            OVERDUE
-          </span>
-        )}
-        {u === 'urgent' && (
-          <span className="kp-card__urgency-label kp-card__urgency-label--urgent">
-            URGENT
-          </span>
-        )}
 
         <button
           className={`kp-btn kp-btn--${isPending ? 'acknowledge' : isPreparing ? 'ready' : 'start'}`}
@@ -142,12 +132,6 @@ export default function OrderCard({ order, lane, onStatusChange }) {
             <span className="kp-spin-sm" aria-hidden="true" />
           ) : isPending ? (
             <>
-              {/* Bell check icon */}
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                <path d="M6.5 1a4 4 0 014 4v2.5l1 1.5H1.5L2.5 7V5a4 4 0 014-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-                <path d="M5 10.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M4 6l1.5 1.5L8.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
               Acknowledge
             </>
           ) : isPreparing ? (
