@@ -8,15 +8,6 @@
   gap: 14px;
   max-width: 560px;
 }
-.odl-stat__value--ok { color: #1D4ED8; }
-
-.odl-empty {
-  text-align: center;
-  color: var(--color-muted-foreground);
-  padding: 60px 0;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-lg);
-}
 
 .odl-list {
   display: grid;
@@ -38,22 +29,6 @@
 .odl-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .odl-card__order { display: block; font-weight: 700; font-size: 0.95rem; color: var(--color-primary); }
 .odl-card__customer { display: block; font-size: 0.82rem; color: var(--color-muted-foreground); margin-top: 2px; }
-
-.odl-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  border-radius: 99px;
-  padding: 4px 10px;
-  white-space: nowrap;
-}
-.odl-status__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.odl-status--preparing { background: #E7DDC8; color: #7C5A00; }
-.odl-status--ready { background: #E2E8F0; color: #1D4ED8; }
-.odl-status--out_for_delivery { background: #E1F0FF; color: #1D4ED8; }
-.odl-status--delivered { background: #E8EFFB; color: #1D4ED8; }
 
 .odl-card__meta {
   display: flex;

@@ -1,41 +1,25 @@
 import { deliveryAPI } from '../../services/managerApi';
 import useLiveData from '../../hooks/useLiveData';
 import { STATUS_LABEL, deliveryBadgeVariant } from '../../utils/format';
-import Loader from '../../components/Loader';
+import { listEvent, deliveryUpsert, deliveryStatus } from './managerData';
+import { RiderIcon, ClockIcon } from './managerIcons';
+import LiveControls from './LiveControls';
+import PageSkeleton from '../../components/PageSkeleton';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
 import StatCard from '../../components/StatCard';
 import PageHeader from '../../components/PageHeader';
+import ErrorBanner from '../../components/ErrorBanner';
 import '../../styles/OversightDelivery.css';
 
 const STEPS = ['preparing', 'ready', 'out_for_delivery', 'delivered'];
 
 export default function OversightDelivery() {
-  const { data: deliveries, loading } = useLiveData({
-    fetchFn: async () => {
-      const { data } = await deliveryAPI.getAll();
-      return data;
-    },
+  const { data: deliveries, loading, error, refresh, lastUpdated, refreshing } = useLiveData({
+    fetchFn: async () => (await deliveryAPI.getAll()).data,
     events: [
-      {
-        name: 'delivery:update',
-        merge: (prev, p) => {
-          if (!p) return prev;
-          const idx = prev.findIndex((d) => d.id === p.deliveryId);
-          if (idx < 0) return prev;
-          const next = prev.slice();
-          next[idx] = { ...next[idx], status: p.status, eta: p.status === 'delivered' ? 'Delivered' : next[idx].eta };
-          return next;
-        },
-      },
-      {
-        name: 'delivery:new',
-        merge: (prev, p) => {
-          if (!p) return prev;
-          if (prev.some((d) => d.id === p.id)) return prev;
-          return [p, ...prev];
-        },
-      },
+      listEvent('delivery:new', deliveryUpsert),
+      listEvent('delivery:update', deliveryStatus),
     ],
   });
 
@@ -54,8 +38,17 @@ export default function OversightDelivery() {
         <StatCard label="Delivered" value={completed.length} />
       </div>
 
+      {error && (
+        <ErrorBanner>
+          Couldn't load this view.
+          <button type="button" className="ui-error__retry" onClick={() => refresh()}>Retry</button>
+        </ErrorBanner>
+      )}
+
+      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh deliveries" />
+
       {loading ? (
-        <Loader text="Loading deliveries…" />
+        <PageSkeleton stats={3} wide rows={3} />
       ) : deliveries.length === 0 ? (
         <EmptyState message="No deliveries yet." />
       ) : (
@@ -96,17 +89,3 @@ export default function OversightDelivery() {
   );
 }
 
-function RiderIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="9" cy="7" r="3"/><path d="M2 21v-1a5 5 0 0 1 5-5 4 4 0 0 1 1.5.29M17 11l4 4v4h-4M17 11l-3 3M20 15l-4-4v3M17 18h.01"/>
-    </svg>
-  );
-}
-function ClockIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
-    </svg>
-  );
-}
