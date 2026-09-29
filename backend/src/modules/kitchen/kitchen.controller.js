@@ -1,10 +1,33 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
+// Shared transition rules. The kitchen used to hand-enforce its own
+// `confirmed -> preparing -> ready` chain here, which could drift from the
+// rules in the orders module. See orders/status-transitions.js.
+const { canTransition } = require('../orders/status-transitions');
+
+// The kitchen's own live prep queue. 'ready' is deliberately excluded: the
+// kitchen marks an order ready and is then done with it, so a ready ticket
+// sitting in its queue is stale work competing with orders still being made.
+const PREP_STATUSES = ['pending', 'confirmed', 'preparing'];
+
+// Manager-only opt-in. The manager watches for orders to be handed over once
+// they leave the kitchen, which is a status the prep queue drops on purpose.
+// Off by default so the kitchen display and its socket flow are untouched;
+// no other caller sends it.
+const PREP_PLUS_HANDOFF_STATUSES = [...PREP_STATUSES, 'ready'];
 
 // ─── GET /api/kitchen/orders ──────────────────────────────────────────────────
 // Returns all orders with status 'pending', 'confirmed', or 'preparing'.
+// `?include_ready=1` additionally returns 'ready' (see above).
 async function getKitchenOrders(req, res, next) {
   try {
+    const statuses =
+      req.query.include_ready === '1' ? PREP_PLUS_HANDOFF_STATUSES : PREP_STATUSES;
+    // Both lists are module constants, never caller input. Build the IN clause
+    // from a quoted literal list rather than binding placeholders so the shape
+    // of the prepared statement does not change with the flag.
+    const inClause = statuses.map((s) => `'${s}'`).join(', ');
+
     const { rows } = await db.query(
       `SELECT
          o.id,
@@ -25,7 +48,7 @@ async function getKitchenOrders(req, res, next) {
        FROM orders o
        JOIN order_items oi ON oi.order_id = o.id
        JOIN menu_items  mi ON mi.id = oi.menu_item_id
-       WHERE o.status IN ('pending', 'confirmed', 'preparing')
+        WHERE o.status IN (${inClause})
        GROUP BY o.id
        ORDER BY o.created_at ASC`
     );
@@ -119,16 +142,10 @@ async function updateKitchenOrderStatus(req, res, next) {
     }
 
     const from = current[0].status;
-    if (status === 'preparing' && from !== 'confirmed') {
+    if (!canTransition(from, status)) {
       await client.query('ROLLBACK');
       return res.status(409).json({
-        message: `Cannot move to "preparing" from "${from}". Order must be "confirmed".`,
-      });
-    }
-    if (status === 'ready' && from !== 'preparing') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({
-        message: `Cannot move to "ready" from "${from}". Order must be "preparing".`,
+        message: `Cannot move to "${status}" from "${from}". Kitchen can only set status to: ${ALLOWED.join(', ')}.`,
       });
     }
 
