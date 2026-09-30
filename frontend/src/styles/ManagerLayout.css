@@ -1,4 +1,4 @@
-/* ─── MANAGER LAYOUT — scoped to .mr-root ─────────────────────────────── */
+/* ─── MANAGER LAYOUT — scoped to .ml-root ─────────────────────────────── */
 
 .ml-root {
   --color-primary: #1D4ED8;
@@ -15,6 +15,15 @@
   display: flex;
   background: var(--color-background);
   color: var(--color-foreground);
+}
+
+/* Every interactive control gets a visible keyboard focus ring. Page-level
+ * CSS sets `outline: none` on input/search elements, so this rule is written
+ * with enough specificity to win and keep focus discoverable while clicking
+ * still stays free of a ring (focus-visible). */
+.ml-root :is(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* ── Sidebar ──────────────────────────────────────────────────────────── */
@@ -249,7 +258,6 @@
   box-shadow: var(--shadow-sm);
 }
 .ml-compact__badge--urgent { color: var(--color-gold); }
-.ml-compact__badge--critical { color: var(--color-destructive); }
 .ml-compact__dot {
   position: absolute;
   top: 5px; right: 5px;
@@ -284,6 +292,60 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+/* Live / Offline connection pill (top of main content; mobile top bar)
+ * and the slim status strip above every page's header. */
+.ml-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.ml-status__hint {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+}
+.ml-status__stamp {
+  font-size: 0.72rem;
+  color: var(--color-muted-foreground);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ml-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, white);
+  background: color-mix(in srgb, var(--color-primary) 10%, white);
+  border-radius: 99px;
+  padding: 6px 12px;
+}
+.ml-conn--off {
+  color: var(--color-destructive);
+  border-color: #F3CFCF;
+  background: #FBEAEA;
+}
+.ml-conn__dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ml-conn:not(.ml-conn--off) .ml-conn__dot {
+  animation: ml-pulse 2.2s ease-out infinite;
+}
+@keyframes ml-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); }
+  70% { box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent); }
 }
 
 .ml-drawer-overlay {
@@ -323,6 +385,8 @@
 .ml-main {
   flex: 1;
   min-width: 0;
+  width: 100%;
+  max-width: 1560px;
   padding: 28px;
 }
 
@@ -333,6 +397,7 @@
 
 @media (max-width: 720px) {
   .ml-sidebar-compact { display: none; }
+  .ml-status { display: none; }
   .ml-topbar {
     display: flex;
     align-items: center;

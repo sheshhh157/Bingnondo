@@ -13,6 +13,16 @@
   gap: 14px;
 }
 
+.dash-kpi {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.dash-kpi:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 40%, white);
+  box-shadow: var(--shadow-md);
+}
+
 /* ── Charts grid ──────────────────────────────────────────────────────── */
 .dash-grid {
   display: grid;
@@ -21,6 +31,127 @@
 }
 
 .dash-chart { width: 100%; }
+
+/* ── Ready-for-pickup banner ───────────────────────────────────────────── */
+.dash-ready {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #F0D9A8;
+  background: #FBF3E4;
+  border-radius: var(--radius-md);
+  color: #B45309;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+.dash-ready:hover { border-color: #E3C582; }
+.dash-ready__count {
+  width: 24px; height: 24px;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  background: #B45309;
+}
+.dash-ready__text { flex: 1; }
+
+/* ── Status chart scope toggle ─────────────────────────────────────────── */
+.dash-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dash-scope__label {
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-right: 2px;
+}
+.dash-scope__btn {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 99px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.dash-scope__btn--active {
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 25%, white);
+  background: color-mix(in srgb, var(--color-primary) 10%, white);
+}
+
+/* Shown when the order read hit its limit, so the window-derived panels
+   aren't mistaken for the whole history. */
+.dash-truncated {
+  margin: 0 0 4px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #7A4A00;
+  background: #FFF6E5;
+  border: 1px solid #F2D8A8;
+  border-radius: 8px;
+}
+
+/* ── Live activity feed ────────────────────────────────────────────────── */
+.dash-feed__title { display: inline-flex; align-items: center; gap: 8px; }
+.dash-feed__count {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, white);
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+.dash-feed { display: flex; flex-direction: column; }
+.dash-feed__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.85rem;
+}
+.dash-feed__row:last-child { border-bottom: none; }
+.dash-feed__tag {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 99px;
+  padding: 2px 8px;
+}
+.dash-feed__tag--info { background: #E8EFFB; color: #1D4ED8; }
+.dash-feed__tag--success { background: #E8F3EA; color: #1A7F37; }
+.dash-feed__tag--muted { background: var(--color-surface); color: var(--color-muted-foreground); }
+.dash-feed__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-muted-foreground); }
+.dash-feed__num { color: var(--color-foreground); font-weight: 600; }
+.dash-feed__status { color: var(--color-foreground); }
+.dash-feed__time { flex-shrink: 0; color: var(--color-muted-foreground); font-size: 0.75rem; }
+
+/* ── Skeleton loading states ─────────────────────────────────────────────── */
+.dash-skel {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--color-border), var(--color-muted), var(--color-border));
+  background-size: 200% 100%;
+  animation: osk-shimmer 1.2s infinite linear;
+}
+.dash-skel--label { height: 10px; width: 45%; }
+.dash-skel--value { height: 22px; width: 60%; }
+.dash-skel--sub { height: 10px; width: 70%; }
+.dash-skel--chart { height: 260px; border-radius: var(--radius-md); }
 
 /* ── Low / out of stock quick list ─────────────────────────────────────── */
 .dash-low-title {
@@ -47,6 +178,43 @@
 .dash-low__row:last-child { border-bottom: none; }
 .dash-low__name { flex: 1; font-weight: 500; font-size: 0.875rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-low__val { color: var(--color-muted-foreground); font-size: 0.85rem; }
+
+/* ── Top selling items ──────────────────────────────────────────────────── */
+.dash-top-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+  margin: 0 0 12px;
+}
+.dash-top-sub { font-size: 0.75rem; font-weight: 500; color: var(--color-muted-foreground); }
+.dash-top { display: flex; flex-direction: column; }
+.dash-top__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+.dash-top__row:last-child { border-bottom: none; }
+.dash-top__rank {
+  width: 22px; height: 22px;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, white);
+}
+.dash-top__name { flex: 1; font-weight: 500; font-size: 0.875rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-top__qty { color: var(--color-muted-foreground); font-size: 0.82rem; }
 
 @media (max-width: 960px) {
   .dash-kpis { grid-template-columns: repeat(2, 1fr); }

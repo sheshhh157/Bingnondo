@@ -132,6 +132,18 @@ button, input, textarea, select { font-family: var(--font-body); }
 ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
 
+/* ─── Reduced motion ───────────────────────────────────────────────────
+ * Users who prefer reduced motion get instant opacity/visibility with no
+ * animated entrance (loaders, toasts, shimmer, drawer sweeps). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ─── Admin Theme — Imperial Ink (墨池) Dark Heritage Variant ──────────
  * Scoped to .al-root — the admin console keeps its dark "imperial ink"
  * character while inheriting the heritage token vocabulary: same token

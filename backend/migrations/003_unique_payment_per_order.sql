@@ -1,0 +1,28 @@
+-- 003_unique_payment_per_order.sql
+--
+-- One payment row per order, enforced.
+--
+-- `POST /api/orders` creates exactly one `payments` row (pending) as part of
+-- placing an order, and `POST /api/payments` updates that same row in place
+-- rather than inserting a second. So the one-row-per-order invariant is
+-- already how the application works — it was just never stated to the
+-- database. 002 added a non-unique index on `payments(order_id)` for join
+-- performance; that does not prevent duplicates.
+--
+-- Why it matters: several reports resolve "the payment for this order" by
+-- picking a single row (the sales report uses a LATERAL join ordered by
+-- paid_at / id). A second row would make that choice ambiguous and the
+-- revenue figures silently wrong. `POST /api/payments` likewise locks and
+-- updates one row chosen by a plain JOIN, so with duplicates it could update
+-- the wrong one. Enforcing uniqueness at the schema level turns a silent
+-- wrong-number bug into a loud constraint violation.
+--
+-- Applied only after verifying no order currently has more than one payment
+-- row, so this succeeds against the existing data.
+--
+-- NOTE: a UNIQUE index takes a write lock that blocks inserts for the
+-- duration. That is instant at this size. If this is ever re-run against a
+-- large live table, use CREATE UNIQUE INDEX CONCURRENTLY instead — but note
+-- CONCURRENTLY cannot run inside a transaction, so it must not be wrapped.
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_order_id_unique ON payments (order_id);

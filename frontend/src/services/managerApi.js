@@ -1,141 +1,204 @@
-// ─── READ-ONLY APIs ─────────────────────────────────────────────────────────
-// Manager Dashboard reads data only. It attempts to consume the Manager
-// backend (Express) over HTTP via the Vite /api proxy (localhost:5000).
-// If the backend is unreachable, it falls back to the bundled mock data so
-// the dashboard still works offline. Only GET requests are ever made.
+/**
+ * managerApi.js — Real API calls for the Manager dashboard.
+ *
+ * The manager dashboard is strictly read-only and consumes the same DB-backed
+ * endpoints as the rest of the staff app. Requests go through apiClient so the
+ * Bearer JWT is attached and a 401 triggers a silent refresh + redirect.
+ *
+ * Backend response shapes, and how they are adapted for the manager pages:
+ *
+ *   GET  /api/orders            → { orders: [...], total }
+ *     `ordersAPI.getRange` returns `{ data, total }`; the pages treat `data` as
+ *     an array. `from`/`to`/`limit`/`offset` do the filtering and paging in
+ *     Postgres, and `total` is the unpaged match count, so no page pulls the
+ *     whole order history to know how many pages there are.
+ *
+ *   GET  /api/orders/totals     → { total_revenue, collected_orders }
+ *     Single aggregate row backing the Dashboard's all-time KPI.
+ *
+ *   GET  /api/orders/report      → { revenue, order_count, cancelled_count,
+ *                                       method_split, daily, top_items,
+ *                                       peak_hours }
+ *     Every figure the sales report shows, computed in Postgres.
+ *
+ *   GET  /api/inventory         → { items: [...] }
+ *     (pages do `data.items || data`, so { data: res } works unchanged)
+ *
+ *   GET  /api/kitchen/orders    → { data: [...] }
+ *     The kitchen prep queue. `?include_ready=1` widens it to the handoff
+ *     queue; only OversightKitchen asks for that.
+ *
+ * Every function keeps the `{ data: ... }` wrapper so ManagerLayout,
+ * DashboardPage, SalesReportPage, OversightKitchen, OversightStocks,
+ * OversightDelivery and MenuPage need no changes.
+ */
 
-import axios from 'axios';
+import { get } from './apiClient';
 
-const http = axios.create({
-  baseURL: '/api/manager',
-  timeout: 2500,
-});
-
-let backendUp = true;
-let lastProbeAt = 0;
-// While the backend is down, retry it at most this often so a recovered
-// server is picked back up instead of serving mock data forever.
-const PROBE_INTERVAL_MS = 15000;
-
-function isNetworkError(err) {
-  return !err?.response || err?.code === 'ECONNABORTED' || err?.message?.includes('Network Error');
-}
-
-async function get(path, fallback) {
-  if (!backendUp && Date.now() - lastProbeAt < PROBE_INTERVAL_MS) {
-    return { data: fallback(), _mock: true };
-  }
+/**
+ * IANA timezone of the browser, for server-side day/hour bucketing.
+ *
+ * The backend groups revenue into calendar days and hours for the sales report.
+ * Doing that in the database means it has to know *which* day is "today" to the
+ * person looking at the screen. Sending the browser's own zone keeps the
+ * report's day boundary aligned with the filter pickers above it, instead of
+ * inheriting the server's zone.
+ */
+function viewerTimeZone() {
   try {
-    const res = await http.get(path);
-    // Backend wraps the payload as { data: <payload> }; unwrap so callers
-    // receive an object whose `.data` is the payload (matches mock shape).
-    backendUp = true;
-    return { data: res.data.data, _mock: false };
-  } catch (err) {
-    if (isNetworkError(err)) {
-      backendUp = false;
-      lastProbeAt = Date.now();
-      return { data: fallback(), _mock: true };
-    }
-    throw err;
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
   }
 }
 
-// ─── Auth (manager) ──────────────────────────────────────────────────────────
-export const authAPI = {
-  managerLogin: async ({ email, password }) => {
-    const accounts = [
-      { id: 4, full_name: 'Manager', email: 'manager@bingnondo.com', password: 'manager123', role: 'manager' },
-      { id: 3, full_name: 'Owner',   email: 'owner@bingnondo.com',   password: 'owner123',   role: 'owner' },
-    ];
-    const user = accounts.find((a) => a.email === email && a.password === password);
-    if (!user) throw { response: { data: { message: 'Invalid credentials. Try again.' } } };
-    const { password: _, ...userData } = user;
-    return { data: { accessToken: 'mock-access-token', refreshToken: 'mock-refresh-token', user: userData } };
-  },
-  logout: async () => ({ data: { message: 'Logged out.' } }),
-  backendAvailable: () => backendUp,
+/**
+ * Page sizes for manager order reads.
+ *
+ * The pages used to request `limit=10000` and aggregate in the browser. These
+ * are the bounded sizes that replaced it — see `ordersAPI.getRange`. The
+ * backend still clamps any single read at 10 000, but nothing asks for that
+ * any more.
+ */
+export const MANAGER_ORDER_LIMITS = {
+  /** Oversight "today" pulse and the Dashboard's bounded window. */
+  window: 2000,
+  /** Sales report transactions table, one page at a time. */
+  page: 50,
 };
 
-// ─── Fallback mock data (bundled copy of the backend store) ─────────────────
-const today = new Date();
-const hrsAgo = (h) => new Date(today.getTime() - h * 60 * 60 * 1000).toISOString();
-const daysAgo = (d, h = 12) => new Date(today.getTime() - d * 24 * 60 * 60 * 1000 - h * 60 * 60 * 1000).toISOString();
-const minsAgo = (m) => new Date(Date.now() - m * 60 * 1000).toISOString();
 
-const MOCK_ORDERS = [
-  { id: 1001, order_number: 'ORD-1001', status: 'completed', payment_method: 'cash',  total_amount: 240, created_at: hrsAgo(1),  items: [{ name: 'Tapsilog', quantity: 1, unit_price: 120 }, { name: 'Iced Tea', quantity: 1, unit_price: 45 }, { name: 'Extra Rice', quantity: 1, unit_price: 20 }, { name: 'Coke Regular', quantity: 1, unit_price: 40 }] },
-  { id: 1002, order_number: 'ORD-1002', status: 'completed', payment_method: 'gcash', total_amount: 175, created_at: hrsAgo(2),  items: [{ name: 'Longsilog', quantity: 1, unit_price: 110 }, { name: 'Bottled Water', quantity: 1, unit_price: 25 }, { name: 'Extra Egg', quantity: 1, unit_price: 20 }] },
-  { id: 1003, order_number: 'ORD-1003', status: 'preparing', payment_method: 'cash',  total_amount: 285, created_at: hrsAgo(0.25), items: [{ name: 'Sinigang Set', quantity: 1, unit_price: 150 }, { name: 'Iced Tea', quantity: 1, unit_price: 45 }, { name: 'Lumpiang Shanghai', quantity: 1, unit_price: 65 }] },
-  { id: 1004, order_number: 'ORD-1004', status: 'completed', payment_method: 'cash',  total_amount: 130, created_at: hrsAgo(3),  items: [{ name: 'Goto', quantity: 1, unit_price: 85 }, { name: 'Extra Rice', quantity: 1, unit_price: 20 }, { name: 'Hot Coffee', quantity: 1, unit_price: 60 }] },
-  { id: 1005, order_number: 'ORD-1005', status: 'cancelled', payment_method: 'cash',  total_amount: 110, created_at: hrsAgo(4),  items: [{ name: 'Tocilog', quantity: 1, unit_price: 110 }] },
-  { id: 2001, order_number: 'ORD-2001', status: 'completed', payment_method: 'cash',  total_amount: 320, created_at: daysAgo(1),  items: [{ name: 'Sinigang Set', quantity: 2, unit_price: 150 }, { name: 'Iced Tea', quantity: 1, unit_price: 45 }] },
-  { id: 2002, order_number: 'ORD-2002', status: 'completed', payment_method: 'gcash', total_amount: 190, created_at: daysAgo(1, 16), items: [{ name: 'Bangsilog', quantity: 1, unit_price: 130 }, { name: 'Extra Rice', quantity: 1, unit_price: 20 }, { name: 'Pineapple Juice', quantity: 1, unit_price: 55 }] },
-  { id: 2003, order_number: 'ORD-2003', status: 'completed', payment_method: 'cash',  total_amount: 240, created_at: daysAgo(2),  items: [{ name: 'Fried Chicken', quantity: 1, unit_price: 135 }, { name: 'Pancit Bihon', quantity: 1, unit_price: 75 }, { name: 'Coke Regular', quantity: 1, unit_price: 40 }] },
-  { id: 2004, order_number: 'ORD-2004', status: 'completed', payment_method: 'cash',  total_amount: 150, created_at: daysAgo(2, 15), items: [{ name: 'Spamsilog', quantity: 1, unit_price: 140 }, { name: 'Bottled Water', quantity: 1, unit_price: 25 }] },
-  { id: 2005, order_number: 'ORD-2005', status: 'completed', payment_method: 'gcash', total_amount: 265, created_at: daysAgo(3),  items: [{ name: 'Adobo Rice', quantity: 2, unit_price: 105 }, { name: 'Iced Tea', quantity: 1, unit_price: 45 }, { name: 'Extra Egg', quantity: 1, unit_price: 20 }] },
-  { id: 2006, order_number: 'ORD-2006', status: 'completed', payment_method: 'cash',  total_amount: 210, created_at: daysAgo(4),  items: [{ name: 'Lumpiang Shanghai', quantity: 2, unit_price: 65 }, { name: 'Sinigang Set', quantity: 1, unit_price: 150 }] },
-  { id: 2007, order_number: 'ORD-2007', status: 'completed', payment_method: 'cash',  total_amount: 180, created_at: daysAgo(5),  items: [{ name: 'Goto', quantity: 1, unit_price: 85 }, { name: 'Tapsilog', quantity: 1, unit_price: 120 }] },
-  { id: 2008, order_number: 'ORD-2008', status: 'completed', payment_method: 'gcash', total_amount: 300, created_at: daysAgo(6),  items: [{ name: 'Bistek Rice', quantity: 1, unit_price: 145 }, { name: 'Arroz Caldo', quantity: 1, unit_price: 80 }, { name: 'Coke Zero', quantity: 1, unit_price: 40 }] },
-];
 
-const MOCK_INVENTORY = [
-  { id: 1,  name: 'Beef Tapa',       unit: 'g',   current_stock: 2400, reorder_level: 500  },
-  { id: 2,  name: 'Longganisa',      unit: 'pcs', current_stock: 80,   reorder_level: 20   },
-  { id: 3,  name: 'Tocino',          unit: 'g',   current_stock: 1800, reorder_level: 400  },
-  { id: 4,  name: 'Bangus',          unit: 'pcs', current_stock: 12,   reorder_level: 10   },
-  { id: 5,  name: 'Spam',            unit: 'can', current_stock: 4,    reorder_level: 6    },
-  { id: 6,  name: 'Corned Beef',     unit: 'can', current_stock: 18,   reorder_level: 6    },
-  { id: 7,  name: 'Chicken',         unit: 'g',   current_stock: 3200, reorder_level: 800  },
-  { id: 8,  name: 'Pork',            unit: 'g',   current_stock: 0,    reorder_level: 600  },
-  { id: 9,  name: 'Eggs',            unit: 'pcs', current_stock: 55,   reorder_level: 24   },
-  { id: 10, name: 'Jasmine Rice',    unit: 'kg',  current_stock: 22,   reorder_level: 5    },
-  { id: 11, name: 'Garlic',          unit: 'g',   current_stock: 350,  reorder_level: 150  },
-  { id: 12, name: 'Cooking Oil',     unit: 'ml',  current_stock: 1200, reorder_level: 500  },
-  { id: 13, name: 'Soy Sauce',       unit: 'ml',  current_stock: 800,  reorder_level: 300  },
-  { id: 14, name: 'Calamansi',       unit: 'pcs', current_stock: 30,   reorder_level: 20   },
-  { id: 15, name: 'Tamarind',        unit: 'g',   current_stock: 0,    reorder_level: 100  },
-  { id: 16, name: 'Rice Noodles',    unit: 'g',   current_stock: 900,  reorder_level: 250  },
-  { id: 17, name: 'Spring Roll Wrap',unit: 'pcs', current_stock: 60,   reorder_level: 30   },
-  { id: 18, name: 'Ground Pork',     unit: 'g',   current_stock: 1100, reorder_level: 300  },
-  { id: 19, name: 'Ginger',          unit: 'g',   current_stock: 180,  reorder_level: 80   },
-  { id: 20, name: 'Brewed Coffee',   unit: 'g',   current_stock: 450,  reorder_level: 100  },
-];
-
-const MOCK_KITCHEN = [
-  { id: 2001, order_number: 'ORD-2001', status: 'confirmed', order_channel: 'counter',   created_at: minsAgo(2),  order_items: [{ id: 1, quantity: 2, notes: '',            menu_item: { name: 'Tapsilog' } }, { id: 3, quantity: 1, notes: '',            menu_item: { name: 'Iced Tea' } }] },
-  { id: 2003, order_number: 'ORD-2003', status: 'preparing', order_channel: 'counter',   created_at: minsAgo(7),  order_items: [{ id: 7, quantity: 3, notes: 'no garlic', menu_item: { name: 'Longsilog' } }, { id: 8, quantity: 2, notes: '',          menu_item: { name: 'Extra Rice' } }] },
-  { id: 2005, order_number: 'ORD-2005', status: 'confirmed', order_channel: 'counter',   created_at: minsAgo(4),  order_items: [{ id: 11, quantity: 1, notes: '', menu_item: { name: 'Adobo Rice' } }, { id: 12, quantity: 1, notes: '', menu_item: { name: 'Coke Regular' } }] },
-  { id: 2002, order_number: 'ORD-2002', status: 'preparing', order_channel: 'mobile_app', created_at: minsAgo(9),  order_items: [{ id: 4, quantity: 1, notes: '', menu_item: { name: 'Sinigang Set' } }, { id: 5, quantity: 2, notes: '', menu_item: { name: 'Iced Tea' } }] },
-  { id: 2004, order_number: 'ORD-2004', status: 'confirmed', order_channel: 'mobile_app', created_at: minsAgo(3),  order_items: [{ id: 9, quantity: 1, notes: '',       menu_item: { name: 'Bangsilog' } }, { id: 11, quantity: 1, notes: '',       menu_item: { name: 'Extra Egg' } }] },
-  { id: 2006, order_number: 'ORD-2006', status: 'confirmed', order_channel: 'mobile_app', created_at: minsAgo(8),  order_items: [{ id: 13, quantity: 2, notes: 'extra sauce', menu_item: { name: 'Tapsilog' } }, { id: 14, quantity: 2, notes: '',            menu_item: { name: 'Coke Zero' } }] },
-];
-
-const MOCK_DELIVERIES = [
-  { id: 1, order_number: 'ORD-3001', customer: 'Juan Dela Cruz', rider: 'Rider Marco',   status: 'out_for_delivery', eta: '~15 min', created_at: minsAgo(18) },
-  { id: 2, order_number: 'ORD-3002', customer: 'Maria Santos',   rider: 'Rider Liza',    status: 'preparing',        eta: '~35 min', created_at: minsAgo(6) },
-  { id: 3, order_number: 'ORD-3003', customer: 'Pedro Bautista', rider: 'Rider Marco',   status: 'delivered',        eta: 'Delivered', created_at: minsAgo(46) },
-  { id: 4, order_number: 'ORD-3004', customer: 'Ana Reyes',      rider: 'Rider Niko',    status: 'ready',            eta: 'Awaiting rider', created_at: minsAgo(12) },
-  { id: 5, order_number: 'ORD-3005', customer: 'Jose Ramirez',   rider: 'Rider Liza',    status: 'out_for_delivery', eta: '~10 min', created_at: minsAgo(26) },
-];
-
-// ─── API objects ────────────────────────────────────────────────────────────
+// ─── Orders / sales ───────────────────────────────────────────────────────────
 export const ordersAPI = {
-  getAll: () => get('/orders', () => [...MOCK_ORDERS]),
-  getById: (id) => get(`/orders/${id}`, () => MOCK_ORDERS.find((o) => o.id === Number(id)) ?? { status: 404 }),
+  /**
+   * Orders, newest first, optionally narrowed server-side.
+   *
+   * The pages used to request `range=all&limit=10000` and aggregate in the
+   * browser. That pulled the entire order history — each row carrying
+   * json_agg'd line items — into the tab on every poll, and silently truncated
+   * every aggregate once the shop passed the limit. Filtering and paging now
+   * happen in Postgres via the endpoint's existing `from`/`to`/`limit`/`offset`.
+   *
+   * `from`/`to` should be full ISO datetimes (see `localDayBounds` in
+   * utils/format) so the server honours the browser's timezone; a bare
+   * 'YYYY-MM-DD' is interpreted in the server's timezone instead.
+   *
+   * @param {string} [search] Match order number or line-item name, server-side.
+   * @returns {{ data: object[], total: number }} `total` is the number of
+   *   matching orders ignoring `limit`/`offset`, so a caller can build a pager
+   *   without downloading every page.
+   */
+  getRange: async ({ from, to, limit, offset = 0, status, search } = {}) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    if (status) q.set('status', status);
+    if (search && search.trim()) q.set('search', search.trim());
+    if (Number.isFinite(limit)) q.set('limit', String(limit));
+    if (offset > 0) q.set('offset', String(offset));
+    // `range=all` is still sent so the endpoint's legacy `today` default never
+    // applies; the explicit from/to or limit alone is not enough, because with
+    // no date bounds an omitted range silently narrows results to today.
+    q.set('range', 'all');
+    const res = await get(`/api/orders?${q.toString()}`);
+    return { data: res.orders || [], total: res.total ?? 0 };
+  },
+
+  /**
+   * All-time revenue collected and order count in a single aggregate row.
+   * Keeps the Dashboard's all-time KPI correct now that its own order fetch is
+   * bounded to a recent window.
+   */
+  getTotals: async () => {
+    const res = await get('/api/orders/totals');
+    return { data: res };
+  },
+
+  /**
+   * Sales report aggregates, computed server-side.
+   *
+   * The page used to download the whole period (up to 2 000 orders, each with
+   * its line items) on every poll and reduce over it in the browser for six
+   * separate figures. That was both wasteful and wrong: the figures were only
+   * as complete as the row limit, so a 90-day view silently reported the totals
+   * of the most recent 2 000 orders.
+   *
+   * @param {object} opts
+   * @param {string} [opts.from] ISO datetime bounding the period start.
+   * @param {string} [opts.to]   ISO datetime bounding the period end.
+   * @param {string} [opts.payment] Restrict to one payment method.
+   * @param {string} [opts.search] Match order number or line-item name.
+   * @returns {{ data: object }} The aggregate row, `data` kept for symmetry with
+   *   the other `ordersAPI` helpers.
+   */
+  getReport: async ({ from, to, payment, search } = {}) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    if (payment) q.set('payment', payment);
+    if (search && search.trim()) q.set('search', search.trim());
+    q.set('range', 'all');
+    const tz = viewerTimeZone();
+    if (tz) q.set('tz', tz);
+    const res = await get(`/api/orders/report?${q.toString()}`);
+    return { data: res };
+  },
 };
 
+// ─── Inventory ────────────────────────────────────────────────────────────────
 export const inventoryAPI = {
-  getAll: () => get('/inventory', () => ({ items: [...MOCK_INVENTORY] })),
+  getAll: async () => {
+    const res = await get('/api/inventory');
+    return { data: res };
+  },
+  /** Movement history for one ingredient (restock / deduction / adjustment). */
+  getTransactions: async (id) => {
+    const res = await get(`/api/inventory/${id}/transactions`);
+    return { data: res.transactions || [] };
+  },
 };
 
+// ─── Kitchen ──────────────────────────────────────────────────────────────────
 export const kitchenAPI = {
-  getOrders: () => get('/kitchen', () => [...MOCK_KITCHEN]),
-  getAlerts: () => get('/kitchen/alerts', () => []),
+  /**
+   * Orders in 'pending' | 'confirmed' | 'preparing' — the live prep queue.
+   *
+   * @param {object} [opts]
+   * @param {boolean} [opts.includeReady] Also return 'ready' orders. The
+   *   manager needs these to see what is waiting on a handoff; the kitchen
+   *   omits them by design and passes nothing.
+   */
+  getOrders: async ({ includeReady = false } = {}) => {
+    const q = includeReady ? '?include_ready=1' : '';
+    const res = await get(`/api/kitchen/orders${q}`);
+    return { data: res.data || [] };
+  },
+  /** Unacknowledged kitchen alerts — read-only for the manager (ack is kitchen-side). */
+  getAlerts: async () => {
+    const res = await get('/api/kitchen/alerts');
+    return { data: res.data || [] };
+  },
 };
 
+// ─── Delivery ─────────────────────────────────────────────────────────────────
+// No delivery backend exists yet (no `deliveries` table, controller or route),
+// so there is nothing real to read. The page renders its empty state until one
+// is built. Replace this with a real `get('/api/deliveries')` call at that point.
 export const deliveryAPI = {
-  getAll: () => get('/deliveries', () => [...MOCK_DELIVERIES]),
+  getAll: async () => ({ data: [] }),
 };
 
-export default { authAPI, ordersAPI, inventoryAPI, kitchenAPI, deliveryAPI };
+// ─── Menu catalog ─────────────────────────────────────────────────────────────
+// GET /api/menu/staff only requires `staff` (the manager account passes), and
+// every menu edit is broadcast to all rooms as menu_update / menu_item_deleted,
+// so a read-only availability view needs no backend change.
+export const menuAPI = {
+  /** All menu items, enriched with category name + linked ingredient stocks. */
+  getStaffMenu: async () => {
+    const res = await get('/api/menu/staff');
+    return { data: res.items || [] };
+  },
+};
+
+export default { ordersAPI, inventoryAPI, kitchenAPI, deliveryAPI, menuAPI };

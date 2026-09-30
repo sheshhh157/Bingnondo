@@ -2,6 +2,20 @@ import { io } from 'socket.io-client';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+// ─── Role → socket room ───────────────────────────────────────────────────────
+// Mirrors the rooms documented in backend/src/sockets/index.js. Kept here (not
+// inline in AuthContext) so the socket provider can re-derive the room from
+// storage on every connect — including after a page refresh, which never goes
+// through the login flow.
+export const SOCKET_ROOM_BY_ROLE = {
+  cashier:       'cashier',
+  kitchen_staff: 'kitchen',
+  staff:         'staff',
+  owner:         'manager',
+  admin:         'manager',
+  manager:       'manager',
+};
+
 let socket = null;
 
 export const getSocket = () => {

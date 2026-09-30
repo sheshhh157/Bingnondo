@@ -18,6 +18,14 @@ router.post('/', ...canOrder, ctrl.createOrder);
 // GET /api/orders — list orders (cashier sees own, others see all)
 router.get('/', ...staffAuth, ctrl.getOrders);
 
+// GET /api/orders/totals — all-time revenue collected + count, one row.
+// Must be registered before '/:id' or Express matches "totals" as an id.
+router.get('/totals', ...staffAuth, ctrl.getOrderTotals);
+
+// GET /api/orders/report — sales report aggregates, one row.
+// Same ordering requirement as '/totals'.
+router.get('/report', ...staffAuth, ctrl.getOrderReport);
+
 // GET /api/orders/:id — get single order detail
 router.get('/:id', ...staffAuth, ctrl.getOrderById);
 

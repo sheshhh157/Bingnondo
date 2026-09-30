@@ -19,12 +19,106 @@
   cursor: pointer;
 }
 .sales-period__btn + .sales-period__btn { border-left: 1px solid var(--color-border); }
+.sales-period__btn:not(.sales-period__btn--active):hover { background: var(--color-surface); }
 .sales-period__btn--active { background: var(--color-primary); color: var(--color-on-primary); }
 
 .sales-summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
+}
+
+/* Search + filter row */
+.sales-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Transactions table paging. */
+.sales-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--color-border);
+}
+.sales-pager__status {
+  font-size: 0.78rem;
+  color: var(--color-muted-foreground);
+  text-align: center;
+}
+.sales-pager .ui-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sales-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  padding: 0 10px;
+  color: var(--color-muted-foreground);
+  flex: 1;
+  min-width: 200px;
+}
+.sales-search__input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 10px 0;
+  font-size: 0.875rem;
+  outline: none;
+  color: var(--color-foreground);
+}
+.sales-select {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  font-size: 0.85rem;
+  color: var(--color-foreground);
+}
+
+/* Breakdown chips under the summary cards */
+.sales-substats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sales-method {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--color-muted-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: 99px;
+  padding: 6px 12px;
+  background: var(--color-card);
+}
+.sales-method strong { color: var(--color-foreground); }
+.sales-method--cash { border-color: color-mix(in srgb, #1A7F37 25%, white); color: #1A7F37; }
+.sales-method--cash strong { color: #1A7F37; }
+.sales-method--gcash { border-color: color-mix(in srgb, #1D4ED8 25%, white); color: #1D4ED8; }
+.sales-method--gcash strong { color: #1D4ED8; }
+.sales-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-destructive);
+  border: 1px solid #F3CFCF;
+  background: #FBEAEA;
+  border-radius: 99px;
+  padding: 6px 12px;
 }
 
 /* Expand / collapse for order drill-down */
@@ -83,7 +177,9 @@
 .sales-table td {
   padding: 12px;
   border-bottom: 1px solid var(--color-border);
+  transition: background-color 0.12s ease;
 }
+.sales-table tbody tr:not(.sales-detail-row):hover td { background: var(--color-surface); }
 .sales-table tr:last-child td { border-bottom: none; }
 
 .sales-cell--order { font-weight: 600; color: var(--color-primary); }
@@ -91,27 +187,6 @@
 .sales-more { color: var(--color-muted-foreground); font-size: 0.8rem; }
 .sales-cell--total { font-weight: 600; }
 .sales-cell--time { color: var(--color-muted-foreground); }
-
-.sales-pay {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 99px;
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-.sales-pay--gcash { background: #E1F0FF; color: #1D4ED8; }
-.sales-pay--cash { background: #E9EFE8; color: #4B5563; }
-
-.sales-status {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 99px;
-  font-size: 0.72rem;
-  font-weight: 500;
-  background: #E8EFFB;
-  color: #1D4ED8;
-}
-.sales-empty { text-align: center; color: var(--color-muted-foreground); padding: 24px; }
 
 @media (max-width: 900px) {
   .sales-grid { grid-template-columns: 1fr; }

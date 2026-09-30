@@ -26,11 +26,6 @@
   opacity: 1 !important;
 }
 .ok-conn--off { color: var(--color-destructive); border-color: #F3CFCF; background: #FBEAEA; }
-.ok-conn__dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-}
 
 .ok-split {
   display: grid;
@@ -52,6 +47,13 @@
 }
 
 .ok-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* Unrecognised order_channel bucket — sits below the counter/online grid. */
+.ok-unknown {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--color-border);
+}
 
 .ok-col__header {
   display: flex;
@@ -108,6 +110,9 @@
 .ok-card__bar-fill { height: 100%; background: var(--color-primary); }
 .ok-card__bar--preparing .ok-card__bar-fill { width: 66%; }
 .ok-card__bar--confirmed .ok-card__bar-fill { width: 33%; }
+.ok-card__bar--pending .ok-card__bar-fill { width: 33%; }
+/* Ready is the end of the line, not a step past preparing. */
+.ok-card__bar--ready .ok-card__bar-fill { width: 100%; }
 
 .ok-card__items {
   list-style: none;
@@ -135,3 +140,93 @@
   border-radius: 99px;
   padding: 3px 10px;
 }
+
+/* Handoff section — finished kitchen work waiting to be collected. Neutral
+   rather than urgent: the card is a prompt to hand the order over, and a long
+   wait means the handoff was missed, not that the kitchen is behind. */
+.ok-handoff {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.ok-handoff__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+}
+.ok-handoff__count {
+  min-width: 26px; height: 26px;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--color-primary) 12%, white);
+  color: var(--color-primary);
+}
+.ok-handoff__title { margin: 0; font-size: 1rem; font-weight: 600; }
+.ok-handoff__hint { font-size: 0.78rem; color: var(--color-muted-foreground); }
+.ok-handoff__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ok-card--handoff { border-left: 3px solid var(--color-primary); }
+.ok-card__handoff-note {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, white);
+  border-radius: 99px;
+  padding: 3px 10px;
+}
+
+/* ── Active kitchen alerts strip ──────────────────────────────────────────── */
+.kit-alerts {
+  border: 1px solid #F3CFCF;
+  border-left: 3px solid var(--color-destructive);
+  background: #FFF8F6;
+  border-radius: var(--radius-lg);
+  padding: 14px;
+}
+.kit-alerts__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.kit-alerts__count {
+  min-width: 22px; height: 22px;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--color-destructive);
+}
+.kit-alerts__title { font-size: 0.95rem; font-weight: 600; color: var(--color-foreground); }
+.kit-alerts__hint { font-size: 0.75rem; color: var(--color-muted-foreground); }
+.kit-alerts__list { display: flex; flex-direction: column; gap: 8px; }
+.kit-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  color: var(--color-destructive);
+}
+.kit-alert__body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.kit-alert__order { font-size: 0.875rem; font-weight: 600; color: var(--color-foreground); }
+.kit-alert__loc { font-size: 0.75rem; color: var(--color-muted-foreground); }
+.kit-alert__time { font-size: 0.78rem; color: var(--color-muted-foreground); white-space: nowrap; }

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { ToastProvider } from './context/ToastContext';
 import Login from './pages/auth/Login';
 import CashierPage from './pages/cashier/CashierPage';
 import StaffLayout from './pages/staff/StaffLayout';
@@ -9,7 +10,6 @@ import InventoryPage from './pages/staff/InventoryPage';
 import MenuPage from './pages/staff/MenuPage';
 import DeliveryPage from './pages/staff/DeliveryPage';
 import SupportChatPage from './pages/staff/SupportChatPage';
-import StaffPlaceholder from './pages/staff/StaffPlaceholder';
 import KitchenPage from './pages/kitchen/KitchenPage';
 import AdminLayout from './pages/admin/AdminLayout';
 import StaffAccounts from './pages/admin/StaffAccounts';
@@ -19,9 +19,9 @@ import CustomerRestrictions from './pages/admin/CustomerRestrictions';
 import ManagerLayout from './pages/manager/ManagerLayout';
 import DashboardPage from './pages/manager/DashboardPage';
 import SalesReportPage from './pages/manager/SalesReportPage';
-import OversightPage from './pages/manager/OversightPage';
 import OversightKitchen from './pages/manager/OversightKitchen';
 import OversightStocks from './pages/manager/OversightStocks';
+import OversightMenu from './pages/manager/MenuPage';
 import OversightDelivery from './pages/manager/OversightDelivery';
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -57,8 +57,9 @@ function RoleRedirect() {
 export default function App() {
   return (
     <AuthProvider>
-      <SocketProvider>
-        <BrowserRouter>
+      <ToastProvider>
+        <SocketProvider>
+          <BrowserRouter>
           <Routes>
           <Route path="/login" element={<Login />} />
 
@@ -126,9 +127,14 @@ export default function App() {
             <Route index element={<Navigate to="/manager/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="sales" element={<SalesReportPage />} />
-            <Route path="oversight" element={<OversightPage />} />
+            {/* The oversight launcher was removed as redundant with the
+                dashboard. Its sub-pages are independent sibling routes and
+                stay. This redirect keeps old bookmarks and stale links
+                landing somewhere useful instead of the "*" fallback. */}
+            <Route path="oversight" element={<Navigate to="/manager/dashboard" replace />} />
             <Route path="oversight/kitchen" element={<OversightKitchen />} />
             <Route path="oversight/stocks" element={<OversightStocks />} />
+            <Route path="oversight/menu" element={<OversightMenu />} />
             <Route path="oversight/delivery" element={<OversightDelivery />} />
           </Route>
 
@@ -136,8 +142,9 @@ export default function App() {
           <Route path="/" element={<RoleRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        </BrowserRouter>
-      </SocketProvider>
+          </BrowserRouter>
+        </SocketProvider>
+      </ToastProvider>
     </AuthProvider>
   );
 }

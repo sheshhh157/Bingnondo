@@ -32,7 +32,7 @@ async function processPayment(req, res, next) {
 
     // Fetch order + its payment record together
     const { rows } = await client.query(
-      `SELECT o.id, o.status, o.total_amount::float,
+      `SELECT o.id, o.status AS order_status, o.total_amount::float,
               p.id AS payment_id, p.status AS payment_status
        FROM orders o
        JOIN payments p ON p.order_id = o.id
@@ -46,11 +46,24 @@ async function processPayment(req, res, next) {
       return res.status(404).json({ message: 'Order not found.' });
     }
 
-    const { total_amount, payment_id, payment_status } = rows[0];
+    const { total_amount, payment_id, payment_status, order_status } = rows[0];
 
     if (payment_status === 'paid') {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'This order has already been paid.' });
+    }
+
+    // Never take money for a cancelled order. Without this, a payment could
+    // land after a cancellation and the two would disagree: the report counts
+    // revenue only when the payment is 'paid' and the order is not
+    // 'cancelled', so the money would be collected but reported nowhere.
+    //
+    // Checked after the row lock above, and the same order row is locked by
+    // `POST /api/orders/:id/cancel`, so a payment and a cancellation cannot
+    // interleave — one of these two checks always sees the other's result.
+    if (order_status === 'cancelled') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'This order has been cancelled and cannot be paid.' });
     }
 
     // Cash: validate cash_given covers the total
