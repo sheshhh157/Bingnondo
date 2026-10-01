@@ -77,6 +77,11 @@ export default function StaffLayout() {
         </div>
       </div>
 
+      {/* Dashboard switcher — below brand, above nav */}
+      <div style={{ padding: '4px 8px 8px' }}>
+        <DashboardSwitcher variant="dark" context="sidebar" />
+      </div>
+
       {/* Nav */}
       <nav className="sl-nav" aria-label="Staff navigation">
         {NAV.map(({ to, label, sub, icon }) => (
@@ -116,11 +121,6 @@ export default function StaffLayout() {
                 : 'Staff'}
             </span>
           </div>
-        </div>
-
-        {/* Dashboard switcher — only visible if admin granted access to other dashboards */}
-        <div style={{ padding: '0 12px 8px' }}>
-          <DashboardSwitcher />
         </div>
 
         <button className="sl-user__logout" onClick={handleLogout} aria-label="Sign out">
@@ -178,7 +178,7 @@ export default function StaffLayout() {
           <span className="sl-topbar__name">Bingnondo</span>
         </div>
         {/* Show switcher in mobile topbar too */}
-        <DashboardSwitcher />
+        <DashboardSwitcher variant="dark" context="sidebar" />
         <button
           className="sl-topbar__menu"
           onClick={() => setDrawerOpen(true)}

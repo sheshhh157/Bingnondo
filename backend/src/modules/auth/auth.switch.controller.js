@@ -27,22 +27,18 @@ async function writeAuditLog(actorId, action, targetType, targetId, details = {}
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getSwitchOptions = async (req, res) => {
   try {
-    const staffId = req.user.sub;
+    const staffId  = req.user.sub;
+    // home_role = their real assigned role (always in the token)
+    // active role may differ if they already switched
+    const homeRole = req.user.home_role || req.user.role;
 
-    // Fetch all granted dashboards for this staff member
+    // Fetch all admin-granted dashboards for this staff member
     const { rows: access } = await db.query(
       `SELECT target_dashboard FROM staff_dashboard_access WHERE staff_id = $1`,
       [staffId]
     );
 
-    if (access.length === 0) {
-      return res.json({ data: [] }); // no dashboards granted — hide dropdown
-    }
-
-    // Resolve PIN requirement for each target dashboard:
-    // Priority 1: per_staff config for this staff member
-    // Priority 2: per_dashboard config for the target
-    // Default: false
+    // Resolve PIN config
     const { rows: perStaffConfig } = await db.query(
       `SELECT requires_pin FROM dashboard_switch_config
        WHERE scope = 'per_staff' AND staff_id = $1`,
@@ -61,33 +57,58 @@ exports.getSwitchOptions = async (req, res) => {
 
     const perStaffRequiresPin = perStaffConfig.length > 0
       ? perStaffConfig[0].requires_pin
-      : null; // null = not configured at per_staff level
+      : null;
 
-    // Check if staff has a PIN set at all
+    // Check if staff has a PIN set
     const { rows: pinRow } = await db.query(
       `SELECT EXISTS(SELECT 1 FROM staff_switch_pin WHERE staff_id = $1) AS has_pin`,
       [staffId]
     );
     const hasPin = pinRow[0].has_pin;
 
-    const options = access.map(({ target_dashboard }) => {
+    function resolvePin(dashboard) {
+      // Home dashboard never needs a PIN — always free to go back
+      if (dashboard === homeRole) return false;
       let requiresPin;
       if (perStaffRequiresPin !== null) {
-        // per_staff config takes priority
         requiresPin = perStaffRequiresPin;
-      } else if (target_dashboard in perDashboardMap) {
-        // per_dashboard config is secondary
-        requiresPin = perDashboardMap[target_dashboard];
+      } else if (dashboard in perDashboardMap) {
+        requiresPin = perDashboardMap[dashboard];
       } else {
-        requiresPin = false; // default
+        requiresPin = false;
       }
+      return requiresPin && hasPin;
+    }
 
-      return {
-        dashboard:   target_dashboard,
-        requires_pin: requiresPin && hasPin, // only require PIN if both config says so AND a PIN is actually set
+    // Build granted options (excluding home role — added separately below)
+    const grantedDashboards = access
+      .map(r => r.target_dashboard)
+      .filter(d => d !== homeRole); // avoid duplicate if home is also in access table
+
+    const options = grantedDashboards.map(dashboard => ({
+      dashboard,
+      requires_pin:   resolvePin(dashboard),
+      pin_configured: hasPin,
+      is_home:        false,
+    }));
+
+    // Always prepend the home dashboard so the user can always switch back.
+    // No PIN needed, no admin grant needed — it's their original role.
+    // Only include it if they are currently on a different dashboard.
+    const currentRole = req.user.role;
+    if (currentRole !== homeRole) {
+      options.unshift({
+        dashboard:      homeRole,
+        requires_pin:   false,
         pin_configured: hasPin,
-      };
-    });
+        is_home:        true,
+      });
+    }
+
+    // If no options at all (no granted dashboards and already on home), hide dropdown
+    if (options.length === 0) {
+      return res.json({ data: [] });
+    }
 
     return res.json({ data: options });
   } catch (err) {

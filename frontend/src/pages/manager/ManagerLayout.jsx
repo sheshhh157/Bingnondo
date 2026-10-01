@@ -151,7 +151,7 @@ export default function ManagerLayout() {
         </div>
         <ConnPill connected={connected} />
         {/* Dashboard switcher in mobile topbar */}
-        <DashboardSwitcher />
+        <DashboardSwitcher variant="light" context="header" />
         <button
           className="ml-topbar__menu"
           onClick={() => setDrawerOpen(true)}
@@ -218,6 +218,11 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
         </div>
       </div>
 
+      {/* Dashboard switcher — below brand, above nav */}
+      <div style={{ padding: '4px 0 8px' }}>
+        <DashboardSwitcher variant="light" context="sidebar" />
+      </div>
+
       <nav className="ml-nav" aria-label="Manager navigation">
         {SECTIONS.map((section) => (
           <div key={section.label} className="ml-section">
@@ -272,11 +277,6 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
                 : user?.role || 'manager'}
             </span>
           </div>
-        </div>
-
-        {/* Dashboard switcher — only visible if admin granted access to other dashboards */}
-        <div style={{ padding: '0 12px 8px' }}>
-          <DashboardSwitcher />
         </div>
 
         <button className="ml-user__logout" onClick={onLogout} aria-label="Sign out">
