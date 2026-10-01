@@ -132,35 +132,45 @@ exports.switchDashboard = async (req, res) => {
       return res.status(400).json({ message: 'target_dashboard is required.' });
     }
 
-    // 1. Verify this staff member actually has access to the target dashboard
-    const { rows: access } = await db.query(
-      `SELECT id FROM staff_dashboard_access
-       WHERE staff_id = $1 AND target_dashboard = $2`,
-      [staffId, target_dashboard]
-    );
-    if (access.length === 0) {
-      return res.status(403).json({
-        message: "You don't have permission to switch to this dashboard.",
-      });
+    // 1. Verify this staff member has access to the target dashboard.
+    //    Exception: switching back to their home_role is ALWAYS allowed —
+    //    no admin grant needed (it's their own original role).
+    const homeRole = req.user.home_role || req.user.role;
+    const isGoingHome = target_dashboard === homeRole;
+
+    if (!isGoingHome) {
+      const { rows: access } = await db.query(
+        `SELECT id FROM staff_dashboard_access
+         WHERE staff_id = $1 AND target_dashboard = $2`,
+        [staffId, target_dashboard]
+      );
+      if (access.length === 0) {
+        return res.status(403).json({
+          message: "You don't have permission to switch to this dashboard.",
+        });
+      }
     }
 
     // 2. Resolve whether a PIN is required
-    const { rows: perStaffConfig } = await db.query(
-      `SELECT requires_pin FROM dashboard_switch_config
-       WHERE scope = 'per_staff' AND staff_id = $1`,
-      [staffId]
-    );
-    const { rows: perDashboardConfig } = await db.query(
-      `SELECT requires_pin FROM dashboard_switch_config
-       WHERE scope = 'per_dashboard' AND target_dashboard = $1`,
-      [target_dashboard]
-    );
-
+    //    Going home never requires a PIN.
     let requiresPin = false;
-    if (perStaffConfig.length > 0) {
-      requiresPin = perStaffConfig[0].requires_pin;
-    } else if (perDashboardConfig.length > 0) {
-      requiresPin = perDashboardConfig[0].requires_pin;
+    if (!isGoingHome) {
+      const { rows: perStaffConfig } = await db.query(
+        `SELECT requires_pin FROM dashboard_switch_config
+         WHERE scope = 'per_staff' AND staff_id = $1`,
+        [staffId]
+      );
+      const { rows: perDashboardConfig } = await db.query(
+        `SELECT requires_pin FROM dashboard_switch_config
+         WHERE scope = 'per_dashboard' AND target_dashboard = $1`,
+        [target_dashboard]
+      );
+
+      if (perStaffConfig.length > 0) {
+        requiresPin = perStaffConfig[0].requires_pin;
+      } else if (perDashboardConfig.length > 0) {
+        requiresPin = perDashboardConfig[0].requires_pin;
+      }
     }
 
     // 3. If PIN is required, verify it
