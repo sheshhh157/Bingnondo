@@ -53,7 +53,7 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
         </div>
 
         {/* Dashboard switcher — only visible if admin granted access to other dashboards */}
-        <DashboardSwitcher variant="dark" context="header" />
+        <DashboardSwitcher variant="light" context="header" />
 
         <div className="kp-header__user">
           <span className="kp-header__username">

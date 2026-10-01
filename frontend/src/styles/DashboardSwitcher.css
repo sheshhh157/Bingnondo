@@ -49,7 +49,7 @@
   border-color: rgba(201,150,60,0.4);
 }
 
-/* light variant (Manager) */
+/* light variant (Manager, Kitchen) */
 .ds-trigger--light {
   background: rgba(0,0,0,0.04);
   border-color: rgba(0,0,0,0.12);
@@ -64,6 +64,23 @@
   background: rgba(201,150,60,0.1);
   color: #7a5a1a;
   border-color: rgba(201,150,60,0.45);
+}
+
+/* colored variant (Cashier — dark colored header bg) */
+.ds-trigger--colored {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.25);
+  color: rgba(255,248,230,0.85);
+}
+.ds-trigger--colored:hover:not(:disabled) {
+  background: rgba(255,255,255,0.22);
+  color: #fff8e6;
+  border-color: rgba(255,255,255,0.4);
+}
+.ds-trigger--colored.ds-trigger--open {
+  background: rgba(255,255,255,0.22);
+  color: #fff8e6;
+  border-color: rgba(255,230,100,0.5);
 }
 
 /* ── Dropdown panel ─────────────────────────────────────────── */
@@ -130,9 +147,30 @@
   background: rgba(201,150,60,0.07);
   color: #1e1e1e;
 }
-.ds-dropdown--light .ds-dropdown__icon  { color: #c9963c; }
+.ds-dropdown--light .ds-dropdown__icon      { color: #c9963c; }
 .ds-dropdown--light .ds-dropdown__pin-badge { color: rgba(30,30,30,0.3); }
 .ds-dropdown--light .ds-dropdown__current   { color: #b8860b; }
+
+/* colored dropdown (Cashier) — cream bg, dark text */
+.ds-dropdown--colored {
+  background: #FFF8EC;
+  border: 1px solid rgba(185,28,28,0.15);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+}
+.ds-dropdown--colored .ds-dropdown__header {
+  color: rgba(26,10,0,0.35);
+  border-bottom: 1px solid rgba(26,10,0,0.07);
+}
+.ds-dropdown--colored .ds-dropdown__item {
+  color: rgba(26,10,0,0.75);
+}
+.ds-dropdown--colored .ds-dropdown__item:hover:not(:disabled) {
+  background: rgba(185,28,28,0.06);
+  color: #1a0a00;
+}
+.ds-dropdown--colored .ds-dropdown__icon      { color: #b91c1c; }
+.ds-dropdown--colored .ds-dropdown__pin-badge { color: rgba(26,10,0,0.3); }
+.ds-dropdown--colored .ds-dropdown__current   { color: #b91c1c; }
 
 /* shared dropdown internals */
 .ds-dropdown__header {
@@ -216,9 +254,27 @@
 }
 .ds-pin-modal--light .ds-pin-input:focus { border-color: rgba(201,150,60,0.6); }
 
+/* colored modal (Cashier) */
+.ds-pin-modal--colored {
+  background: #FFF8EC;
+  border: 1px solid rgba(185,28,28,0.15);
+}
+.ds-pin-modal--colored .ds-pin-modal__title { color: #1a0a00; }
+.ds-pin-modal--colored .ds-pin-modal__close { color: rgba(26,10,0,0.35); }
+.ds-pin-modal--colored .ds-pin-modal__close:hover { color: #1a0a00; }
+.ds-pin-modal--colored .ds-pin-modal__sub  { color: rgba(26,10,0,0.5); }
+.ds-pin-modal--colored .ds-pin-modal__head { border-bottom-color: rgba(26,10,0,0.07); }
+.ds-pin-modal--colored .ds-pin-input {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(185,28,28,0.2);
+  color: #1a0a00;
+}
+.ds-pin-modal--colored .ds-pin-input:focus { border-color: rgba(185,28,28,0.5); }
+
 /* shared modal structure */
 .ds-pin-modal--dark,
-.ds-pin-modal--light {
+.ds-pin-modal--light,
+.ds-pin-modal--colored {
   border-radius: 14px;
   width: 100%;
   max-width: 340px;

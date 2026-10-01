@@ -57,7 +57,7 @@ export default function CashierHeader({ user, view, onViewChange, onLogout, draf
       {/* Right: dashboard switcher + user info + logout */}
       <div className="c-header__user">
         {/* Dashboard switcher — only visible if admin granted access to other dashboards */}
-        <DashboardSwitcher variant="dark" context="header" />
+        <DashboardSwitcher variant="colored" context="header" />
 
         <div className="c-header__avatar" aria-hidden="true">
           {user?.full_name?.[0]?.toUpperCase() || 'C'}
