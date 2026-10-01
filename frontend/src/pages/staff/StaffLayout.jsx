@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import DashboardSwitcher from '../../components/DashboardSwitcher';
 import '../../styles/StaffLayout.css';
 import logo from '../../assets/logo.png';
 
@@ -101,7 +102,7 @@ export default function StaffLayout() {
         ))}
       </nav>
 
-      {/* User + logout */}
+      {/* User + dashboard switcher + logout */}
       <div className="sl-user">
         <div className="sl-user__card">
           <div className="sl-user__avatar" aria-hidden="true">
@@ -109,9 +110,19 @@ export default function StaffLayout() {
           </div>
           <div className="sl-user__info">
             <span className="sl-user__name">{user?.full_name || 'Staff'}</span>
-            <span className="sl-user__role">{user?.role || 'staff'}</span>
+            <span className="sl-user__role">
+              {user?.home_role && user.home_role !== user.role
+                ? `Staff (switched)`
+                : 'Staff'}
+            </span>
           </div>
         </div>
+
+        {/* Dashboard switcher — only visible if admin granted access to other dashboards */}
+        <div style={{ padding: '0 12px 8px' }}>
+          <DashboardSwitcher />
+        </div>
+
         <button className="sl-user__logout" onClick={handleLogout} aria-label="Sign out">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -166,6 +177,8 @@ export default function StaffLayout() {
           <img src={logo} alt="Bingnondo logo" width="26" height="26" />
           <span className="sl-topbar__name">Bingnondo</span>
         </div>
+        {/* Show switcher in mobile topbar too */}
+        <DashboardSwitcher />
         <button
           className="sl-topbar__menu"
           onClick={() => setDrawerOpen(true)}

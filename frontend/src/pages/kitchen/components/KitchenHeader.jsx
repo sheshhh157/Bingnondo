@@ -1,4 +1,5 @@
 import { useAuth } from '../../../context/AuthContext';
+import DashboardSwitcher from '../../../components/DashboardSwitcher';
 import logo1 from '../../../assets/logo2.png';
 
 export default function KitchenHeader({ counterCount, onlineCount }) {
@@ -18,9 +19,7 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
         />
         <div className="kp-header__brand-text">
           <span className="kp-header__name">Bingnondo</span>
-          <span className="kp-header__role">
-            Kitchen Display
-          </span>
+          <span className="kp-header__role">Kitchen Display</span>
         </div>
       </div>
 
@@ -46,12 +45,16 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
         </div>
       </div>
 
-      {/* Clock + user */}
+      {/* Clock + switcher + user */}
       <div className="kp-header__right">
         <div className="kp-header__clock" aria-label={`Time: ${timeStr}`}>
           <span className="kp-header__time">{timeStr}</span>
           <span className="kp-header__date">{dateStr}</span>
         </div>
+
+        {/* Dashboard switcher — only visible if admin granted access to other dashboards */}
+        <DashboardSwitcher />
+
         <div className="kp-header__user">
           <span className="kp-header__username">
             {user?.full_name || user?.name || 'Kitchen'}

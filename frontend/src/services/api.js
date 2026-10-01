@@ -437,334 +437,145 @@ function paginate(arr, page=1, limit=10) {
   return { data: arr.slice(start, start+limit), totalPages: Math.max(1, Math.ceil(arr.length/limit)), total: arr.length };
 }
 
+
+// ─── SWITCH DASHBOARD API ─────────────────────────────────────────────────────
+// These hit the real backend — no mock needed.
+export const switchAPI = {
+  /** GET /api/auth/staff/switch-options — dashboards this staff can switch to */
+  getOptions: () => apiRequest('/auth/staff/switch-options'),
+
+  /** POST /api/auth/staff/switch-dashboard — perform the switch */
+  switch: (body) =>
+    apiRequest('/auth/staff/switch-dashboard', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** POST /api/auth/staff/switch-pin/update — staff updates own PIN */
+  updatePin: (body) =>
+    apiRequest('/auth/staff/switch-pin/update', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+};
+
+// ─── ADMIN API (real backend — replaces mock) ─────────────────────────────────
 export const adminAPI = {
-  // ── Staff Accounts ──────────────────────────────────────────────────
-  listStaffAccounts: async ({ page=1, limit=10, search, role, status } = {}) => {
-    await delay(350);
-    let result = [...MOCK_STAFF_ACCOUNTS];
-    if (search) result = result.filter(a => a.full_name.toLowerCase().includes(search.toLowerCase()) || a.email.toLowerCase().includes(search.toLowerCase()));
-    if (role)   result = result.filter(a => a.role   === role);
-    if (status) result = result.filter(a => a.status === status);
-    return { data: paginate(result, page, limit) };
+  // ── Staff Accounts ──────────────────────────────────────────────────────────
+  listStaffAccounts: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.page)   q.set('page',   params.page);
+    if (params.limit)  q.set('limit',  params.limit);
+    if (params.search) q.set('search', params.search);
+    if (params.role)   q.set('role',   params.role);
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString();
+    return apiRequest(`/admin/staff-accounts${qs ? `?${qs}` : ''}`);
   },
 
-  createStaffAccount: async (data) => {
-    await delay(400);
-    const account = { id: ++staffAccountCounter, ...data, status:'active', created_at: new Date().toISOString() };
-    MOCK_STAFF_ACCOUNTS.push(account);
-    addAuditEntry('create', 'staff_account', account.id, { role: data.role });
-    return { data: account };
+  getStaffAccount: (id) =>
+    apiRequest(`/admin/staff-accounts/${id}`),
+
+  createStaffAccount: (data) =>
+    apiRequest('/admin/staff-accounts', {
+      method: 'POST',
+      body: JSON.stringify({
+        full_name: data.full_name,
+        email:     data.email,
+        password:  data.temp_password,   // backend expects 'password'
+        role:      data.role,
+      }),
+    }),
+
+  updateStaffStatus: (id, status) =>
+    apiRequest(`/admin/staff-accounts/${id}/status`, {
+      method: 'PATCH',
+      // Frontend passes 'inactive', backend expects 'deactivated'
+      body: JSON.stringify({ status: status === 'inactive' ? 'deactivated' : status }),
+    }),
+
+  resetStaffPassword: (id, new_password) =>
+    apiRequest(`/admin/staff-accounts/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password }),
+    }),
+
+  // ── Dashboard Access ────────────────────────────────────────────────────────
+  getDashboardAccess: (id) =>
+    apiRequest(`/admin/staff-accounts/${id}/dashboard-access`),
+
+  setDashboardAccess: (id, dashboards) =>
+    apiRequest(`/admin/staff-accounts/${id}/dashboard-access`, {
+      method: 'PUT',
+      body: JSON.stringify({ dashboards }),
+    }),
+
+  // ── Switch PIN (admin sets for staff) ───────────────────────────────────────
+  setStaffSwitchPin: (id, pin) =>
+    apiRequest(`/admin/staff-accounts/${id}/switch-pin`, {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
+    }),
+
+  removeStaffSwitchPin: (id) =>
+    apiRequest(`/admin/staff-accounts/${id}/switch-pin`, { method: 'DELETE' }),
+
+  // ── Switch Config ───────────────────────────────────────────────────────────
+  getSwitchConfig: () =>
+    apiRequest('/admin/switch-config'),
+
+  setPerStaffSwitchConfig: (staffId, requires_pin) =>
+    apiRequest(`/admin/switch-config/per-staff/${staffId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ requires_pin }),
+    }),
+
+  setPerDashboardSwitchConfig: (dashboard, requires_pin) =>
+    apiRequest(`/admin/switch-config/per-dashboard/${dashboard}`, {
+      method: 'PUT',
+      body: JSON.stringify({ requires_pin }),
+    }),
+
+  // ── Audit Log ───────────────────────────────────────────────────────────────
+  getAuditLog: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.page)       q.set('page',        params.page);
+    if (params.limit)      q.set('limit',        params.limit);
+    if (params.actor_id)   q.set('actor_id',     params.actor_id);
+    if (params.action)     q.set('action',        params.action);
+    if (params.from)       q.set('from',          params.from);
+    if (params.to)         q.set('to',            params.to);
+    const qs = q.toString();
+    return apiRequest(`/admin/audit-log${qs ? `?${qs}` : ''}`);
   },
 
-  updateStaffStatus: async (id, status) => {
-    await delay(300);
-    const account = MOCK_STAFF_ACCOUNTS.find(a => a.id === Number(id));
-    if (account) account.status = status;
-    addAuditEntry(status==='active'?'reactivate':'deactivate', 'staff_account', Number(id), {});
-    return { data: { success: true } };
-  },
-
-  resetStaffPassword: async (id) => {
-    await delay(300);
-    addAuditEntry('reset_password', 'staff_account', Number(id), {});
-    return { data: { success: true } };
-  },
-
-  // ── Settings ────────────────────────────────────────────────────────
+  // ── Settings (still mock until backend ready) ────────────────────────────────
   getSettings: async () => {
-    await delay(300);
+    const MOCK_SETTINGS = {
+      paymongo_key: '', openai_key: '', gemini_key: '',
+      business_hours: {
+        Monday:    { open:'07:00', close:'22:00', closed:false },
+        Tuesday:   { open:'07:00', close:'22:00', closed:false },
+        Wednesday: { open:'07:00', close:'22:00', closed:false },
+        Thursday:  { open:'07:00', close:'22:00', closed:false },
+        Friday:    { open:'07:00', close:'23:00', closed:false },
+        Saturday:  { open:'08:00', close:'23:00', closed:false },
+        Sunday:    { open:'08:00', close:'21:00', closed:false },
+      },
+      menu_categories: ['Silog Meals','Rice Meals','Merienda','Drinks','Add-ons'],
+    };
     return { data: { ...MOCK_SETTINGS } };
   },
 
   updateSettings: async (updates) => {
-    await delay(300);
-    Object.assign(MOCK_SETTINGS, updates);
-    const field = Object.keys(updates)[0];
-    addAuditEntry('update_settings', 'settings', null, { field });
     return { data: { success: true } };
   },
 
-  // ── ESP32 Devices ────────────────────────────────────────────────────
-  listDevices: async () => {
-    await delay(250);
-    return { data: [...MOCK_DEVICES] };
-  },
-
-  registerDevice: async (data) => {
-    await delay(350);
-    const device = { id: ++deviceCounter, ...data, is_online: false };
-    MOCK_DEVICES.push(device);
-    addAuditEntry('register_device', 'esp32_device', device.id, { label: data.location_label });
-    return { data: device };
-  },
-
-  removeDevice: async (id) => {
-    await delay(300);
-    const device = MOCK_DEVICES.find(d => d.id === Number(id));
-    MOCK_DEVICES = MOCK_DEVICES.filter(d => d.id !== Number(id));
-    addAuditEntry('remove_device', 'esp32_device', Number(id), { label: device?.location_label });
-    return { data: { success: true } };
-  },
-
-  // ── Audit Log ────────────────────────────────────────────────────────
-  getAuditLog: async ({ page=1, limit=20, actor_id, action, from, to } = {}) => {
-    await delay(350);
-    let result = [...MOCK_AUDIT_LOG];
-    if (actor_id) result = result.filter(e => String(e.actor_id) === String(actor_id));
-    if (action)   result = result.filter(e => e.action === action);
-    if (from)     result = result.filter(e => new Date(e.created_at) >= new Date(from));
-    if (to)       result = result.filter(e => new Date(e.created_at) <= new Date(to + 'T23:59:59'));
-    return { data: paginate(result, page, limit) };
-  },
-};
-// ─── CUSTOMER RESTRICTIONS (6.4) ───────────────────────────────────────────────
-
-let MOCK_CUSTOMER_RESTRICTIONS = [
-  {
-    customer_id: 1001, customer_name: 'Jose Rizal',     customer_email: 'jose@gmail.com',
-    restriction_level: 'suspended',      violation_count: 4,
-    reason: 'Repeated no-show after 3rd order in 30 days.',
-    updated_by: 1, updated_by_name: 'System Admin',
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    customer_id: 1002, customer_name: 'Maria Clara',    customer_email: 'mclara@yahoo.com',
-    restriction_level: 'cod_restricted', violation_count: 3,
-    reason: 'Third cancellation within 30-day window.',
-    updated_by: null, updated_by_name: null,
-    updated_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-  },
-  {
-    customer_id: 1003, customer_name: 'Andres Bonifacio', customer_email: 'andres@mail.ph',
-    restriction_level: 'warned',         violation_count: 2,
-    reason: null, updated_by: null, updated_by_name: null,
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-  },
-  {
-    customer_id: 1004, customer_name: 'Gabriela Silang',  customer_email: 'gsilang@hotmail.com',
-    restriction_level: 'none',           violation_count: 1,
-    reason: null, updated_by: null, updated_by_name: null,
-    updated_at: null,
-  },
-  {
-    customer_id: 1005, customer_name: 'Apolinario Mabini', customer_email: 'sublimeparalytico@ph.net',
-    restriction_level: 'suspended',      violation_count: 5,
-    reason: 'Persistent no-show. Admin review required.',
-    updated_by: 1, updated_by_name: 'System Admin',
-    updated_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-  },
-];
-
-const MOCK_VIOLATIONS = {
-  1001: [
-    { id: 101, order_id: 5011, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*3).toISOString()  },
-    { id: 102, order_id: 4892, violation_type: 'cancelled_after_prep',  created_at: new Date(Date.now()-86400000*10).toISOString() },
-    { id: 103, order_id: 4701, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*18).toISOString() },
-    { id: 104, order_id: 4500, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*25).toISOString() },
-  ],
-  1002: [
-    { id: 201, order_id: 5100, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*5).toISOString()  },
-    { id: 202, order_id: 4980, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*12).toISOString() },
-    { id: 203, order_id: 4810, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*20).toISOString() },
-  ],
-  1003: [
-    { id: 301, order_id: 5050, violation_type: 'cancelled_after_prep',  created_at: new Date(Date.now()-86400000*1).toISOString()  },
-    { id: 302, order_id: 4920, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*8).toISOString()  },
-  ],
-  1004: [
-    { id: 401, order_id: 5200, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*2).toISOString()  },
-  ],
-  1005: [
-    { id: 501, order_id: 5300, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*1).toISOString()  },
-    { id: 502, order_id: 5280, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*7).toISOString()  },
-    { id: 503, order_id: 5200, violation_type: 'cancelled_after_prep',  created_at: new Date(Date.now()-86400000*14).toISOString() },
-    { id: 504, order_id: 5150, violation_type: 'cancelled_before_prep', created_at: new Date(Date.now()-86400000*21).toISOString() },
-    { id: 505, order_id: 5000, violation_type: 'no_show',               created_at: new Date(Date.now()-86400000*28).toISOString() },
-  ],
+  listDevices: async () => ({ data: [] }),
+  registerDevice: async (data) => ({ data: { id: Date.now(), ...data, is_online: false } }),
+  removeDevice: async () => ({ data: { success: true } }),
 };
 
-export const customerRestrictionsAPI = {
-  listCustomerRestrictions: async ({ page = 1, limit = 12, search, restriction_level } = {}) => {
-    await delay(350);
-    let result = [...MOCK_CUSTOMER_RESTRICTIONS];
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(c =>
-        c.customer_name.toLowerCase().includes(q) ||
-        c.customer_email.toLowerCase().includes(q)
-      );
-    }
-    if (restriction_level) result = result.filter(c => c.restriction_level === restriction_level);
-    return { data: paginate(result, page, limit) };
-  },
-
-  getCustomerViolations: async (customerId) => {
-    await delay(250);
-    const viols = MOCK_VIOLATIONS[Number(customerId)] || [];
-    return { data: viols };
-  },
-
-  overrideCustomerRestriction: async (customerId, { restriction_level, reason }) => {
-    await delay(400);
-    const customer = MOCK_CUSTOMER_RESTRICTIONS.find(c => c.customer_id === Number(customerId));
-    if (customer) {
-      customer.restriction_level = restriction_level;
-      customer.reason            = reason;
-      customer.updated_by        = 1;
-      customer.updated_by_name   = 'System Admin';
-      customer.updated_at        = new Date().toISOString();
-    }
-    addAuditEntry('override_restriction', 'customer', Number(customerId), { restriction_level, reason });
-    return { data: { success: true } };
-  },
-};
-
-// Re-export customerRestrictionsAPI methods on adminAPI for convenience
-Object.assign(adminAPI, {
-  listCustomerRestrictions:      customerRestrictionsAPI.listCustomerRestrictions,
-  getCustomerViolations:         customerRestrictionsAPI.getCustomerViolations,
-  overrideCustomerRestriction:   customerRestrictionsAPI.overrideCustomerRestriction,
-});
-// ─── DELIVERY MOCK DATA (§4.3) ────────────────────────────────────────────────
-let MOCK_DELIVERIES = [
-  {
-    id: 1,
-    order_id: 1003,
-    status: 'pending_assignment',
-    delivery_preference: 'own',
-    rider_name: null,
-    rider_contact: null,
-    lalamove_booking_id: null,
-    order: {
-      order_number: 'ORD-1003',
-      created_at: hrsAgo(0.13),
-      customer_name: 'Maria Santos',
-      customer_address: '45 Rizal St., Binondo, Manila',
-      order_items: [
-        { quantity: 1, menu_item: { name: 'Tapsilog' } },
-        { quantity: 2, menu_item: { name: 'Iced Tea' } },
-      ],
-    },
-  },
-  {
-    id: 2,
-    order_id: 1004,
-    status: 'pending_assignment',
-    delivery_preference: 'lalamove',
-    rider_name: null,
-    rider_contact: null,
-    lalamove_booking_id: null,
-    order: {
-      order_number: 'ORD-1004',
-      created_at: hrsAgo(0.2),
-      customer_name: 'Jose Reyes',
-      customer_address: '12 Ongpin St., Binondo, Manila',
-      order_items: [
-        { quantity: 1, menu_item: { name: 'Sinigang Set' } },
-        { quantity: 1, menu_item: { name: 'Extra Rice' } },
-      ],
-    },
-  },
-  {
-    id: 3,
-    order_id: 1005,
-    status: 'assigned',
-    delivery_preference: 'own',
-    rider_name: 'Carlo Mendoza',
-    rider_contact: '09171234567',
-    lalamove_booking_id: null,
-    order: {
-      order_number: 'ORD-1005',
-      created_at: hrsAgo(0.42),
-      customer_name: 'Ana Cruz',
-      customer_address: '78 Nueva St., Binondo, Manila',
-      order_items: [
-        { quantity: 2, menu_item: { name: 'Longsilog' } },
-        { quantity: 2, menu_item: { name: 'Bottled Water' } },
-      ],
-    },
-  },
-  {
-    id: 4,
-    order_id: 1006,
-    status: 'assigned',
-    delivery_preference: 'lalamove',
-    rider_name: null,
-    rider_contact: null,
-    lalamove_booking_id: 'LLM-20248801',
-    order: {
-      order_number: 'ORD-1006',
-      created_at: hrsAgo(0.5),
-      customer_name: 'Pedro Lim',
-      customer_address: '3 Yuchengco St., Binondo, Manila',
-      order_items: [
-        { quantity: 1, menu_item: { name: 'Fried Chicken' } },
-        { quantity: 1, menu_item: { name: 'Coke Regular' } },
-      ],
-    },
-  },
-  {
-    id: 5,
-    order_id: 1007,
-    status: 'out_for_delivery',
-    delivery_preference: 'own',
-    rider_name: 'Ramon Garcia',
-    rider_contact: '09189876543',
-    lalamove_booking_id: null,
-    order: {
-      order_number: 'ORD-1007',
-      created_at: hrsAgo(0.75),
-      customer_name: 'Luz Tan',
-      customer_address: '22 Carvajal St., Binondo, Manila',
-      order_items: [
-        { quantity: 1, menu_item: { name: 'Bangsilog' } },
-        { quantity: 1, menu_item: { name: 'Pineapple Juice' } },
-        { quantity: 1, menu_item: { name: 'Extra Egg' } },
-      ],
-    },
-  },
-  {
-    id: 6,
-    order_id: 1008,
-    status: 'delivered',
-    delivery_preference: 'own',
-    rider_name: 'Carlo Mendoza',
-    rider_contact: '09171234567',
-    lalamove_booking_id: null,
-    order: {
-      order_number: 'ORD-1008',
-      created_at: hrsAgo(1.5),
-      customer_name: 'Rosa Villanueva',
-      customer_address: '5 Globo de Oro St., Binondo, Manila',
-      order_items: [
-        { quantity: 3, menu_item: { name: 'Adobo Rice' } },
-        { quantity: 3, menu_item: { name: 'Iced Tea' } },
-      ],
-    },
-  },
-  {
-    id: 7,
-    order_id: 1009,
-    status: 'cancelled',
-    delivery_preference: 'own',
-    rider_name: null,
-    rider_contact: null,
-    lalamove_booking_id: null,
-    order: {
-      order_number: 'ORD-1009',
-      created_at: hrsAgo(2),
-      customer_name: 'Tony Uy',
-      customer_address: '88 Quintin Paredes St., Binondo, Manila',
-      order_items: [
-        { quantity: 1, menu_item: { name: 'Cornsilog' } },
-      ],
-    },
-  },
-];
-
-let deliveryCounter = 8;
-
-// ─── DELIVERY API (§4.3) ──────────────────────────────────────────────────────
 export const deliveryAPI = {
   /** GET /api/deliveries — all deliveries for staff view */
   getAll: async () => {

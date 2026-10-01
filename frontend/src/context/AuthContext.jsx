@@ -1,17 +1,39 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authClient } from '../services/apiClient';
 import { connectSocket, disconnectSocket } from '../services/socket';
+import { switchAPI } from '../services/api';
 
 const AuthContext = createContext(null);
 
-export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null);
-  const [loading, setLoading] = useState(true);
+const SOCKET_ROOM_MAP = {
+  cashier:       'cashier',
+  kitchen_staff: 'kitchen',
+  staff:         'staff',
+  owner:         'manager',
+  admin:         'manager',
+};
 
+export function AuthProvider({ children }) {
+  const [user, setUser]                   = useState(null);
+  const [loading, setLoading]             = useState(true);
+  // Dashboards this user can switch to (fetched after login)
+  const [switchOptions, setSwitchOptions] = useState([]);
+
+  // ── Restore session from localStorage ────────────────────────────────────────
   useEffect(() => {
     const stored = localStorage.getItem('bingnondo_user');
     if (stored) {
-      try { setUser(JSON.parse(stored)); } catch { localStorage.clear(); }
+      try {
+        const parsed = JSON.parse(stored);
+        setUser(parsed);
+        // Restore switch options if they were cached
+        const cachedOptions = localStorage.getItem('bingnondo_switch_options');
+        if (cachedOptions) {
+          try { setSwitchOptions(JSON.parse(cachedOptions)); } catch { /* ignore */ }
+        }
+      } catch {
+        localStorage.clear();
+      }
     }
     setLoading(false);
 
@@ -20,47 +42,90 @@ export function AuthProvider({ children }) {
       localStorage.clear();
       disconnectSocket();
       setUser(null);
+      setSwitchOptions([]);
       window.location.replace('/login');
     };
     window.addEventListener('auth:expired', onExpired);
     return () => window.removeEventListener('auth:expired', onExpired);
   }, []);
 
+  // ── Fetch switch options (called after login + after any switch) ──────────────
+  const fetchSwitchOptions = useCallback(async () => {
+    try {
+      const res = await switchAPI.getOptions();
+      const options = res.data?.data || [];
+      setSwitchOptions(options);
+      localStorage.setItem('bingnondo_switch_options', JSON.stringify(options));
+    } catch {
+      // Not fatal — user just won't see the dropdown
+      setSwitchOptions([]);
+    }
+  }, []);
+
+  // ── Login ─────────────────────────────────────────────────────────────────────
   const login = useCallback(async (credentials) => {
-    // authClient.staffLogin returns the raw backend response:
-    // { accessToken, refreshToken, user, message }
-    // (no { data: ... } wrapper — backend sends these at top level)
     const res = await authClient.staffLogin(credentials);
     const userData = res.user;
 
-    // Persist user for page reloads
     localStorage.setItem('bingnondo_user', JSON.stringify(userData));
     setUser(userData);
 
-    // Join the correct socket room for this role
-    const roomMap = {
-      cashier:       'cashier',
-      kitchen_staff: 'kitchen',
-      staff:         'staff',
-      owner:         'manager',
-      admin:         'manager',
-    };
-    connectSocket(roomMap[userData.role]);
+    connectSocket(SOCKET_ROOM_MAP[userData.role]);
+
+    // Fetch which dashboards this staff can switch to (non-blocking)
+    // Admin never gets the switcher (they must re-login for other dashboards)
+    if (userData.role !== 'admin') {
+      fetchSwitchOptions();
+    }
 
     return userData;
-  }, []);
+  }, [fetchSwitchOptions]);
 
+  // ── Switch Dashboard ──────────────────────────────────────────────────────────
+  // Called by DashboardSwitcher component.
+  // Returns { success: true } or throws with { message, pin_required }
+  const switchDashboard = useCallback(async (targetDashboard, pin = null) => {
+    const body = { target_dashboard: targetDashboard };
+    if (pin) body.pin = pin;
+
+    const res = await switchAPI.switch(body);
+    const { accessToken, refreshToken, user: updatedUser, active_dashboard, home_role } = res.data;
+
+    // Persist new tokens — the new accessToken carries the switched role
+    localStorage.setItem('bingnondo_access_token', accessToken);
+    localStorage.setItem('bingnondo_refresh_token', refreshToken);
+
+    // Build the updated user object — role = active dashboard
+    const newUserData = {
+      ...updatedUser,
+      role:      active_dashboard,
+      home_role: home_role,
+    };
+    localStorage.setItem('bingnondo_user', JSON.stringify(newUserData));
+    setUser(newUserData);
+
+    // Switch socket room
+    disconnectSocket();
+    connectSocket(SOCKET_ROOM_MAP[active_dashboard] || active_dashboard);
+
+    // Refresh switch options (they may have changed)
+    fetchSwitchOptions();
+
+    return { success: true };
+  }, [fetchSwitchOptions]);
+
+  // ── Logout ────────────────────────────────────────────────────────────────────
   const logout = useCallback(() => {
     authClient.logout().catch(() => {});
     localStorage.clear();
     disconnectSocket();
     setUser(null);
-    // Replace the entire history stack so back button can't return to protected pages
+    setSwitchOptions([]);
     window.location.replace('/login');
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, switchDashboard, switchOptions, fetchSwitchOptions }}>
       {children}
     </AuthContext.Provider>
   );
