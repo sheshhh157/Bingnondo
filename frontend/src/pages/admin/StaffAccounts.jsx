@@ -224,7 +224,7 @@ function DashboardAccessModal({ open, onClose, account, toast, onSaved }) {
       .then(res => {
         const d = res.data?.data || res.data;
         setAccess(d);
-        setSelected((d.granted_dashboards || []).map(g => g.dashboard));
+        setSelected((d.granted_dashboards || []).map(g => g.target_dashboard || g.dashboard));
         setPerStaffPin(d.per_staff_requires_pin ?? null);
       })
       .catch(() => toast.error('Failed to load access settings.'))
@@ -241,7 +241,7 @@ function DashboardAccessModal({ open, onClose, account, toast, onSaved }) {
       // shows the correct checked state without a refetch
       setAccess(prev => ({
         ...prev,
-        granted_dashboards: selected.map(d => ({ dashboard: d })),
+        granted_dashboards: selected.map(d => ({ target_dashboard: d })),
       }));
 
       onSaved(); // refresh the parent table row's "Access" column count
@@ -420,7 +420,6 @@ function DashboardAccessModal({ open, onClose, account, toast, onSaved }) {
 
 // ── Staff table row ───────────────────────────────────────────────────────────
 function StaffRow({ account, onStatusChange, onReset, onManageAccess, actionLoading }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const isActive = account.status === 'active';
   const busy = actionLoading === account.id;
 
@@ -438,7 +437,6 @@ function StaffRow({ account, onStatusChange, onReset, onManageAccess, actionLoad
       <td><Badge type={account.role} label={ROLE_LABELS[account.role]||account.role}/></td>
       <td><Badge type={isActive?'active':'inactive'} label={isActive?'Active':'Inactive'}/></td>
       <td>
-        {/* Show granted dashboard count if any */}
         {account.dashboard_access && account.dashboard_access.length > 0 ? (
           <span style={{fontSize:'0.7rem',color:'rgba(201,150,60,0.8)',fontWeight:500}}>
             {account.dashboard_access.length} dashboard{account.dashboard_access.length > 1 ? 's' : ''}
@@ -451,29 +449,59 @@ function StaffRow({ account, onStatusChange, onReset, onManageAccess, actionLoad
         {new Date(account.created_at).toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})}
       </td>
       <td className="ap-table__th--right">
-        <div className="ap-menu-wrap">
-          <Btn variant="ghost" size="icon" onClick={()=>setMenuOpen(o=>!o)} disabled={busy} aria-label="Actions">
-            {busy ? <Spinner size={13}/> : <span style={{letterSpacing:'0.1em',fontSize:'1rem'}}>···</span>}
-          </Btn>
-          {menuOpen && (
-            <>
-              <div className="ap-menu__backdrop" onClick={()=>setMenuOpen(false)}/>
-              <div className="ap-menu">
-                <button className="ap-menu__item" onClick={()=>{setMenuOpen(false);onManageAccess(account);}}>
-                  Manage dashboard access
-                </button>
-                <button className="ap-menu__item" onClick={()=>{setMenuOpen(false);onReset(account);}}>Reset password</button>
-                <div className="ap-menu__divider"/>
-                <button
-                  className={`ap-menu__item ap-menu__item--${isActive?'danger':'success'}`}
-                  onClick={()=>{setMenuOpen(false);onStatusChange(account);}}
-                >
-                  {isActive?'Deactivate':'Reactivate'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        {busy ? (
+          <div style={{display:'flex',justifyContent:'flex-end',padding:'0 4px'}}>
+            <Spinner size={14}/>
+          </div>
+        ) : (
+          <div className="ap-row-actions">
+            {/* Manage dashboard access */}
+            <button
+              className="ap-row-btn ap-row-btn--default"
+              onClick={() => onManageAccess(account)}
+              title="Manage dashboard access"
+              aria-label="Manage dashboard access"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+              </svg>
+            </button>
+
+            {/* Reset password */}
+            <button
+              className="ap-row-btn ap-row-btn--default"
+              onClick={() => onReset(account)}
+              title="Reset password"
+              aria-label="Reset password"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </button>
+
+            {/* Activate / Deactivate */}
+            <button
+              className={`ap-row-btn${isActive ? ' ap-row-btn--danger' : ' ap-row-btn--success'}`}
+              onClick={() => onStatusChange(account)}
+              title={isActive ? 'Deactivate account' : 'Reactivate account'}
+              aria-label={isActive ? 'Deactivate account' : 'Reactivate account'}
+            >
+              {isActive ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              )}
+            </button>
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -549,10 +577,16 @@ export default function StaffAccounts() {
 
   const [createOpen, setCreateOpen]         = useState(false);
   const [accessTarget, setAccessTarget]     = useState(null);   // for dashboard access modal
+  const lastAccessTarget = useRef(null); // keep last target so modal stays mounted
   const [resetTarget, setResetTarget]       = useState(null);   // for reset password modal
   const [actionRow, setActionRow]           = useState(null);
   const [actionType, setActionType]         = useState(null);
   const [actionLoading, setActionLoading]   = useState(null);
+
+  // Keep lastAccessTarget in sync so modal stays mounted with last account
+  useEffect(() => {
+    if (accessTarget) lastAccessTarget.current = accessTarget;
+  }, [accessTarget]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -676,10 +710,11 @@ export default function StaffAccounts() {
         toast={toast}
       />
 
+      {/* Keep modal always mounted so state persists on close/reopen of same staff */}
       <DashboardAccessModal
         open={!!accessTarget}
         onClose={()=>setAccessTarget(null)}
-        account={accessTarget}
+        account={accessTarget || lastAccessTarget.current}
         toast={toast}
         onSaved={load}
       />

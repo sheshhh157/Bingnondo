@@ -812,3 +812,55 @@
   resize: vertical;
   height: auto;
 }
+
+/* ── Row action icon buttons (replaces dropdown menu) ──────────────────────── */
+.ap-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.ap-row-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.ap-row-btn--default {
+  color: rgba(232,224,212,0.45);
+  border-color: transparent;
+}
+.ap-row-btn--default:hover {
+  color: rgba(232,224,212,0.9);
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.1);
+}
+
+.ap-row-btn--danger {
+  color: rgba(224,96,80,0.6);
+  border-color: transparent;
+}
+.ap-row-btn--danger:hover {
+  color: #E06050;
+  background: rgba(192,57,43,0.1);
+  border-color: rgba(192,57,43,0.2);
+}
+
+.ap-row-btn--success {
+  color: rgba(94,200,122,0.6);
+  border-color: transparent;
+}
+.ap-row-btn--success:hover {
+  color: #5EC87A;
+  background: rgba(94,200,122,0.08);
+  border-color: rgba(94,200,122,0.2);
+}
