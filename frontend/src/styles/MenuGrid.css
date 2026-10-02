@@ -263,6 +263,14 @@
   .menu-card__price { font-size: 0.875rem; }
 }
 
+/* Touch screens: 28px is a small target for the button that adds an item. */
+@media (pointer: coarse) {
+  .menu-card__add {
+    width: 36px;
+    height: 36px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .menu-card, .menu-card__add { transition: none; }
   .skeleton-block, .skeleton-line { animation: none; background: var(--color-muted); }

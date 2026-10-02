@@ -28,6 +28,10 @@ export default function CashierPage() {
   const [placingOrder, setPlacingOrder]   = useState(false);
   const [toastMsg, setToastMsg]           = useState('');
   const toastRef = useRef(null);
+  // Below 1024px the menu and the order draft cannot share the screen
+  // side by side, so exactly one of them is shown and this decides which.
+  // Above that the CSS ignores it and shows both, as before.
+  const [pane, setPane]                     = useState('menu');   // 'menu' | 'cart'
 
   // Track the last confirmed order so we can PATCH it instead of creating a new one
   const [confirmedOrder, setConfirmedOrder] = useState(null); // { id, orderNumber, snapshotDraft }
@@ -113,6 +117,8 @@ export default function CashierPage() {
   const updateNote    = (lineKey, note) => setDraft((prev) => prev.map((d) => (d.lineKey === lineKey ? { ...d, note } : d)));
   const clearDraft    = () => { setDraft([]); setConfirmedOrder(null); setVariantPick(null); };
   const draftTotal    = draft.reduce((sum, d) => sum + d.price * d.qty, 0);
+  // Total units, not lines: "3 items" should read 3 when one line is qty 3.
+  const draftQty     = draft.reduce((sum, d) => sum + d.qty, 0);
 
   //  ─── Draft changed since last confirm? ───────────────────────────
   // Simple check: compare sorted line keys+qty+note against the snapshot.
@@ -206,6 +212,7 @@ export default function CashierPage() {
     showToast(`Payment via ${method} confirmed. `);
     setPaymentModal(null);
     clearDraft(); // now we clear — payment is done
+    setPane('menu'); // on a phone the cart is the whole screen; go back to ordering
   };
 
   // ─── Close modal without paying → keep draft & confirmedOrder ────
@@ -241,7 +248,7 @@ export default function CashierPage() {
 
       <main className="cashier-main">
         {view === VIEWS.ORDER ? (
-          <div className="cashier-workspace">
+          <div className={`cashier-workspace cashier-workspace--${pane}`}>
             {/* Left: Menu */}
             <section className="cashier-menu-panel" aria-label="Menu">
               <div className="cashier-menu-toolbar">
@@ -305,6 +312,28 @@ export default function CashierPage() {
           <TransactionHistory />
         )}
       </main>
+
+      {/* Cart bar — narrow screens only, where the draft is a pane of its own.
+          Carries the count and total so it is always one tap from the order. */}
+      {view === VIEWS.ORDER && (
+        <div className="cashier-cartbar">
+          <button
+            type="button"
+            className="cashier-cartbar__btn"
+            onClick={() => setPane(pane === 'menu' ? 'cart' : 'menu')}
+            aria-label={pane === 'menu' ? 'Show current order' : 'Back to menu'}
+          >
+            <span className="cashier-cartbar__label">
+              {pane === 'menu' ? 'View order' : 'Back to menu'}
+            </span>
+            {pane === 'menu' && (
+              <span className="cashier-cartbar__meta">
+                {draftQty} {draftQty === 1 ? 'item' : 'items'} · ₱{draftTotal.toFixed(2)}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Variant picker — Hot / Iced, Solo / Sharing and friends */}
       {variantPick && (

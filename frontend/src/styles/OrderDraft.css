@@ -334,15 +334,31 @@
 
 /* ─── RESPONSIVE ─────────────────────────────────────────────────────── */
 @media (max-width: 1023px) {
-  .od-root { max-height: 300px; }
+  /* No max-height here: below 1024px the draft is a full-height pane of its
+     own, so a 300px cap would leave most of the screen empty. */
   .od-items { min-height: 0; }
   .od-footer { gap: 0.5rem; padding: 0.625rem 1rem; }
   .od-subtotal__value { font-size: 1.125rem; }
 }
 
 @media (max-width: 639px) {
-  .od-root { max-height: none; }
   .od-item__main { gap: 0.5rem; }
+}
+
+/* Touch screens: 22-24px controls are hard to hit accurately. */
+@media (pointer: coarse) {
+  .od-item__qty-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .od-item__remove-btn {
+    width: 30px;
+    height: 30px;
+  }
+  .od-item__note-btn {
+    width: 30px;
+    height: 30px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
