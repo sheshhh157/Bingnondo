@@ -40,4 +40,19 @@ router.patch('/:id/availability', ...staffWrite, ctrl.setAvailability);
 // DELETE /api/menu/:id
 router.delete('/:id', ...staffWrite, ctrl.deleteMenuItem);
 
+// ─── Menu item options (variants) ─────────────────────────────────────────────
+// Variants are read as part of the item itself (GET /:id and both menu
+// listings return `options[]`), so there is no separate list endpoint -- one
+// less round trip for the staff modal and the cashier menu, which need the
+// variants and the item in the same payload anyway.
+
+// POST /api/menu/:id/options
+router.post('/:id/options', ...staffWrite, ctrl.createOption);
+
+// PUT /api/menu/:id/options/:optionId
+router.put('/:id/options/:optionId', ...staffWrite, ctrl.updateOption);
+
+// DELETE /api/menu/:id/options/:optionId  — archives, never hard-deletes
+router.delete('/:id/options/:optionId', ...staffWrite, ctrl.deleteOption);
+
 module.exports = router;

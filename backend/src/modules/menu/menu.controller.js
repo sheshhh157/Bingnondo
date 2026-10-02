@@ -8,6 +8,80 @@ function emitMenuUpdate(item) {
   if (_io) _io.emit('menu_update', item);
 }
 
+/**
+ * Broadcast `menu_update` for menu items that some *other* module changed —
+ * today the inventory cascade flipping `is_available` when an ingredient runs
+ * out. Without this the cashier POS (which listens but never polls) keeps
+ * selling items the kitchen can no longer make.
+ *
+ * The payload is the same enriched shape that create/update emit, not a bare
+ * `{ id, is_available }`: listeners that merge the whole object (the staff
+ * menu) also get refreshed `ingredients[].current_stock`, which is what drives
+ * their out-of-stock hints. Two queries total no matter how many items
+ * changed. Call only after the caller's transaction has committed.
+ */
+async function emitAvailabilityUpdates(ids) {
+  if (!_io || !Array.isArray(ids) || ids.length === 0) return [];
+
+  const unique = [...new Set(ids.map(Number).filter(Number.isInteger))];
+  if (unique.length === 0) return [];
+
+  const [itemRes, ingRes] = await Promise.all([
+    db.query(
+      `SELECT
+         mi.id,
+         mi.category_id,
+         mc.name  AS category_name,
+         mi.name,
+         mi.description,
+         mi.price,
+         mi.image_url,
+         mi.is_available,
+         mi.created_at,
+         mi.updated_at
+       FROM menu_items mi
+       JOIN menu_categories mc ON mc.id = mi.category_id
+       WHERE mi.id = ANY($1::int[])`,
+      [unique]
+    ),
+    db.query(
+      `SELECT
+         mii.menu_item_id,
+         mii.inventory_item_id,
+         mii.quantity_required,
+         inv.name,
+         inv.unit,
+         inv.current_stock
+       FROM menu_item_ingredients mii
+       JOIN inventory_items inv ON inv.id = mii.inventory_item_id
+       WHERE mii.menu_item_id = ANY($1::int[])
+       ORDER BY inv.name ASC`,
+      [unique]
+    ),
+  ]);
+
+  const ingredientsByItem = new Map();
+  for (const r of ingRes.rows) {
+    if (!ingredientsByItem.has(r.menu_item_id)) ingredientsByItem.set(r.menu_item_id, []);
+    ingredientsByItem.get(r.menu_item_id).push({
+      inventory_item_id: r.inventory_item_id,
+      quantity_required: r.quantity_required != null ? parseFloat(r.quantity_required) : null,
+      name: r.name,
+      unit: r.unit,
+      current_stock: parseFloat(r.current_stock),
+    });
+  }
+
+  const items = itemRes.rows.map((item) => ({
+    ...item,
+    price: parseFloat(item.price),
+    ingredients: ingredientsByItem.get(item.id) || [],
+  }));
+
+  for (const item of items) emitMenuUpdate(item);
+  return items;
+}
+
 // ─── Internal helper: fetch one item enriched with category + ingredients ─────
 async function _getEnrichedItem(id) {
   const [itemRes, ingRes] = await Promise.all([
@@ -46,9 +120,11 @@ async function _getEnrichedItem(id) {
   if (itemRes.rows.length === 0) return null;
 
   const item = itemRes.rows[0];
+  const byItem = await fetchOptionsForItems([Number(id)]);
   return {
     ...item,
     price: parseFloat(item.price),
+    options: byItem.get(Number(id)) || [],
     ingredients: ingRes.rows.map((r) => ({
       inventory_item_id: r.inventory_item_id,
       quantity_required: r.quantity_required != null ? parseFloat(r.quantity_required) : null,
@@ -72,18 +148,22 @@ async function getPublicMenu(req, res, next) {
           mc.name  AS category_name,
           mi.name,
           mi.description,
-          mi.price,
-          mi.image_url,
-          mi.is_available
-        FROM menu_items mi
-        JOIN menu_categories mc ON mc.id = mi.category_id
-        ORDER BY mc.name ASC, mi.name ASC
-      `),
+mi.price,
+            mi.image_url,
+            mi.is_available
+          FROM menu_items mi
+          JOIN menu_categories mc ON mc.id = mi.category_id
+         WHERE mi.archived_at IS NULL
+         ORDER BY mc.name ASC, mi.name ASC
+        `),
     ]);
 
     res.json({
       categories: catRes.rows,
-      items: itemRes.rows.map((r) => ({ ...r, price: parseFloat(r.price) })),
+      items: attachOptions(
+        itemRes.rows.map((r) => ({ ...r, price: parseFloat(r.price) })),
+        await fetchOptionsForItems(itemRes.rows.map((r) => r.id))
+      ),
     });
   } catch (err) {
     next(err);
@@ -106,12 +186,14 @@ async function getStaffMenu(req, res, next) {
           mi.price,
           mi.image_url,
           mi.is_available,
-          mi.created_at,
-          mi.updated_at
-        FROM menu_items mi
-        JOIN menu_categories mc ON mc.id = mi.category_id
-        ORDER BY mc.name ASC, mi.name ASC
-      `),
+mi.created_at,
+            mi.updated_at,
+            mi.archived_at
+          FROM menu_items mi
+          JOIN menu_categories mc ON mc.id = mi.category_id
+         WHERE mi.archived_at IS NULL
+         ORDER BY mc.name ASC, mi.name ASC
+        `),
       db.query(`
         SELECT
           mii.menu_item_id,
@@ -141,11 +223,14 @@ async function getStaffMenu(req, res, next) {
 
     res.json({
       categories: catRes.rows,
-      items: itemRes.rows.map((item) => ({
-        ...item,
-        price: parseFloat(item.price),
-        ingredients: ingMap[item.id] || [],
-      })),
+      items: attachOptions(
+        itemRes.rows.map((item) => ({
+          ...item,
+          price: parseFloat(item.price),
+          ingredients: ingMap[item.id] || [],
+        })),
+        await fetchOptionsForItems(itemRes.rows.map((i) => i.id))
+      ),
     });
   } catch (err) {
     next(err);
@@ -177,6 +262,7 @@ async function createMenuItem(req, res, next) {
       is_available = true,
       image_url = null,
       ingredients = [],
+      options = [],
     } = req.body;
 
     if (!name?.trim())            return res.status(400).json({ message: 'Item name is required.' });
@@ -206,6 +292,28 @@ async function createMenuItem(req, res, next) {
       );
     }
 
+    // Options carry their own absolute price, so they are inserted after the
+    // item exists and in the same transaction -- a half-created item with no
+    // variants is not a state the staff page should ever be able to save.
+    // 5 values per row: id, name, price, is_available, sort_order.
+    if (Array.isArray(options) && options.length > 0) {
+      const values = options
+        .map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`)
+        .join(', ');
+      const params = options.flatMap((opt, i) => [
+        newId,
+        String(opt.name || '').trim(),
+        Number(opt.price) || 0,
+        opt.is_available !== false,
+        i,
+      ]);
+      await client.query(
+        `INSERT INTO menu_item_options (menu_item_id, name, price, is_available, sort_order)
+         VALUES ${values}`,
+        params
+      );
+    }
+
     await client.query('COMMIT');
 
     const enriched = await _getEnrichedItem(newId);
@@ -225,7 +333,7 @@ async function updateMenuItem(req, res, next) {
   const client = await db.getClient();
   try {
     const { id } = req.params;
-    const { name, price, description, category_id, is_available, image_url, ingredients } = req.body;
+    const { name, price, description, category_id, is_available, image_url, ingredients, options } = req.body;
 
     const existing = await db.query('SELECT id FROM menu_items WHERE id = $1', [id]);
     if (existing.rows.length === 0) return res.status(404).json({ message: 'Menu item not found.' });
@@ -267,6 +375,81 @@ async function updateMenuItem(req, res, next) {
           params2
         );
       }
+    }
+
+    // Reconcile the submitted options against the stored ones.
+    //
+    // This deliberately does NOT delete-then-insert the way the ingredient list
+    // above does. order_items.menu_item_option_id holds a hard FK to
+    // menu_item_options(id) with NO ACTION, so re-creating a row would either
+    // fail outright once the option had been sold, or silently orphan the
+    // order lines that referenced the old id. Existing rows are therefore
+    // UPDATEd in place, which keeps their ids and keeps history resolvable.
+    if (options !== undefined) {
+      const list = Array.isArray(options) ? options : [];
+
+      // 1. Update the ones that came from the server, matching on the id the
+      //    form was given and confirming it really belongs to this item.
+      const keptIds = [];
+      for (const [i, opt] of list.entries()) {
+        const optId = Number(opt?.id);
+        if (!Number.isInteger(optId)) continue;
+        const updated = await client.query(
+          `UPDATE menu_item_options
+              SET name = $1, price = $2, is_available = $3, sort_order = $4, updated_at = NOW()
+            WHERE id = $5 AND menu_item_id = $6 AND archived_at IS NULL
+            RETURNING id`,
+          [
+            String(opt.name).trim(),
+            Number(opt.price) || 0,
+            opt.is_available !== false,
+            i,
+            optId,
+            id,
+          ]
+        );
+        // Only trust the id if a row for THIS item actually moved. An id from
+        // elsewhere falls through and is inserted as a new option instead of
+        // silently re-pointing another item's variant.
+        // RETURNING matters here: without it pg reports an empty rows array for
+        // an UPDATE and this branch would never run.
+        if (updated.rows.length > 0) keptIds.push(optId);
+      }
+
+      // 2. Insert the genuinely new ones (no id from the server).
+      const inserts = list.filter(
+        (o) => !Number.isInteger(Number(o?.id)) && String(o?.name || '').trim()
+      );
+      if (inserts.length > 0) {
+        const values = inserts
+          .map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`)
+          .join(', ');
+        const params = inserts.flatMap((opt, i) => [
+          id,
+          String(opt.name).trim(),
+          Number(opt.price) || 0,
+          opt.is_available !== false,
+          i,
+        ]);
+        const added = await client.query(
+          `INSERT INTO menu_item_options (menu_item_id, name, price, is_available, sort_order)
+           VALUES ${values} RETURNING id`,
+          params
+        );
+        // Keep these too, or step 3 would archive the options just added.
+        keptIds.push(...added.rows.map((r) => r.id));
+      }
+
+      // 3. Archive the live options the form dropped. Archived, not deleted:
+      //    a sold variant must keep resolving for its receipts.
+      await client.query(
+        `UPDATE menu_item_options
+            SET archived_at = NOW(), is_available = false, updated_at = NOW()
+          WHERE menu_item_id = $1
+            AND archived_at IS NULL
+            AND NOT (id = ANY($2::int[]))`,
+        [id, keptIds]
+      );
     }
 
     await client.query('COMMIT');
@@ -332,15 +515,230 @@ async function setAvailability(req, res, next) {
 // Staff: remove an item (cascade deletes ingredient links via FK)
 async function deleteMenuItem(req, res, next) {
   try {
+    // Archive, don't delete.
+    //
+    // `order_items.menu_item_id` is NOT NULL and has no ON DELETE clause, and
+    // order_items stores no name snapshot — only quantity and unit_price. So a
+    // hard DELETE of an item that has ever been ordered fails with FK violation
+    // 23503. Before this, that reached next(err) and the caller saw a bare 500,
+    // which is why no menu item could be deleted at all.
+    //
+    // Keeping the row lets past orders keep resolving to a name and price.
+    // Menu listings filter on archived_at IS NULL, so the item disappears from
+    // the menu while the history stays intact.
     const result = await db.query(
-      'DELETE FROM menu_items WHERE id = $1 RETURNING id, name',
+      `UPDATE menu_items
+          SET archived_at = NOW(), is_available = false, updated_at = NOW()
+        WHERE id = $1 AND archived_at IS NULL
+        RETURNING id, name, category_id`,
       [req.params.id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ message: 'Menu item not found.' });
+
+    if (result.rows.length === 0) {
+      // Either it does not exist, or it was already archived.
+      const existing = await db.query(
+        'SELECT id, name, archived_at FROM menu_items WHERE id = $1',
+        [req.params.id]
+      );
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ message: 'Menu item not found.' });
+      }
+      return res.status(409).json({
+        message: `"${existing.rows[0].name}" is already removed from the menu.`,
+      });
+    }
 
     if (_io) _io.emit('menu_item_deleted', { id: result.rows[0].id });
-    res.json({ message: 'Menu item removed.', deleted: result.rows[0] });
+    res.json({
+      message: 'Menu item removed.',
+      archived: result.rows[0],
+    });
   } catch (err) {
+    // Safety net: if a hard delete is ever reintroduced, fail with a readable
+    // message instead of a raw constraint violation bubbling out as a 500.
+    if (err.code === '23503') {
+      return res.status(409).json({
+        message:
+          'This item appears in past orders, so it cannot be erased. Mark it unavailable instead.',
+      });
+    }
+    next(err);
+  }
+}
+
+// ─── Menu item options (variants: Hot / Iced, sizes, flavours) ────────────────
+
+/**
+ * Options for the given item ids, grouped by menu_item_id.
+ *
+ * Exported because createOrder and updateOrderItems both need to price a
+ * cart, and both already fetch their menu items in one round trip. Folding
+ * the options into that same query shape keeps order pricing to two queries
+ * no matter how many lines the cart has.
+ *
+ * Archived options are excluded: an archived variant is not sellable, so
+ * quoting one would let a price slip through for something the staff page
+ * has taken off the menu.
+ */
+async function fetchOptionsForItems(ids) {
+  const unique = [...new Set((ids || []).map(Number).filter(Number.isInteger))];
+  if (unique.length === 0) return new Map();
+
+  const { rows } = await db.query(
+    `SELECT id, menu_item_id, name, price, is_available, sort_order
+       FROM menu_item_options
+      WHERE menu_item_id = ANY($1::int[])
+        AND archived_at IS NULL
+      ORDER BY menu_item_id, sort_order, name`,
+    [unique]
+  );
+
+  const byItem = new Map();
+  for (const r of rows) {
+    if (!byItem.has(r.menu_item_id)) byItem.set(r.menu_item_id, []);
+    byItem.get(r.menu_item_id).push({
+      id: r.id,
+      name: r.name,
+      price: parseFloat(r.price),
+      is_available: r.is_available,
+    });
+  }
+  return byItem;
+}
+
+// Attach `options` to already-fetched menu rows, without an N+1 per item.
+function attachOptions(items, byItem) {
+  return items.map((it) => ({ ...it, options: byItem.get(it.id) || [] }));
+}
+
+async function _getEnrichedItemWithOptions(id) {
+  const item = await _getEnrichedItem(id);
+  if (!item) return null;
+  return item;
+}
+
+// ─── POST /api/menu/:id/options ──────────────────────────────────────────────
+async function createOption(req, res, next) {
+  const client = await db.getClient();
+  try {
+    const { id } = req.params;
+    const { name, price, is_available = true, sort_order = 0 } = req.body;
+
+    if (!name?.trim()) return res.status(400).json({ message: 'Option name is required.' });
+    if (price === undefined || price === null || Number(price) < 0) {
+      return res.status(400).json({ message: 'A valid price is required.' });
+    }
+
+    const item = await db.query('SELECT id FROM menu_items WHERE id = $1', [id]);
+    if (item.rows.length === 0) return res.status(404).json({ message: 'Menu item not found.' });
+
+    await client.query('BEGIN');
+    const result = await client.query(
+      `INSERT INTO menu_item_options (menu_item_id, name, price, is_available, sort_order)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, menu_item_id, name, price, is_available, sort_order`,
+      [id, name.trim(), Number(price), is_available, Number(sort_order) || 0]
+    );
+    await client.query('COMMIT');
+
+    const row = result.rows[0];
+    res.status(201).json({ ...row, price: parseFloat(row.price) });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    // The UNIQUE(menu_item_id, name) guard turned into a readable message
+    // rather than a raw 23505 bubbling out of the error handler. The name is
+    // re-read from req.body because the destructured copy above is scoped to
+    // the try block.
+    if (err.code === '23505') {
+      return res.status(409).json({
+        message: `"${String(req.body?.name || '').trim()}" is already an option for this item.`,
+      });
+    }
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+// ─── PUT /api/menu/:id/options/:optionId ─────────────────────────────────────
+async function updateOption(req, res, next) {
+  try {
+    const { id, optionId } = req.params;
+    const { name, price, is_available, sort_order } = req.body;
+
+    if (name !== undefined && !name.trim()) {
+      return res.status(400).json({ message: 'Option name cannot be empty.' });
+    }
+    if (price !== undefined && (Number(price) < 0 || Number.isNaN(Number(price)))) {
+      return res.status(400).json({ message: 'Price must be zero or more.' });
+    }
+
+    const sets = [];
+    const params = [];
+    let n = 1;
+    if (name        !== undefined) { sets.push(`name = $${n++}`);         params.push(name.trim()); }
+    if (price       !== undefined) { sets.push(`price = $${n++}`);        params.push(Number(price)); }
+    if (is_available!== undefined) { sets.push(`is_available = $${n++}`); params.push(is_available); }
+    if (sort_order  !== undefined) { sets.push(`sort_order = $${n++}`);   params.push(Number(sort_order) || 0); }
+
+    if (sets.length === 0) {
+      return res.status(400).json({ message: 'Nothing to update.' });
+    }
+    sets.push(`updated_at = NOW()`);
+    params.push(optionId, id);
+
+    const result = await db.query(
+      `UPDATE menu_item_options SET ${sets.join(', ')}
+        WHERE id = $${n++} AND menu_item_id = $${n}
+        RETURNING id, menu_item_id, name, price, is_available, sort_order`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Option not found.' });
+    }
+    res.json({ ...result.rows[0], price: parseFloat(result.rows[0].price) });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'That option name is already in use for this item.' });
+    }
+    next(err);
+  }
+}
+
+// ─── DELETE /api/menu/:id/options/:optionId ──────────────────────────────────
+// Archive, for the same reason menu items are archived (migration 008).
+async function deleteOption(req, res, next) {
+  try {
+    const { id, optionId } = req.params;
+    const result = await db.query(
+      `UPDATE menu_item_options
+          SET archived_at = NOW(), is_available = false, updated_at = NOW()
+        WHERE id = $1 AND menu_item_id = $2 AND archived_at IS NULL
+        RETURNING id, name`,
+      [optionId, id]
+    );
+
+    if (result.rows.length === 0) {
+      const existing = await db.query(
+        'SELECT id, name, archived_at FROM menu_item_options WHERE id = $1 AND menu_item_id = $2',
+        [optionId, id]
+      );
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ message: 'Option not found.' });
+      }
+      return res.status(409).json({
+        message: `"${existing.rows[0].name}" is already removed from this item.`,
+      });
+    }
+
+    res.json({ message: 'Option removed.', archived: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23503') {
+      return res.status(409).json({
+        message: 'This option was sold in past orders, so it cannot be erased. Mark it unavailable instead.',
+      });
+    }
     next(err);
   }
 }
@@ -395,6 +793,7 @@ async function deleteCategory(req, res, next) {
 
 module.exports = {
   setIO,
+  emitAvailabilityUpdates,
   getPublicMenu,
   getStaffMenu,
   getMenuItemById,
@@ -405,4 +804,8 @@ module.exports = {
   getCategories,
   createCategory,
   deleteCategory,
+  fetchOptionsForItems,
+  createOption,
+  updateOption,
+  deleteOption,
 };
