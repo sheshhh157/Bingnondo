@@ -235,7 +235,7 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
 }
 
 // ─── Mobile card ──────────────────────────────────────────────────────────────
-function InventoryCard({ item, onRestock, onAdjust, onOutOfStock }) {
+function InventoryCard({ item, onRestock, onAdjust, onOutOfStock, onDelete }) {
   const s = stockStatus(item.current_stock, item.reorder_level);
   return (
     <article className={`inv-card${s !== 'ok' ? ` inv-card--${s}` : ''}`}>
@@ -262,8 +262,74 @@ function InventoryCard({ item, onRestock, onAdjust, onOutOfStock }) {
         {item.current_stock > 0 && (
           <button className="inv-btn inv-btn--danger inv-btn--sm" onClick={() => onOutOfStock(item)}>Out of stock</button>
         )}
+        <button
+          className="inv-btn inv-btn--ghost inv-btn--sm inv-btn--icon"
+          onClick={() => onDelete(item)}
+          aria-label={`Delete ${item.name}`}
+          title="Delete ingredient"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+          </svg>
+        </button>
       </div>
     </article>
+  );
+}
+
+// ─── Delete Ingredient Confirm ────────────────────────────────────────────────
+// Mirrors MenuPage's ConfirmDialog, but reuses the inventory modal styles since
+// this page has no separate confirm stylesheet.
+function DeleteIngredientDialog({ item, onClose, onConfirm, loading }) {
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape' && !loading) onClose(); };
+    document.addEventListener('keydown', handleKey);
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', handleKey); document.body.style.overflow = ''; };
+  }, [onClose, loading]);
+
+  return (
+    <div className="inv-modal-overlay" onClick={() => !loading && onClose()} aria-hidden="true">
+      <div
+        className="inv-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="inv-delete-title"
+      >
+        <div className="inv-modal__header">
+          <h3 id="inv-delete-title" className="inv-modal__title">Delete Ingredient</h3>
+          <button
+            className="inv-modal__close"
+            onClick={onClose}
+            disabled={loading}
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="inv-modal__body">
+          <p>
+            Delete <strong>{item.name}</strong>? This permanently removes the ingredient
+            and <strong>erases its stock movement history</strong>.
+          </p>
+          <p className="inv-modal__item-meta">
+            Currently {item.current_stock} {item.unit} on hand. To keep the history but stop
+            selling it, use <strong>Out of stock</strong> instead.
+          </p>
+        </div>
+
+        <div className="inv-modal__footer">
+          <button className="inv-btn inv-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="inv-btn inv-btn--danger" onClick={onConfirm} disabled={loading} aria-busy={loading}>
+            {loading ? 'Deleting…' : 'Delete permanently'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -424,6 +490,8 @@ export default function InventoryPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchItems = useCallback(async () => {
@@ -484,6 +552,29 @@ export default function InventoryPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      const { data } = await inventoryAPI.remove(deleteTarget.id);
+      const unlinked = data.unlinked_menu_items?.length || 0;
+      const erased = data.transactions_erased || 0;
+      showToast(
+        `"${data.name}" deleted.` +
+        (unlinked > 0
+          ? ` ${unlinked} menu item${unlinked > 1 ? 's' : ''} lost this ingredient.` : '') +
+        (erased > 0 ? ` ${erased} history entr${erased > 1 ? 'ies' : 'y'} erased.` : ''),
+        'warning'
+      );
+      setDeleteTarget(null);
+      await fetchItems();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to delete ingredient.', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const stats = useMemo(() => {
     const out = items.filter((i) => i.current_stock <= 0).length;
     const low = items.filter((i) => i.current_stock > 0 && i.current_stock <= i.reorder_level).length;
@@ -516,7 +607,6 @@ export default function InventoryPage() {
   const start      = (safePage - 1) * perPage;
 
   const pagedTable = useMemo(() => filtered.slice(start, start + perPage), [filtered, start, perPage]);
-  const pagedCards = pagedTable; // same slice, different layout
 
   const from = filtered.length === 0 ? 0 : start + 1;
   const to   = Math.min(start + perPage, filtered.length);
@@ -659,6 +749,7 @@ export default function InventoryPage() {
                   onRestock={(i) => setModal({ item: i, type: 'restock' })}
                   onAdjust={(i) => setModal({ item: i, type: 'adjustment' })}
                   onOutOfStock={handleOutOfStock}
+                  onDelete={setDeleteTarget}
                 />
               ))
         }
@@ -728,6 +819,16 @@ export default function InventoryPage() {
                           {item.current_stock > 0 && (
                             <button className="inv-btn inv-btn--danger inv-btn--xs" onClick={() => handleOutOfStock(item)}>Out of stock</button>
                           )}
+                          <button
+                            className="inv-btn inv-btn--ghost inv-btn--xs inv-btn--icon"
+                            onClick={() => setDeleteTarget(item)}
+                            aria-label={`Delete ${item.name}`}
+                            title="Delete ingredient"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                            </svg>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -765,6 +866,16 @@ export default function InventoryPage() {
         <AddIngredientModal
           onClose={() => setShowAddModal(false)}
           onSubmit={handleAddIngredient}
+        />
+      )}
+
+      {/* Delete ingredient confirm */}
+      {deleteTarget && (
+        <DeleteIngredientDialog
+          item={deleteTarget}
+          onClose={() => !deleting && setDeleteTarget(null)}
+          onConfirm={handleDelete}
+          loading={deleting}
         />
       )}
     </div>

@@ -17,6 +17,7 @@ function urgency(dateStr) {
 
 export default function OrderCard({ order, lane, onStatusChange }) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const u = urgency(order.created_at);
 
   const isPending   = order.status === 'pending';
@@ -36,22 +37,22 @@ export default function OrderCard({ order, lane, onStatusChange }) {
 
   async function handleAction() {
     setLoading(true);
+    setError(null);
     try {
-      if (isPending) {
-        // Acknowledge: pending → confirmed
-        await kitchenAPI.acknowledgeOrder(order.id);
-        onStatusChange(order.id, 'confirmed');
-      } else if (isPreparing) {
-        // Mark ready: preparing → ready
-        await kitchenAPI.updateOrderStatus(order.id, 'ready');
-        onStatusChange(order.id, 'ready');
-      } else {
-        // Start preparing: confirmed → preparing
-        await kitchenAPI.updateOrderStatus(order.id, 'preparing');
-        onStatusChange(order.id, 'preparing');
-      }
+      // The server owns the status machine, so apply whatever it actually
+      // stored rather than the status we hoped for. Hardcoding 'confirmed' is
+      // what left stale cards on screen until a manual refresh.
+      const res = isPending
+        ? await kitchenAPI.acknowledgeOrder(order.id)
+        : await kitchenAPI.updateOrderStatus(
+            order.id,
+            isPreparing ? 'ready' : 'preparing'
+          );
+
+      const data = res?.data ?? res;
+      onStatusChange(order.id, data?.status ?? (isPending ? 'confirmed' : isPreparing ? 'ready' : 'preparing'));
     } catch (err) {
-      console.error('Status update failed:', err);
+      setError(err?.response?.data?.message || 'Could not update this order.');
     } finally {
       setLoading(false);
     }
@@ -117,6 +118,10 @@ export default function OrderCard({ order, lane, onStatusChange }) {
 
       {/* Footer */}
       <div className="kp-card__footer">
+
+        {error && (
+          <p className="kp-card__error" role="alert">{error}</p>
+        )}
 
         <button
           className={`kp-btn kp-btn--${isPending ? 'acknowledge' : isPreparing ? 'ready' : 'start'}`}

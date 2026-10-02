@@ -320,108 +320,8 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   ALERT PANEL
-═══════════════════════════════════════════════════════════════════════ */
-.kp-alerts {
-  background: var(--k-gold-light);
-  border-bottom: 2px solid var(--k-gold);
-  padding: var(--k-sp-3) var(--k-sp-6);
-  flex-shrink: 0;
-}
-
-.kp-alerts__header {
-  display: flex;
-  align-items: center;
-  gap: var(--k-sp-2);
-  margin-bottom: var(--k-sp-2);
-}
-
-.kp-alerts__pulse {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--k-gold-dark);
-  flex-shrink: 0;
-  animation: kp-pulse 1.4s ease-out infinite;
-}
-
-@keyframes kp-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(201,168,76,0.65); }
-  70%  { box-shadow: 0 0 0 9px rgba(201,168,76,0); }
-  100% { box-shadow: 0 0 0 0 rgba(201,168,76,0); }
-}
-
-.kp-alerts__title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  font-weight: 800;
-  color: var(--k-amber);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  flex: 1;
-}
-
-.kp-alerts__count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px; height: 20px;
-  border-radius: 50%;
-  background: var(--k-gold-dark);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.kp-alerts__list {
-  list-style: none;
-  display: flex;
-  flex-direction: row;
-  gap: var(--k-sp-2);
-  flex-wrap: wrap;
-}
-
-.kp-alerts__item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--k-sp-1);
-  background: var(--k-surface);
-  border: 1px solid var(--k-gold-border);
-  border-radius: var(--k-r-md);
-  padding: var(--k-sp-2) var(--k-sp-3);
-  min-width: 140px;
-  box-shadow: var(--k-shadow-sm);
-}
-
-.kp-alerts__item-tag {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--k-amber);
-  margin: 0;
-}
-
-.kp-alerts__item-label {
-  font-family: var(--k-font-heading);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--k-text);
-  margin: 0;
-  line-height: 1.2;
-}
-
-.kp-alerts__item-device {
-  font-size: 11px;
-  color: var(--k-text-muted);
-  margin: 0;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
    MAIN + SPLIT
-═══════════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════════════ */
 .kp-main {
   flex: 1;
   min-height: 0;
@@ -842,26 +742,9 @@
 }
 .kp-btn--outline:hover { background: var(--k-surface-3); color: var(--k-text); }
 
-.kp-btn--ack {
-  padding: 6px 12px;
-  min-height: 32px;
-  font-size: 11px;
-  background: var(--k-surface-2);
-  color: var(--k-text-muted);
-  border: 1px solid var(--k-border);
-  margin-left: 0;
-  margin-top: var(--k-sp-1);
-  width: 100%;
-}
-.kp-btn--ack:hover:not(:disabled) {
-  background: var(--k-jade-light);
-  border-color: var(--k-jade-border);
-  color: var(--k-jade);
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    SPINNERS / LOADERS
-═══════════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════════════ */
 .kp-spin-sm {
   display: inline-block;
   width: 13px; height: 13px;
@@ -1070,4 +953,23 @@
   padding-top: 6px;
   margin-top: 4px;
   font-style: italic;
+}
+
+/* Failed status change — surfaced so a dead click never looks like a no-op */
+.kp-card__error {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 0 0 8px;
+  text-align: left;
+}
+
+.kp-card--pending .kp-card__error {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
 }

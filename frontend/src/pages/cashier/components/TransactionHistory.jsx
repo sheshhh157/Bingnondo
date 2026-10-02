@@ -47,7 +47,21 @@ export default function TransactionHistory() {
 
   const filtered = orders;
 
-  const todayTotal = filtered.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+  // The header figure is the money actually taken, not the value of every order
+  // on the list. Summing `total_amount` across all rows counted orders that were
+  // never paid and orders that were cancelled, so the cashier's own takings
+  // disagreed with the manager's sales report.
+  //
+  // The predicate matches the backend's (see `getOrderTotals` in
+  // orders.controller.js): a payment marked 'paid' on an order that was not
+  // cancelled. `payment_status` comes from the order's latest payment, which
+  // the list endpoint already resolves.
+  const collected = filtered.filter(
+    (o) => o.payment_status === 'paid' && o.status !== 'cancelled',
+  );
+  const collectedTotal = collected.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+
+  const periodLabel = filter === 'today' ? 'today' : 'this week';
 
   return (
     <div className="th-root">
@@ -56,7 +70,9 @@ export default function TransactionHistory() {
         <div className="th-toolbar__left">
           <h2 className="th-title">My Transactions</h2>
           {!loading && !error && (
-            <span className="th-count">{filtered.length} order{filtered.length !== 1 ? 's' : ''} · {fmt(todayTotal)}</span>
+            <span className="th-count">
+              {collected.length} paid of {filtered.length} order{filtered.length !== 1 ? 's' : ''} · {fmt(collectedTotal)}
+            </span>
           )}
         </div>
         <div className="th-toolbar__filters" role="group" aria-label="Filter by period">
@@ -101,7 +117,7 @@ export default function TransactionHistory() {
               <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <p>No transactions {filter === 'today' ? 'today' : 'this week'} yet.</p>
+            <p>No transactions {periodLabel} yet.</p>
           </div>
         ) : (
           <div className="th-table-wrap">

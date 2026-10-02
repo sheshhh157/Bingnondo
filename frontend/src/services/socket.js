@@ -52,6 +52,7 @@ export default getSocket;
 // ─── Kitchen-specific socket event names ──────────────────────────────────────
 export const KITCHEN_EVENTS = {
   NEW_ORDER:          'new_order',
-  ORDER_STATUS_UPDATE:'order_status_update',
+  ORDER_STATUS_UPDATE:'order:status',
   KITCHEN_ALERT:      'kitchen_alert',
+  KITCHEN_ALERT_ACK:  'kitchen_alert:ack',
 };

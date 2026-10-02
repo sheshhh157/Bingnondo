@@ -1,138 +1,22 @@
 import apiClient from './apiClient';
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
-// Pansamantala lang ito habang wala pang backend.
-// Palitan mo ito ng tunay na API calls pag ready na ang backend.
+// NOTE: several mock APIs were removed here (menuAPI, ordersAPI, categoriesAPI,
+// authAPI). They had no importers and were superseded by cashierApi.js /
+// apiClient.js. `customerRestrictionsAPI` is also un-exported: CustomerRestrictions
+// .jsx reaches it through the adminAPI alias further down.
 
-const MOCK_CATEGORIES = [
-  { id: 1, name: 'Silog Meals' },
-  { id: 2, name: 'Rice Meals' },
-  { id: 3, name: 'Merienda' },
-  { id: 4, name: 'Drinks' },
-  { id: 5, name: 'Add-ons' },
-];
-
-let MOCK_MENU_ITEMS = [
-  // Silog Meals
-  { id: 1,  category_id: 1, name: 'Tapsilog',      description: 'Beef tapa, sinangag, itlog',      price: 120, is_available: true,  image_url: null },
-  { id: 2,  category_id: 1, name: 'Longsilog',     description: 'Longganisa, sinangag, itlog',     price: 110, is_available: true,  image_url: null },
-  { id: 3,  category_id: 1, name: 'Tocilog',       description: 'Tocino, sinangag, itlog',         price: 110, is_available: true,  image_url: null },
-  { id: 4,  category_id: 1, name: 'Bangsilog',     description: 'Bangus, sinangag, itlog',         price: 130, is_available: true,  image_url: null },
-  { id: 5,  category_id: 1, name: 'Spamsilog',     description: 'Spam, sinangag, itlog',           price: 140, is_available: false, image_url: null },
-  { id: 6,  category_id: 1, name: 'Cornsilog',     description: 'Corned beef, sinangag, itlog',    price: 115, is_available: true,  image_url: null },
-
-  // Rice Meals
-  { id: 7,  category_id: 2, name: 'Adobo Rice',    description: 'Chicken adobo with steamed rice', price: 105, is_available: true,  image_url: null },
-  { id: 8,  category_id: 2, name: 'Sinigang Set',  description: 'Pork sinigang with rice',         price: 150, is_available: true,  image_url: null },
-  { id: 9,  category_id: 2, name: 'Fried Chicken', description: 'Crispy fried chicken with rice',  price: 135, is_available: true,  image_url: null },
-  { id: 10, category_id: 2, name: 'Bistek Rice',   description: 'Beef bistek with steamed rice',   price: 145, is_available: false, image_url: null },
-
-  // Merienda
-  { id: 11, category_id: 3, name: 'Pancit Bihon',      description: 'Stir-fried rice noodles',         price: 75,  is_available: true,  image_url: null },
-  { id: 12, category_id: 3, name: 'Lumpiang Shanghai',  description: '5 pcs with sweet chili sauce',    price: 65,  is_available: true,  image_url: null },
-  { id: 13, category_id: 3, name: 'Goto',               description: 'Rice congee with beef tripe',     price: 85,  is_available: true,  image_url: null },
-  { id: 14, category_id: 3, name: 'Arroz Caldo',        description: 'Chicken congee with ginger',      price: 80,  is_available: true,  image_url: null },
-
-  // Drinks
-  { id: 15, category_id: 4, name: 'Coke Regular',    description: '12oz bottle',       price: 40,  is_available: true,  image_url: null },
-  { id: 16, category_id: 4, name: 'Coke Zero',       description: '12oz bottle',       price: 40,  is_available: true,  image_url: null },
-  { id: 17, category_id: 4, name: 'Iced Tea',        description: 'House blend, 16oz', price: 45,  is_available: true,  image_url: null },
-  { id: 18, category_id: 4, name: 'Bottled Water',   description: '500ml',             price: 25,  is_available: true,  image_url: null },
-  { id: 19, category_id: 4, name: 'Pineapple Juice', description: 'Fresh, 16oz',       price: 55,  is_available: true,  image_url: null },
-  { id: 20, category_id: 4, name: 'Hot Coffee',      description: 'Brewed coffee',     price: 60,  is_available: true,  image_url: null },
-
-  // Add-ons
-  { id: 21, category_id: 5, name: 'Extra Rice',  description: '', price: 20, is_available: true, image_url: null },
-  { id: 22, category_id: 5, name: 'Extra Egg',   description: '', price: 20, is_available: true, image_url: null },
-  { id: 23, category_id: 5, name: 'Extra Sauce', description: '', price: 10, is_available: true, image_url: null },
-];
-
-let menuItemCounter = 24;
-
-// Mock transaction history — mga lumang orders para sa TransactionHistory tab
+// Relative timestamps for the delivery/chat mocks still in use.
 const today = new Date();
 const hrsAgo = (h) => new Date(today.getTime() - h * 60 * 60 * 1000).toISOString();
-
-let MOCK_ORDERS = [
-  {
-    id: 1001, order_number: 'ORD-1001', status: 'completed', payment_method: 'cash',
-    total_amount: 240, created_at: hrsAgo(1),
-    items: [
-      { name: 'Tapsilog', quantity: 1, unit_price: 120 },
-      { name: 'Iced Tea', quantity: 1, unit_price: 45 },
-      { name: 'Extra Rice', quantity: 1, unit_price: 20 },
-      { name: 'Coke Regular', quantity: 1, unit_price: 40 },
-    ],
-  },
-  {
-    id: 1002, order_number: 'ORD-1002', status: 'completed', payment_method: 'gcash',
-    total_amount: 175, created_at: hrsAgo(2),
-    items: [
-      { name: 'Longsilog', quantity: 1, unit_price: 110 },
-      { name: 'Bottled Water', quantity: 1, unit_price: 25 },
-      { name: 'Extra Egg', quantity: 1, unit_price: 20 },
-    ],
-  },
-  {
-    id: 1003, order_number: 'ORD-1003', status: 'preparing', payment_method: 'cash',
-    total_amount: 285, created_at: hrsAgo(0.25),
-    items: [
-      { name: 'Sinigang Set', quantity: 1, unit_price: 150 },
-      { name: 'Iced Tea', quantity: 1, unit_price: 45 },
-      { name: 'Lumpiang Shanghai', quantity: 1, unit_price: 65 },
-    ],
-  },
-  {
-    id: 1004, order_number: 'ORD-1004', status: 'completed', payment_method: 'cash',
-    total_amount: 130, created_at: hrsAgo(3),
-    items: [
-      { name: 'Goto', quantity: 1, unit_price: 85 },
-      { name: 'Extra Rice', quantity: 1, unit_price: 20 },
-      { name: 'Hot Coffee', quantity: 1, unit_price: 60 },
-    ],
-  },
-  {
-    id: 1005, order_number: 'ORD-1005', status: 'cancelled', payment_method: 'cash',
-    total_amount: 110, created_at: hrsAgo(4),
-    items: [
-      { name: 'Tocilog', quantity: 1, unit_price: 110 },
-    ],
-  },
-];
-
-let orderCounter = 1006;
-
-// Mock inventory
-let MOCK_INVENTORY = [
-  { id: 1,  name: 'Beef Tapa',       unit: 'g',   current_stock: 2400, reorder_level: 500  },
-  { id: 2,  name: 'Longganisa',      unit: 'pcs', current_stock: 80,   reorder_level: 20   },
-  { id: 3,  name: 'Tocino',          unit: 'g',   current_stock: 1800, reorder_level: 400  },
-  { id: 4,  name: 'Bangus',          unit: 'pcs', current_stock: 12,   reorder_level: 10   },
-  { id: 5,  name: 'Spam',            unit: 'can', current_stock: 4,    reorder_level: 6    },
-  { id: 6,  name: 'Corned Beef',     unit: 'can', current_stock: 18,   reorder_level: 6    },
-  { id: 7,  name: 'Chicken',         unit: 'g',   current_stock: 3200, reorder_level: 800  },
-  { id: 8,  name: 'Pork',            unit: 'g',   current_stock: 0,    reorder_level: 600  },
-  { id: 9,  name: 'Eggs',            unit: 'pcs', current_stock: 55,   reorder_level: 24   },
-  { id: 10, name: 'Jasmine Rice',    unit: 'kg',  current_stock: 22,   reorder_level: 5    },
-  { id: 11, name: 'Garlic',          unit: 'g',   current_stock: 350,  reorder_level: 150  },
-  { id: 12, name: 'Cooking Oil',     unit: 'ml',  current_stock: 1200, reorder_level: 500  },
-  { id: 13, name: 'Soy Sauce',       unit: 'ml',  current_stock: 800,  reorder_level: 300  },
-  { id: 14, name: 'Calamansi',       unit: 'pcs', current_stock: 30,   reorder_level: 20   },
-  { id: 15, name: 'Tamarind',        unit: 'g',   current_stock: 0,    reorder_level: 100  },
-  { id: 16, name: 'Rice Noodles',    unit: 'g',   current_stock: 900,  reorder_level: 250  },
-  { id: 17, name: 'Spring Roll Wrap',unit: 'pcs', current_stock: 60,   reorder_level: 30   },
-  { id: 18, name: 'Ground Pork',     unit: 'g',   current_stock: 1100, reorder_level: 300  },
-  { id: 19, name: 'Ginger',          unit: 'g',   current_stock: 180,  reorder_level: 80   },
-  { id: 20, name: 'Brewed Coffee',   unit: 'g',   current_stock: 450,  reorder_level: 100  },
-];
 
 // ─── HELPER: simulate network delay ──────────────────────────────────────────
 const delay = (ms = 300) => new Promise((res) => setTimeout(res, ms));
 
-// ─── AUTH ─────────────────────────────────────────────────────────────────────
+// ─── HTTP ─────────────────────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Token helpers — keys match AuthContext and socket.js
-export const tokenStorage = {
+const tokenStorage = {
   getAccess:   () => localStorage.getItem('bingnondo_access_token'),
   getRefresh:  () => localStorage.getItem('bingnondo_refresh_token'),
   setTokens:   (access, refresh) => {
@@ -201,105 +85,16 @@ async function apiRequest(endpoint, options = {}, retry = true) {
   return { data };
 }
 
-export const authAPI = {
-  staffLogin: async ({ email, password }) => {
-    const res = await apiRequest('/auth/staff/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    // Store tokens on successful login
-    tokenStorage.setTokens(res.data.accessToken, res.data.refreshToken);
-    tokenStorage.saveUser(res.data.user);
-    return res;
-  },
-
-  forgotPassword: (email) =>
-    apiRequest('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
-
-  resetPassword: (data) =>
-    apiRequest('/auth/reset-password', { method: 'POST', body: JSON.stringify(data) }),
-
-  me: () => apiRequest('/auth/me'),
-
-  logout: async () => {
-    try { await apiRequest('/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
-    tokenStorage.clearTokens();
-    return { data: { message: 'Logged out.' } };
-  },
-};
-
-// ─── MENU (cashier read) ──────────────────────────────────────────────────────
-export const menuAPI = {
-  getAll: async () => {
-    await delay(400);
-    return { data: { categories: MOCK_CATEGORIES, items: MOCK_MENU_ITEMS } };
-  },
-};
-
-// ─── ORDERS ───────────────────────────────────────────────────────────────────
-export const ordersAPI = {
-  create: async (payload) => {
-    await delay(500);
-    const newOrder = {
-      id: orderCounter,
-      order_number: `ORD-${orderCounter}`,
-      status: 'confirmed',
-      payment_method: null,
-      total_amount: payload.items.reduce((sum, i) => {
-        const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
-        return sum + (menuItem?.price || 0) * i.quantity;
-      }, 0),
-      created_at: new Date().toISOString(),
-      items: payload.items.map((i) => {
-        const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
-        return { name: menuItem?.name || 'Unknown', quantity: i.quantity, unit_price: menuItem?.price || 0 };
-      }),
-    };
-    MOCK_ORDERS = [newOrder, ...MOCK_ORDERS];
-    orderCounter++;
-    return { data: newOrder };
-  },
-
-  updateItems: async (orderId, items) => {
-    await delay(350);
-    const order = MOCK_ORDERS.find((o) => o.id === orderId);
-    if (!order) throw { response: { data: { message: 'Order not found.' } } };
-    order.items = items.map((i) => {
-      const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
-      return { name: menuItem?.name || 'Unknown', quantity: i.quantity, unit_price: menuItem?.price || 0 };
-    });
-    order.total_amount = order.items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
-    return { data: order };
-  },
-
-  getMyTransactions: async () => {
-    await delay(400);
-    return { data: MOCK_ORDERS };
-  },
-
-  getAll: async () => {
-    await delay(400);
-    return { data: MOCK_ORDERS };
-  },
-
-  getById: async (id) => {
-    await delay(200);
-    const order = MOCK_ORDERS.find((o) => o.id === Number(id));
-    if (!order) throw { response: { status: 404, data: { message: 'Order not found.' } } };
-    return { data: order };
-  },
-};
-
 // ─── PAYMENTS ─────────────────────────────────────────────────────────────────
+// Deliberately NOT mocked. A silent mock here once made the cashier's
+// "Mark Paid" print a receipt while writing nothing to the database — no payment
+// row, no kitchen_alerts row, no ESP32 buzzer — and it failed invisibly for
+// days. Import `paymentsAPI` from './cashierApi' instead.
 export const paymentsAPI = {
-  process: async ({ order_id, method }) => {
-    await delay(600);
-    const order = MOCK_ORDERS.find((o) => o.id === Number(order_id));
-    if (order) {
-      order.status = 'completed';
-      order.payment_method = method || 'cash';
-    }
-    return { data: { success: true, message: 'Payment processed.' } };
+  process: async () => {
+    throw new Error(
+      'paymentsAPI.process is not mocked. Import paymentsAPI from services/cashierApi.'
+    );
   },
 };
 
@@ -325,6 +120,9 @@ export const inventoryAPI = {
   /** POST /api/inventory/:id/out-of-stock — force to 0 + cascade menu unavailability */
   outOfStock: (id) =>
     apiRequest(`/inventory/${id}/out-of-stock`, { method: 'POST' }),
+
+  /** DELETE /api/inventory/:id — remove an ingredient (cascades recipe links + history) */
+  remove: (id) => apiRequest(`/inventory/${id}`, { method: 'DELETE' }),
 };
 
 // ─── STAFF MENU (§4.2) — full CRUD, separate from cashier read-only ───────────
@@ -349,22 +147,22 @@ export const staffMenuAPI = {
 
   /** DELETE /api/menu/:id */
   remove: (id) => apiRequest(`/menu/${id}`, { method: 'DELETE' }),
+
+  // Per-option endpoints. The modal edits the whole list through create/update
+  // above; these exist for changing one variant without resending the item.
+  /** POST /api/menu/:id/options */
+  addOption: (id, payload) =>
+    apiRequest(`/menu/${id}/options`, { method: 'POST', body: JSON.stringify(payload) }),
+
+  /** PUT /api/menu/:id/options/:optionId */
+  updateOption: (id, optionId, payload) =>
+    apiRequest(`/menu/${id}/options/${optionId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  /** DELETE /api/menu/:id/options/:optionId — archives, never erases */
+  removeOption: (id, optionId) =>
+    apiRequest(`/menu/${id}/options/${optionId}`, { method: 'DELETE' }),
 };
 
-// ─── CATEGORIES (§4.2) ────────────────────────────────────────────────────────
-export const categoriesAPI = {
-  /** GET /api/menu/categories */
-  getAll: () => apiRequest('/menu/categories'),
-
-  /** POST /api/menu/categories — Body: { name } */
-  create: (name) =>
-    apiRequest('/menu/categories', { method: 'POST', body: JSON.stringify({ name }) }),
-
-  /** DELETE /api/menu/categories/:id */
-  remove: (id) => apiRequest(`/menu/categories/${id}`, { method: 'DELETE' }),
-};
-
-export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMenuAPI, categoriesAPI };
 // ─── KITCHEN ──────────────────────────────────────────────────────────────────
 export const kitchenAPI = {
   getOrders: () => apiClient.get('/api/kitchen/orders'),
@@ -406,7 +204,10 @@ let MOCK_SETTINGS = {
     Saturday:  { open:'08:00', close:'23:00', closed:false },
     Sunday:    { open:'08:00', close:'21:00', closed:false },
   },
-  menu_categories: ['Silog Meals','Rice Meals','Merienda','Drinks','Add-ons'],
+  menu_categories: [
+    'Rice Meals', 'Appetizers', 'Drinks (Caffeinated)', 'Drinks (Non-Caffeinated)',
+    'Drinks (Student)', 'Student Meal', 'Student Platter',
+  ],
 };
 
 let MOCK_DEVICES = [
@@ -583,7 +384,8 @@ const MOCK_VIOLATIONS = {
   ],
 };
 
-export const customerRestrictionsAPI = {
+// Not exported: CustomerRestrictions.jsx reaches these through the adminAPI alias below.
+const customerRestrictionsAPI = {
   listCustomerRestrictions: async ({ page = 1, limit = 12, search, restriction_level } = {}) => {
     await delay(350);
     let result = [...MOCK_CUSTOMER_RESTRICTIONS];
@@ -761,8 +563,6 @@ let MOCK_DELIVERIES = [
     },
   },
 ];
-
-let deliveryCounter = 8;
 
 // ─── DELIVERY API (§4.3) ──────────────────────────────────────────────────────
 export const deliveryAPI = {

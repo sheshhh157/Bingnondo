@@ -172,9 +172,9 @@
 .menu-card__name {
   font-weight: 600;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Wrap the full name instead of ellipsising it. */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .menu-card__meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .menu-card__price { font-size: 0.85rem; color: var(--color-muted-foreground); }

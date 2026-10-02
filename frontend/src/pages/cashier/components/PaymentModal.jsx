@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { paymentsAPI } from '../../../services/api';
+// The real API, not the mock in services/api.js. That mock mutated a local
+// array and returned success without ever calling POST /api/payments, so
+// "Mark Paid" printed a receipt while recording nothing — no payment row, no
+// kitchen_alerts row, and therefore no ESP32 buzzer.
+import { paymentsAPI } from '../../../services/cashierApi';
 import '../../../styles/PaymentModal.css';
 
 const fmt   = (n) => `₱${Number(n).toFixed(2)}`;
@@ -291,7 +295,7 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
 }
 
 // ─── PayMethodCard ────────────────────────────────────────────────────────────
-function PayMethodCard({ id, value, label, description, selected, onSelect, icon }) {
+function PayMethodCard({ id, label, description, selected, onSelect, icon }) {
   return (
     <button
       id={id}

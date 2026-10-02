@@ -4,7 +4,6 @@ import { getSocket, KITCHEN_EVENTS } from '../../services/socket';
 import KitchenHeader from './components/KitchenHeader';
 import OrderColumn from './components/OrderColumn';
 import OrderCard from './components/OrderCard';
-import AlertPanel from './components/AlertPanel';
 import ConnectionStatus from './components/ConnectionStatus';
 import '../../styles/KitchenPage.css';
 
@@ -25,21 +24,6 @@ function ordersReducer(state, action) {
   }
 }
 
-function alertsReducer(state, action) {
-  switch (action.type) {
-    case 'LOAD': return action.payload;
-    case 'ADD': {
-      const exists = state.some((a) => a.id === action.payload.id);
-      return exists ? state : [action.payload, ...state];
-    }
-    case 'ACKNOWLEDGE':
-      return state.map((a) =>
-        a.id === action.id ? { ...a, acknowledged_at: new Date().toISOString() } : a
-      );
-    default: return state;
-  }
-}
-
 // ─── Sound ───────────────────────────────────────────────────────────────────
 function playAlert() {
   try {
@@ -54,13 +38,15 @@ function playAlert() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.5);
-  } catch (_) {}
+  } catch {
+    // Web Audio is unavailable or blocked until a user gesture — the buzzer is
+    // a nicety, so a failure here must not break the caller.
+  }
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function KitchenPage() {
   const [orders, dispatchOrders] = useReducer(ordersReducer, []);
-  const [alerts, dispatchAlerts] = useReducer(alertsReducer, []);
   const [connected, setConnected] = useState(true);
   const [reconnecting, setReconnecting] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -71,15 +57,10 @@ export default function KitchenPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [ordersRes, alertsRes] = await Promise.all([
-          kitchenAPI.getOrders(),
-          kitchenAPI.getAlerts(),
-        ]);
+        const ordersRes = await kitchenAPI.getOrders();
         const ordersData = ordersRes?.data ?? ordersRes ?? [];
-        const alertsData = alertsRes?.data ?? alertsRes ?? [];
         if (!cancelled) {
           dispatchOrders({ type: 'LOAD', payload: Array.isArray(ordersData) ? ordersData : [] });
-          dispatchAlerts({ type: 'LOAD', payload: Array.isArray(alertsData) ? alertsData : [] });
         }
       } catch (err) {
         if (!cancelled) setError(err?.response?.data?.message || 'Failed to load orders.');
@@ -99,15 +80,18 @@ export default function KitchenPage() {
     socket.on('reconnecting',     () => setReconnecting(true));
     socket.on('reconnect_failed', () => setReconnecting(false));
 
-    // New order arrives as 'pending' — play alert so kitchen notices
+    // A new order arrives as 'pending' and the card appears in New Orders.
+    // Deliberately silent: the buzzer and the beep are paid-only triggers, so
+    // Confirm Order must not ring anything.
     socket.on(KITCHEN_EVENTS.NEW_ORDER, (order) => {
       dispatchOrders({ type: 'ADD', payload: order });
-      playAlert();
     });
 
-    socket.on(KITCHEN_EVENTS.KITCHEN_ALERT, (alert) => {
-      dispatchAlerts({ type: 'ADD', payload: alert });
-    });
+    // The only sound trigger: a payment landed. The ESP32 is buzzing and the
+    // order card is waiting to be acknowledged. There is no separate alert
+    // banner any more (the order card's Acknowledge button is the single
+    // control), so this event is only a cue.
+    socket.on(KITCHEN_EVENTS.KITCHEN_ALERT, () => { playAlert(); });
 
     socket.on(KITCHEN_EVENTS.ORDER_STATUS_UPDATE, ({ orderId, status }) => {
       dispatchOrders({ type: 'UPDATE_STATUS', id: orderId, status });
@@ -124,10 +108,6 @@ export default function KitchenPage() {
 
   const handleStatusChange = useCallback((orderId, newStatus) => {
     dispatchOrders({ type: 'UPDATE_STATUS', id: orderId, status: newStatus });
-  }, []);
-
-  const handleAcknowledge = useCallback((alertId) => {
-    dispatchAlerts({ type: 'ACKNOWLEDGE', id: alertId });
   }, []);
 
   // ─── Split orders into lanes ──────────────────────────────────────────────
@@ -149,12 +129,9 @@ export default function KitchenPage() {
       <ConnectionStatus connected={connected} reconnecting={reconnecting} />
 
       <KitchenHeader
-        pendingCount={pendingOrders.length}
         counterCount={counterOrders.length}
         onlineCount={onlineOrders.length}
       />
-
-      <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} />
 
       <main className="kp-main" id="main-content">
         {pageLoading ? (

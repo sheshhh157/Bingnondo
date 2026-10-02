@@ -281,9 +281,10 @@
   color: var(--color-foreground);
   margin: 0;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Wrap instead of truncating, so the full name is always readable.
+     overflow-wrap guards long unbroken words (e.g. no-space names). */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .mn-card__price {
@@ -300,11 +301,15 @@
   font-size: 0.8125rem;
   color: var(--color-muted-foreground);
   margin: 0;
+  /* Full description. The high clamp is a safety valve only, so a
+     pathologically long description cannot make one card swallow the row. */
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .mn-card__footer {
@@ -607,6 +612,8 @@
   justify-content: space-between;
   padding: 18px 20px 14px;
   border-bottom: 1px solid var(--color-border);
+  /* Keep the title and close button pinned while the body scrolls. */
+  flex: 0 0 auto;
   flex-shrink: 0;
 }
 
@@ -666,13 +673,30 @@
 
 .mn-modal__tab:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 
+/* The form is a flex item between .mn-modal and .mn-modal__body. Without this
+   it is a block box, so the body's `flex: 1` was inert: the form grew to the
+   full content height and .mn-modal's overflow:hidden clipped the rest with
+   no scrollbar. It has to be a shrinking flex column for the body to scroll. */
+.mn-modal__form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  /* Flex items default to min-height:auto, which stops them shrinking below
+     their content. Without this the form never yields space to the body. */
+  min-height: 0;
+}
+
 .mn-modal__body {
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Stop the scroll chain from bubbling to the page behind the overlay. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mn-modal__error {
@@ -687,6 +711,61 @@
   font-family: var(--font-body);
   font-size: 0.8125rem;
   color: var(--color-destructive);
+}
+
+/* ─── Menu item options (variants: Hot / Iced) ──────────────────────── */
+.mn-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mn-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.mn-opt__main {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mn-opt__main > .mn-field__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mn-opt__price {
+  position: relative;
+  flex: 0 0 108px;
+  display: flex;
+  align-items: center;
+}
+
+.mn-opt__price > .mn-field__input {
+  width: 100%;
+  padding-left: 22px;
+}
+
+.mn-opt__peso {
+  position: absolute;
+  left: 9px;
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  pointer-events: none;
+}
+
+.mn-opt__side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .mn-modal__footer {

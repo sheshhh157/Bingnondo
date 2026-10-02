@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authClient } from '../services/apiClient';
-import { connectSocket, disconnectSocket } from '../services/socket';
+import { connectSocket, disconnectSocket, SOCKET_ROOM_BY_ROLE } from '../services/socket';
+import { joinSocketRoom, leaveManagerRoom } from './SocketContext';
 
 const AuthContext = createContext(null);
 
@@ -38,14 +39,10 @@ export function AuthProvider({ children }) {
     setUser(userData);
 
     // Join the correct socket room for this role
-    const roomMap = {
-      cashier:       'cashier',
-      kitchen_staff: 'kitchen',
-      staff:         'staff',
-      owner:         'manager',
-      admin:         'manager',
-    };
-    connectSocket(roomMap[userData.role]);
+    connectSocket(SOCKET_ROOM_BY_ROLE[userData.role]);
+    // Also ensure the provider's singleton is in the same room (covers the
+    // case where the provider reconnected in the meantime).
+    joinSocketRoom();
 
     return userData;
   }, []);
@@ -54,6 +51,10 @@ export function AuthProvider({ children }) {
     authClient.logout().catch(() => {});
     localStorage.clear();
     disconnectSocket();
+    // The shared socket is granted the `manager` room from its handshake token,
+    // and discarding the token client-side doesn't tell the server. Drop the
+    // room before the redirect so the tab stops receiving operational events.
+    leaveManagerRoom();
     setUser(null);
     // Replace the entire history stack so back button can't return to protected pages
     window.location.replace('/login');

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { staffMenuAPI, inventoryAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
-import '../../styles/MenuPage.css';
+import '../../styles/StaffMenuPage.css';
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
@@ -196,7 +196,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
                     <button type="button" onClick={() => setEditingIdx(null)} className="mn-btn mn-btn--ghost mn-btn--xs" aria-label="Cancel edit">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
-                  </div>
+</div>
                 ) : (
                   <button
                     type="button"
@@ -315,6 +315,9 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
   });
   const [photoFile, setPhotoFile] = useState(null);
   const [linked, setLinked] = useState(item?.ingredients || []);
+  // Variants ("Hot" / "Iced"). Rows loaded from the server keep their id so the
+  // save can delete exactly those; rows added here have no id yet.
+  const [optionRows, setOptionRows] = useState(item?.options || []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -327,14 +330,40 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
+  const setOption = (i, patch) =>
+    setOptionRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addOption = () =>
+    setOptionRows((rows) => [...rows, { name: '', price: '', is_available: true, _new: true }]);
+  const removeOption = (i) => setOptionRows((rows) => rows.filter((_, idx) => idx !== i));
+
+  // Names are how staff recognise a variant, so a blank one is never sent --
+  // it would collide with the UNIQUE(menu_item_id, name) guard on save.
+  const blankOptionName = optionRows.find((r) => !String(r.name || '').trim());
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) { setError('Item name is required.'); return; }
     if (!form.price || Number(form.price) <= 0) { setError('Enter a valid price.'); return; }
+    if (blankOptionName) {
+      setTab('options');
+      setError('Every option needs a name.');
+      return;
+    }
     setLoading(true); setError('');
     try {
       const image_url = photoFile ? `https://placehold.co/400x300?text=${encodeURIComponent(form.name)}` : (item?.image_url || null);
-      await onSave({ ...form, price: Number(form.price), image_url, ingredients: linked }, isEdit ? item.id : null);
+      await onSave({
+        ...form,
+        price: Number(form.price),
+        image_url,
+        ingredients: linked,
+        options: optionRows.map((o) => ({
+          id: o.id,
+          name: String(o.name).trim(),
+          price: Number(o.price) || 0,
+          is_available: o.is_available !== false,
+        })),
+      }, isEdit ? item.id : null);
       onClose();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save item.');
@@ -354,12 +383,16 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
         </div>
 
         <div className="mn-modal__tabs">
-          {[{ id: 'details', label: 'Details' }, { id: 'ingredients', label: `Ingredients${linked.length ? ` (${linked.length})` : ''}` }].map(({ id, label }) => (
+          {[
+            { id: 'details', label: 'Details' },
+            { id: 'options', label: `Options${optionRows.length ? ` (${optionRows.length})` : ''}` },
+            { id: 'ingredients', label: `Ingredients${linked.length ? ` (${linked.length})` : ''}` },
+          ].map(({ id, label }) => (
             <button key={id} type="button" onClick={() => setTab(id)} className={`mn-modal__tab${tab === id ? ' mn-modal__tab--active' : ''}`}>{label}</button>
           ))}
         </div>
 
-        <form id="mn-form" onSubmit={handleSubmit} noValidate>
+        <form id="mn-form" className="mn-modal__form" onSubmit={handleSubmit} noValidate>
           <div className="mn-modal__body">
             {tab === 'details' ? (
               <>
@@ -400,6 +433,78 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                   </div>
                 </div>
               </>
+            ) : tab === 'options' ? (
+              <div className="mn-field">
+                <p className="mn-field__label">Options</p>
+                <p className="mn-field__hint">
+                  Sell this item in more than one form at its own price — e.g. Hot and Iced.
+                  Once an item has options, the cashier must pick one when ordering.
+                </p>
+
+                {optionRows.length === 0 ? (
+                  <p className="mn-field__hint">
+                    No options. This item is ordered as a single product.
+                  </p>
+                ) : (
+                  <div className="mn-opts">
+                    {optionRows.map((opt, i) => (
+                      <div className="mn-opt" key={opt.id || `new-${i}`}>
+                        <div className="mn-opt__main">
+                          <input
+                            type="text"
+                            value={opt.name}
+                            onChange={(e) => setOption(i, { name: e.target.value })}
+                            className="mn-field__input"
+                            placeholder="Hot"
+                            aria-label="Option name"
+                          />
+                          <div className="mn-opt__price">
+                            <span className="mn-opt__peso">&#8369;</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              value={opt.price}
+                              onChange={(e) => setOption(i, { price: e.target.value })}
+                              className="mn-field__input"
+                              placeholder="0.00"
+                              aria-label="Option price"
+                            />
+                          </div>
+                        </div>
+                        <div className="mn-opt__side">
+                          <span className={`mn-badge${opt.is_available !== false ? ' mn-badge--ok' : ' mn-badge--off'}`}>
+                            {opt.is_available !== false ? 'Available' : 'Unavailable'}
+                          </span>
+                          <Toggle
+                            checked={opt.is_available !== false}
+                            onChange={(v) => setOption(i, { is_available: v })}
+                            label={`Availability for ${opt.name || 'option'}`}
+                          />
+                          <button
+                            type="button"
+                            className="mn-btn mn-btn--ghost mn-btn--sm"
+                            onClick={() => removeOption(i)}
+                            aria-label={`Remove ${opt.name || 'option'}`}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button type="button" className="mn-btn mn-btn--ghost" onClick={addOption}>
+                  + Add option
+                </button>
+
+                {optionRows.length > 0 && (
+                  <p className="mn-field__hint">
+                    Removing an option hides it from the menu. Orders that already sold it keep it.
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="mn-field">
                 <p className="mn-field__label">Linked Ingredients</p>
@@ -447,7 +552,7 @@ function ConfirmDialog({ item, onClose, onConfirm }) {
           </svg>
         </div>
         <h3 id="mn-confirm-title" className="mn-confirm__title">Remove Menu Item</h3>
-        <p className="mn-confirm__msg">Remove <strong>{item.name}</strong> from the menu? This cannot be undone.</p>
+        <p className="mn-confirm__msg">Remove <strong>{item.name}</strong> from the menu? It will be hidden from customers, and past orders are kept.</p>
         <div className="mn-confirm__actions">
           <button className="mn-btn mn-btn--ghost" onClick={onClose}>Cancel</button>
           <button className="mn-btn mn-btn--danger" onClick={onConfirm}>Remove</button>

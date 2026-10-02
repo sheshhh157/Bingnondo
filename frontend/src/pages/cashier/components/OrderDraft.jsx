@@ -55,11 +55,11 @@ export default function OrderDraft({
         ) : (
           draft.map((item) => (
             <DraftItem
-              key={item.id}
+              key={item.lineKey}
               item={item}
-              onQty={(q) => onUpdateQty(item.id, q)}
-              onRemove={() => onRemove(item.id)}
-              onNote={(n) => onUpdateNote(item.id, n)}
+              onQty={(q) => onUpdateQty(item.lineKey, q)}
+              onRemove={() => onRemove(item.lineKey)}
+              onNote={(n) => onUpdateNote(item.lineKey, n)}
             />
           ))
         )}
@@ -102,7 +102,12 @@ function DraftItem({ item, onQty, onRemove, onNote }) {
     <div className="od-item">
       <div className="od-item__main">
         <div className="od-item__info">
-          <p className="od-item__name">{item.name}</p>
+          <p className="od-item__name">
+            {item.name}
+            {/* The variant is part of what the cashier is selling, so it has
+                to read on the ticket -- "Cappuccino" alone is ambiguous. */}
+            {item.optionName && <span className="od-item__variant">{item.optionName}</span>}
+          </p>
           <p className="od-item__unit">₱{Number(item.price).toFixed(2)} each</p>
         </div>
 
