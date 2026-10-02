@@ -1,4 +1,20 @@
 const db = require('../../config/db');
+const socketHub = require('../../sockets');
+const menuController = require('../menu/menu.controller');
+
+/**
+ * Announce a menu availability change caused by an inventory cascade (an
+ * ingredient hitting zero, or a restock making its items sellable again).
+ *
+ * Fire-and-forget on purpose: it runs after COMMIT, so the write has already
+ * succeeded and a failed broadcast must not turn a 200 into a 500. Clients
+ * reconcile on their next poll or manual refresh.
+ */
+function broadcastMenuAvailability(rows) {
+  menuController
+    .emitAvailabilityUpdates((rows || []).map((r) => r.id))
+    .catch((err) => console.error('[inventory] menu availability broadcast failed:', err.message));
+}
 
 // ─── GET /api/inventory ───────────────────────────────────────────────────────
 // Staff: all inventory items with low-stock flag
@@ -104,7 +120,7 @@ async function createTransaction(req, res, next) {
 
     // Row-level lock so concurrent transactions don't race
     const itemRes = await client.query(
-      'SELECT id, name, current_stock FROM inventory_items WHERE id = $1 FOR UPDATE',
+      'SELECT id, name, current_stock, reorder_level FROM inventory_items WHERE id = $1 FOR UPDATE',
       [id]
     );
     if (itemRes.rows.length === 0) {
@@ -160,6 +176,13 @@ async function createTransaction(req, res, next) {
 
     await client.query('COMMIT');
 
+    socketHub.emitInventoryUpdate({
+      itemId: Number(id),
+      currentStock: newStock,
+      reorderLevel: Number(item.reorder_level),
+    });
+    broadcastMenuAvailability(autoEnabled);
+
     res.json({
       id: Number(id),
       name: item.name,
@@ -188,7 +211,7 @@ async function outOfStock(req, res, next) {
 
     // Lock + verify exists
     const itemRes = await client.query(
-      'SELECT id, name, current_stock FROM inventory_items WHERE id = $1 FOR UPDATE',
+      'SELECT id, name, current_stock, reorder_level FROM inventory_items WHERE id = $1 FOR UPDATE',
       [id]
     );
     if (itemRes.rows.length === 0) {
@@ -222,11 +245,90 @@ async function outOfStock(req, res, next) {
 
     await client.query('COMMIT');
 
+    socketHub.emitInventoryUpdate({
+      itemId: Number(id),
+      currentStock: 0,
+      reorderLevel: Number(itemRes.rows[0].reorder_level),
+    });
+    broadcastMenuAvailability(cascadeRes.rows);
+
     res.json({
       id: Number(id),
       name: itemRes.rows[0].name,
       current_stock: 0,
       affected_menu_items: cascadeRes.rows,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+// ─── DELETE /api/inventory/:id ────────────────────────────────────────────────
+// Staff: remove an ingredient outright.
+//
+// This is a hard delete. Both children cascade:
+//   menu_item_ingredients  - the recipe links vanish
+//   inventory_transactions  - the movement history is erased too
+//
+// The erased history is the part worth knowing about, so the response names
+// every menu item that loses a recipe link. That is the caller's only warning
+// before the audit trail is gone.
+async function deleteItem(req, res, next) {
+  const client = await db.getClient();
+  try {
+    const { id } = req.params;
+
+    await client.query('BEGIN');
+
+    const itemRes = await client.query(
+      'SELECT id, name, current_stock FROM inventory_items WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+    if (itemRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Inventory item not found.' });
+    }
+
+    // Capture the linked menu items *before* the delete - once the rows cascade
+    // there is nothing left to join against.
+    const linked = await client.query(
+      `SELECT m.id, m.name, m.is_available
+         FROM menu_items m
+         JOIN menu_item_ingredients mi ON mi.menu_item_id = m.id
+        WHERE mi.inventory_item_id = $1
+        ORDER BY m.name`,
+      [id]
+    );
+
+    // Count the history that is about to cascade away, so the caller can report it.
+    const txnRes = await client.query(
+      'SELECT count(*)::int AS n FROM inventory_transactions WHERE inventory_item_id = $1',
+      [id]
+    );
+
+    const del = await client.query(
+      'DELETE FROM inventory_items WHERE id = $1 RETURNING id',
+      [id]
+    );
+    if (del.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Inventory item not found.' });
+    }
+
+    await client.query('COMMIT');
+
+    // No availability broadcast: menu_items.is_available is a stored flag, and
+    // dropping an ingredient link does not change it. Clients refresh instead.
+    socketHub.emitInventoryUpdate({ id: Number(id), deleted: true });
+
+    res.json({
+      id: Number(id),
+      name: itemRes.rows[0].name,
+      unlinked_menu_items: linked.rows,
+      transactions_erased: txnRes.rows[0].n,
     });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -260,4 +362,4 @@ async function getTransactions(req, res, next) {
   }
 }
 
-module.exports = { getAll, getById, createItem, createTransaction, outOfStock, getTransactions };
+module.exports = { getAll, getById, createItem, createTransaction, outOfStock, deleteItem, getTransactions };

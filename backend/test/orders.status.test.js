@@ -215,11 +215,11 @@ const kitchenSet = (id, status) => call('PATCH', `/api/kitchen/orders/${id}/stat
  * `kitchen_alerts` all cascade on `orders.id`, and the sequence is advanced by
  * the test, so the table is left exactly as found.
  */
-const withTestOrder = async ({ status, payment = 'pending', items = 1 }, fn) => {
+const withTestOrder = async ({ status, payment = 'pending', items = 1, cashierId = null }, fn) => {
   const created = await db.query(
-    `INSERT INTO orders (order_type, status, order_channel, total_amount)
-     VALUES ('counter', $1, 'web_counter', 100) RETURNING id`,
-    [status]);
+    `INSERT INTO orders (order_type, status, order_channel, total_amount, cashier_id)
+     VALUES ('counter', $1, 'web_counter', 100, $2) RETURNING id`,
+    [status, cashierId]);
   const id = created.rows[0].id;
 
   const menuItem = await db.query(`SELECT id, price FROM menu_items ORDER BY id LIMIT 1`);

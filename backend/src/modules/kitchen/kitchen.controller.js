@@ -37,18 +37,24 @@ async function getKitchenOrders(req, res, next) {
          o.status,
          o.special_request,
          o.created_at,
-         json_agg(
-           json_build_object(
-             'id',        oi.id,
-             'quantity',  oi.quantity,
-             'notes',     oi.notes,
-             'menu_item', json_build_object('name', mi.name)
-           ) ORDER BY oi.id
-         ) AS order_items
-       FROM orders o
-       JOIN order_items oi ON oi.order_id = o.id
-       JOIN menu_items  mi ON mi.id = oi.menu_item_id
-        WHERE o.status IN (${inClause})
+json_agg(
+            json_build_object(
+              'id',        oi.id,
+              'quantity',  oi.quantity,
+              'notes',     oi.notes,
+              'menu_item', json_build_object('name', mi.name),
+              -- Variant the cashier sold ("Hot" / "Iced"). Without this the
+              -- ticket just said "Cappuccino" and the kitchen had to guess.
+              -- LEFT JOIN: items with no options must still produce a line.
+              'option',    CASE WHEN mio.id IS NULL THEN NULL
+                                ELSE json_build_object('name', mio.name) END
+            ) ORDER BY oi.id
+          ) AS order_items
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        JOIN menu_items  mi ON mi.id = oi.menu_item_id
+        LEFT JOIN menu_item_options mio ON mio.id = oi.menu_item_option_id
+         WHERE o.status IN (${inClause})
        GROUP BY o.id
        ORDER BY o.created_at ASC`
     );
@@ -68,46 +74,66 @@ async function acknowledgeOrder(req, res, next) {
     await client.query('BEGIN');
 
     const { rows: current } = await client.query(
-      `SELECT id, status FROM orders WHERE id = $1`,
+      `SELECT id, status, order_channel,
+              'ORD-' || LPAD(id::text, 4, '0') AS order_number
+         FROM orders WHERE id = $1`,
       [req.params.id]
     );
     if (!current[0]) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Order not found.' });
     }
-    if (current[0].status !== 'pending') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({
-        message: `Cannot acknowledge. Order status is "${current[0].status}", expected "pending".`,
-      });
+
+    // Silencing the buzzer is the point of this endpoint, so the alert is
+    // cleared whatever the order status happens to be. A retried click, or a
+    // second tab that already acknowledged, must never leave the ESP32 stuck
+    // buzzing just because the status moved on.
+    const { rows: acked } = await client.query(
+      `UPDATE kitchen_alerts
+          SET acknowledged_at = NOW(), acknowledged_by = $1
+        WHERE order_id = $2 AND acknowledged_at IS NULL
+        RETURNING id, device_id`,
+      [req.user.sub, req.params.id]
+    );
+
+    // Only advance the status machine when it is actually still on 'pending'.
+    // Already-acknowledged orders are a no-op here, not an error.
+    const wasPending = current[0].status === 'pending';
+    let order = current[0];
+
+    if (wasPending) {
+      const { rows } = await client.query(
+        `UPDATE orders SET status = 'confirmed', updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, status, order_channel,
+                   'ORD-' || LPAD(id::text, 4, '0') AS order_number`,
+        [req.params.id]
+      );
+      order = rows[0];
+
+      await client.query(
+        `INSERT INTO order_status_history (order_id, status, changed_by)
+         VALUES ($1, 'confirmed', $2)`,
+        [req.params.id, req.user.sub]
+      );
     }
-
-    const { rows } = await client.query(
-      `UPDATE orders SET status = 'confirmed', updated_at = NOW()
-       WHERE id = $1
-       RETURNING id, status, order_channel,
-                 'ORD-' || LPAD(id::text, 4, '0') AS order_number`,
-      [req.params.id]
-    );
-
-    await client.query(
-      `INSERT INTO order_status_history (order_id, status, changed_by)
-       VALUES ($1, 'confirmed', $2)`,
-      [req.params.id, req.user.sub]
-    );
 
     await client.query('COMMIT');
 
-    const order = rows[0];
+    if (wasPending) {
+      socketHub.emitOrderStatus({
+        orderId: order.id,
+        orderNumber: order.order_number,
+        status: 'confirmed',
+      });
+    }
 
-    // Notify all rooms that this order is now confirmed
-    socketHub.emitOrderStatus({
-      orderId: order.id,
-      orderNumber: order.order_number,
-      status: 'confirmed',
-    });
+    // Tell the ESP32 to stop buzzing for every alert closed by this request
+    for (const { id: alertId, deviceId } of acked) {
+      socketHub.emitKitchenAlertAck({ alertId, deviceId });
+    }
 
-    res.json(order);
+    res.json({ ...order, statusChanged: wasPending, alertsAcknowledged: acked.length });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -241,9 +267,30 @@ async function acknowledgeAlert(req, res, next) {
     );
 
     if (!rows[0]) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({
-        message: 'Alert not found or already acknowledged.',
+      // Nothing was updated. Either the id is bogus, or the alert was already
+      // acknowledged — most likely by PATCH /orders/:id/acknowledge, which
+      // clears this order's alerts so the kitchen's primary button also stops
+      // the buzzer. That is the desired end state, not a failure, so report
+      // success and let the caller settle instead of raising a 404.
+      const { rows: existing } = await client.query(
+        `SELECT id, device_id, acknowledged_at FROM kitchen_alerts WHERE id = $1`,
+        [req.params.id]
+      );
+
+      if (!existing[0]) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Alert not found.' });
+      }
+
+      await client.query('COMMIT');
+      socketHub.emitKitchenAlertAck({
+        alertId: existing[0].id,
+        deviceId: existing[0].device_id,
+      });
+      return res.json({
+        message: 'Alert already acknowledged.',
+        alertId: existing[0].id,
+        alreadyAcknowledged: true,
       });
     }
 

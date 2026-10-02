@@ -7,6 +7,12 @@ const ctrl = require('./inventory.controller');
 const staffAccess = [authenticateToken, requireStaff];
 const staffWrite  = [authenticateToken, requireStaff, requireRoles('staff', 'owner', 'admin')];
 
+// DELETE /api/inventory/:id                — remove an ingredient outright.
+// Cascades menu_item_ingredients (recipe links) and inventory_transactions
+// (movement history). The response names every menu item that gets unlinked so
+// the caller can warn before the history is gone.
+router.delete('/:id', ...staffWrite, ctrl.deleteItem);
+
 // POST /api/inventory/:id/out-of-stock  — force to 0 + cascade menu unavailability
 router.post('/:id/out-of-stock', ...staffWrite, ctrl.outOfStock);
 

@@ -1,4 +1,5 @@
 const db = require('../../config/db');
+const socketHub = require('../../sockets');
 
 // ─── POST /api/payments ───────────────────────────────────────────────────────
 // Cashier marks a counter order as paid (Cash only for now).
@@ -33,11 +34,12 @@ async function processPayment(req, res, next) {
     // Fetch order + its payment record together
     const { rows } = await client.query(
       `SELECT o.id, o.status AS order_status, o.total_amount::float,
+              o.cashier_id,
               p.id AS payment_id, p.status AS payment_status
        FROM orders o
-       JOIN payments p ON p.order_id = o.id
+       LEFT JOIN payments p ON p.order_id = o.id
        WHERE o.id = $1
-       FOR UPDATE`,
+       FOR UPDATE OF o`,
       [Number(order_id)]
     );
 
@@ -46,7 +48,33 @@ async function processPayment(req, res, next) {
       return res.status(404).json({ message: 'Order not found.' });
     }
 
-    const { total_amount, payment_id, payment_status, order_status } = rows[0];
+    const { total_amount, payment_id, payment_status, order_status, cashier_id } = rows[0];
+
+    // A cashier is confined to their own orders. owner / admin / staff act as
+    // a supervisor override, mirroring the scoping `buildOrderFilters` applies
+    // to the order list. Without this any cashier could mark another's order
+    // paid, and the read scoping meant the victim could not see it happen.
+    // An unowned order (cashier_id NULL) is not "someone else's" — see
+    // ownsOrder in orders.controller.js, which applies the same rule.
+    const ownsIt = req.user.role !== 'cashier'
+      || cashier_id === null
+      || cashier_id === undefined
+      || Number(cashier_id) === Number(req.user.sub);
+    if (!ownsIt) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'You can only act on your own orders.' });
+    }
+
+    // LEFT JOIN above means an order with no payment row now surfaces as a
+    // distinct, accurate error instead of being indistinguishable from a
+    // missing order. It used to be an INNER JOIN, so such orders reported
+    // "Order not found." and were permanently unpayable.
+    if (!payment_id) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: 'This order has no payment record, so it cannot be settled. Ask a manager to void and recreate it.',
+      });
+    }
 
     if (payment_status === 'paid') {
       await client.query('ROLLBACK');
@@ -86,7 +114,35 @@ async function processPayment(req, res, next) {
       [method, payment_id]
     );
 
+    // Paid -> ring the kitchen buzzer. Same transaction as the payment, so a
+    // paid order always has its alert. If the device row is missing we skip the
+    // alert rather than fail the sale.
+    let alert = null;
+    const { rows: devRows } = await client.query(
+      `SELECT id, location_label FROM esp32_devices WHERE device_code = $1`,
+      [process.env.ESP32_DEVICE_CODE || 'ESP32-KitchenA']
+    );
+    if (devRows[0]) {
+      const { rows: alertRows } = await client.query(
+        `INSERT INTO kitchen_alerts (order_id, device_id)
+         VALUES ($1, $2)
+         RETURNING id, order_id, device_id`,
+        [Number(order_id), devRows[0].id]
+      );
+      alert = { ...alertRows[0], location_label: devRows[0].location_label };
+    }
+
     await client.query('COMMIT');
+
+    if (alert) {
+      socketHub.emitKitchenAlert({
+        alertId: alert.id,
+        orderId: alert.order_id,
+        orderNumber: `ORD-${String(alert.order_id).padStart(4, '0')}`,
+        deviceId: alert.device_id,
+        locationLabel: alert.location_label,
+      });
+    }
 
     const payment = payRows[0];
     const change = method === 'cash'

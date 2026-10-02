@@ -1,11 +1,157 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
+const { fetchOptionsForItems } = require('../menu/menu.controller');
 const { ALL_STATUSES, isKnownStatus, canTransition } = require('./status-transitions');
+
+// ─── Cart pricing ────────────────────────────────────────────────────────────
+
+/** Thrown for any cart problem the caller should turn into a 400. */
+class CartError extends Error {
+  constructor(message) { super(message); this.name = 'CartError'; }
+}
+
+/**
+ * Validate a cart and price it from the database. Never trust a client price.
+ *
+ * The unit price always comes from `menu_items.price` / `menu_item_options.price`
+ * as they stand right now, so a tampered or stale payload cannot set its own
+ * amount.
+ *
+ * Variant handling (migration 008):
+ *   An item that has options is priced by the option the cashier chose, and
+ *   choosing one is mandatory. Silently falling back to `menu_items.price`
+ *   would sell "Iced" at the Hot price whenever the UI failed to send an
+ *   option, which is exactly the mistake this feature exists to prevent.
+ *
+ * Shared by createOrder and updateOrderItems. They priced carts with
+ * near-identical inline loops, so the rules below previously existed twice and
+ * a fix to one did not reach the other.
+ */
+async function priceCart(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new CartError('Order must contain at least one item.');
+  }
+
+  const menuIds = items.map((i) => Number(i.menu_item_id));
+
+  // archived_at IS NULL matters: a removed item must not be orderable by id
+  // even though its row still exists for history.
+  const menuRes = await db.query(
+    `SELECT id, name, price, is_available, archived_at
+       FROM menu_items
+      WHERE id = ANY($1::int[])`,
+    [menuIds]
+  );
+  const menuMap = Object.fromEntries(menuRes.rows.map((r) => [r.id, r]));
+
+  const optionsByItem = await fetchOptionsForItems(menuIds);
+  const optionIds = items
+    .map((i) => Number(i.menu_item_option_id))
+    .filter((n) => Number.isInteger(n) && n > 0);
+
+  // Options are validated in one extra query rather than one per line: the id
+  // alone is not enough, because an option id belonging to a *different* item
+  // would otherwise price this line.
+  let optionMap = {};
+  if (optionIds.length > 0) {
+    const optRes = await db.query(
+      `SELECT id, menu_item_id, name, price, is_available
+         FROM menu_item_options
+        WHERE id = ANY($1::int[]) AND archived_at IS NULL`,
+      [optionIds]
+    );
+    optionMap = Object.fromEntries(optRes.rows.map((r) => [r.id, r]));
+  }
+
+  let totalAmount = 0;
+  const validated = [];
+
+  for (const item of items) {
+    const mi = menuMap[Number(item.menu_item_id)];
+    if (!mi || mi.archived_at) {
+      throw new CartError(`Menu item ${item.menu_item_id} not found.`);
+    }
+    if (!mi.is_available) {
+      throw new CartError(`"${mi.name}" is currently unavailable.`);
+    }
+
+    const qty = Number(item.quantity);
+    if (!qty || qty < 1) {
+      throw new CartError('Quantity must be at least 1.');
+    }
+
+    const itemOptions = optionsByItem.get(mi.id) || [];
+    let unitPrice = parseFloat(mi.price);
+    let optionId = null;
+    let optionName = null;
+
+    if (itemOptions.length > 0) {
+      const requested = Number(item.menu_item_option_id);
+      const opt = Number.isInteger(requested) ? optionMap[requested] : null;
+
+      if (!opt) {
+        const available = itemOptions.filter((o) => o.is_available).map((o) => o.name);
+        throw new CartError(
+          available.length > 0
+            ? `"${mi.name}" needs an option: ${available.join(' or ')}.`
+            : `"${mi.name}" has no available options right now.`
+        );
+      }
+      // Guards against an option id from another item being used here.
+      if (Number(opt.menu_item_id) !== Number(mi.id)) {
+        throw new CartError(`That option does not belong to "${mi.name}".`);
+      }
+      if (!opt.is_available) {
+        throw new CartError(`"${mi.name} (${opt.name})" is currently unavailable.`);
+      }
+
+      optionId = opt.id;
+      optionName = opt.name;
+      unitPrice = parseFloat(opt.price);
+    }
+
+    totalAmount += unitPrice * qty;
+    validated.push({
+      menu_item_id: mi.id,
+      menu_item_option_id: optionId,
+      option_name: optionName,
+      name: mi.name,
+      unit_price: unitPrice,
+      quantity: qty,
+      notes: item.notes || null,
+    });
+  }
+
+  return { totalAmount, validated };
+}
 
 // ─── Helper: format order number ─────────────────────────────────────────────
 function orderNumber(id) {
   return `ORD-${String(id).padStart(4, '0')}`;
 }
+
+/**
+ * Whether `req.user` is allowed to act on an order belonging to `cashierId`.
+ *
+ * Mirrors the scoping `buildOrderFilters` already applies to the read paths: a
+ * cashier is confined to their own orders, while owner / admin / staff act
+ * across the whole shop as a supervisor override.
+ *
+ * This existed only on reads. The write paths (pay, cancel, status, items)
+ * accepted any order id, so in a cafe with two tills either cashier could mark
+ * the other's order paid, cancel it, or re-price it — and the read scoping
+ * meant the victim could not even see the result afterwards.
+ */
+function ownsOrder(req, cashierId) {
+  if (req.user.role !== 'cashier') return true;
+  // An order with no recorded owner is not "somebody else's". Orders created
+  // through POST /api/orders always carry one, so this only covers rows that
+  // predate that (or fixtures). Treating NULL as forbidden would 403 those.
+  if (cashierId === null || cashierId === undefined) return true;
+  return Number(cashierId) === Number(req.user.sub);
+}
+
+const NOT_YOUR_ORDER = { message: 'You can only act on your own orders.' };
 
 // Reporting buckets default to the server's zone. Real clients always send
 // their own (see getOrderReport); this only covers callers like curl that
@@ -45,40 +191,18 @@ async function createOrder(req, res, next) {
   try {
     const { items, special_request } = req.body;
 
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: 'Order must contain at least one item.' });
-    }
-
-    // 1. Validate all items exist and are available, compute total
-    const menuIds = items.map((i) => Number(i.menu_item_id));
-    const menuRes = await db.query(
-      'SELECT id, name, price, is_available FROM menu_items WHERE id = ANY($1)',
-      [menuIds]
-    );
-    const menuMap = Object.fromEntries(menuRes.rows.map((r) => [r.id, r]));
-
-    let totalAmount = 0;
-    const validated = [];
-
-    for (const item of items) {
-      const mi = menuMap[Number(item.menu_item_id)];
-      if (!mi) {
-        return res.status(400).json({ message: `Menu item ${item.menu_item_id} not found.` });
-      }
-      if (!mi.is_available) {
-        return res.status(400).json({ message: `"${mi.name}" is currently unavailable.` });
-      }
-      const qty = Number(item.quantity);
-      if (!qty || qty < 1) {
-        return res.status(400).json({ message: 'Quantity must be at least 1.' });
-      }
-      totalAmount += parseFloat(mi.price) * qty;
-      validated.push({ menu_item_id: mi.id, name: mi.name, unit_price: parseFloat(mi.price), quantity: qty, notes: item.notes || null });
+    let totalAmount;
+    let validated;
+    try {
+      ({ totalAmount, validated } = await priceCart(items));
+    } catch (err) {
+      if (err instanceof CartError) return res.status(400).json({ message: err.message });
+      throw err;
     }
 
     await client.query('BEGIN');
 
-    // 2. Insert order — status 'pending' so kitchen sees it in New Orders first.
+    // 1. Insert order — status 'pending' so kitchen sees it in New Orders first.
     //    Kitchen acknowledges → 'confirmed' → 'preparing' → 'ready'.
     const orderRes = await client.query(
       `INSERT INTO orders
@@ -90,30 +214,35 @@ async function createOrder(req, res, next) {
     const order = orderRes.rows[0];
     order.order_number = orderNumber(order.id);
 
-    // 3. Insert order items
+    // 2. Insert order items
     for (const item of validated) {
       await client.query(
-        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [order.id, item.menu_item_id, item.quantity, item.unit_price, item.notes]
+        `INSERT INTO order_items (order_id, menu_item_id, menu_item_option_id, quantity, unit_price, notes)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [order.id, item.menu_item_id, item.menu_item_option_id, item.quantity, item.unit_price, item.notes]
       );
     }
 
-    // 4. Log initial status in history
+    // 3. Log initial status in history
     await client.query(
       `INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'pending', $2)`,
       [order.id, req.user.sub]
     );
 
-    // 5. Create pending payment record (method updated when cashier confirms payment)
+    // 4. Create pending payment record (method updated when cashier confirms payment)
     await client.query(
       `INSERT INTO payments (order_id, method, amount, status) VALUES ($1, 'cash', $2, 'pending')`,
       [order.id, totalAmount]
     );
 
+// 5. No kitchen alert here on purpose.
+    //    Creating an order is NOT the trigger for the ESP32 buzzer — the only
+    //    trigger is a successful payment (see payments.controller.js). Creating
+    //    an alert here rang the buzzer at Confirm Order and then collided with
+    //    the paid-only INSERT under idx_kitchen_alerts_one_open_per_order.
+
     await client.query('COMMIT');
 
-    // 6. Attach items to response and emit to kitchen
     order.items = validated;
     order.total_amount = parseFloat(order.total_amount);
 
@@ -513,6 +642,9 @@ async function getOrderById(req, res, next) {
     );
 
     if (!rows[0]) return res.status(404).json({ message: 'Order not found.' });
+    if (!ownsOrder(req, rows[0].cashier_id)) {
+      return res.status(403).json(NOT_YOUR_ORDER);
+    }
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -535,12 +667,16 @@ async function updateOrderStatus(req, res, next) {
     // below can't validate a transition on its own, and locking here is what
     // makes the read-then-write atomic against a concurrent status change.
     const { rows: current } = await client.query(
-      `SELECT id, status FROM orders WHERE id = $1 FOR UPDATE`,
+      `SELECT id, status, cashier_id FROM orders WHERE id = $1 FOR UPDATE`,
       [req.params.id]
     );
     if (!current[0]) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Order not found.' });
+    }
+    if (!ownsOrder(req, current[0].cashier_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json(NOT_YOUR_ORDER);
     }
 
     const from = current[0].status;
@@ -619,7 +755,7 @@ async function cancelOrder(req, res, next) {
     // agree on which row is "the" payment. A unique index on
     // payments(order_id) now guarantees there is only ever one.
     const { rows } = await client.query(
-      `SELECT o.id, o.status,
+      `SELECT o.id, o.status, o.cashier_id,
               (SELECT p.status FROM payments p
                 WHERE p.order_id = o.id
                 ORDER BY p.paid_at DESC NULLS LAST, p.id DESC
@@ -632,6 +768,10 @@ async function cancelOrder(req, res, next) {
     if (!rows[0]) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Order not found.' });
+    }
+    if (!ownsOrder(req, rows[0].cashier_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json(NOT_YOUR_ORDER);
     }
 
     // Paid money cannot be voided by cancelling. There is no refund flow, so
@@ -691,12 +831,23 @@ async function updateOrderItems(req, res, next) {
 
     // 1. Check order exists and is still editable
     const { rows: orderRows } = await client.query(
-      'SELECT id, status FROM orders WHERE id = $1 FOR UPDATE',
+      `SELECT o.id, o.status, o.cashier_id,
+              (SELECT p.status FROM payments p
+                WHERE p.order_id = o.id
+                ORDER BY p.paid_at DESC NULLS LAST, p.id DESC
+                LIMIT 1) AS payment_status
+         FROM orders o
+         WHERE o.id = $1
+         FOR UPDATE`,
       [orderId]
     );
     if (!orderRows[0]) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Order not found.' });
+    }
+    if (!ownsOrder(req, orderRows[0].cashier_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json(NOT_YOUR_ORDER);
     }
     // Only editable while still 'pending' (before kitchen acknowledges).
     // Once kitchen hits Acknowledge → 'confirmed', items are locked.
@@ -707,42 +858,40 @@ async function updateOrderItems(req, res, next) {
       });
     }
 
-    // 2. Validate all items
-    const menuIds = items.map((i) => Number(i.menu_item_id));
-    const menuRes = await client.query(
-      'SELECT id, name, price, is_available FROM menu_items WHERE id = ANY($1)',
-      [menuIds]
-    );
-    const menuMap = Object.fromEntries(menuRes.rows.map((r) => [r.id, r]));
+    // Money already collected means the price is settled.
+    //
+    // The cashier normally pays at the counter while the order is still
+    // 'pending' — the kitchen acknowledging it is what moves it to
+    // 'confirmed'. So 'pending' alone does not mean "unpaid", and editing an
+    // item after taking the cash rewrote `orders.total_amount` while
+    // `payments.amount` kept the figure actually collected. Revenue sums
+    // `orders.total_amount`, so a single edit inflated the till by the
+    // difference (measured: PHP 80 collected reported as PHP 630).
+    if (orderRows[0].payment_status === 'paid') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: 'Cannot edit items — payment has already been collected for this order.',
+      });
+    }
 
-    let totalAmount = 0;
-    const validated = [];
-
-    for (const item of items) {
-      const mi = menuMap[Number(item.menu_item_id)];
-      if (!mi) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ message: `Menu item ${item.menu_item_id} not found.` });
-      }
-      if (!mi.is_available) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ message: `"${mi.name}" is currently unavailable.` });
-      }
-      const qty = Number(item.quantity);
-      if (!qty || qty < 1) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ message: 'Quantity must be at least 1.' });
-      }
-      totalAmount += parseFloat(mi.price) * qty;
-      validated.push({ menu_item_id: mi.id, name: mi.name, unit_price: parseFloat(mi.price), quantity: qty, notes: item.notes || null });
+// 2. Validate all items
+    let totalAmount;
+    let validated;
+    try {
+      ({ totalAmount, validated } = await priceCart(items));
+    } catch (err) {
+      await client.query('ROLLBACK');
+      if (err instanceof CartError) return res.status(400).json({ message: err.message });
+      throw err;
     }
 
     // 3. Delete old items, insert new ones
     await client.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
     for (const item of validated) {
       await client.query(
-        'INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes) VALUES ($1, $2, $3, $4, $5)',
-        [orderId, item.menu_item_id, item.quantity, item.unit_price, item.notes]
+        `INSERT INTO order_items (order_id, menu_item_id, menu_item_option_id, quantity, unit_price, notes)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [orderId, item.menu_item_id, item.menu_item_option_id, item.quantity, item.unit_price, item.notes]
       );
     }
 
