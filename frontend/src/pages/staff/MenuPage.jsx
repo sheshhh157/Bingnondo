@@ -3,6 +3,20 @@ import { staffMenuAPI, inventoryAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import '../../styles/StaffMenuPage.css';
 
+// Categories that sell in two forms, e.g. a coffee Hot or Iced, or a rice meal
+// Solo or Sharing. `base` is the variant whose price becomes menu_items.price --
+// the number shown on cards and in reports when no variant has been picked. It
+// is set per category rather than derived, because the cafe quotes coffee at
+// the Iced rate but rice meals at the Solo rate.
+//
+// Matched by NAME, not id: category ids are seeded per database, so a hardcoded
+// id would silently stop matching on a fresh install. Adding a third pair means
+// adding one line here.
+const VARIANT_PRESETS = {
+  'Drinks (Caffeinated)': { names: ['Hot', 'Iced'], base: 'Iced' },
+  'Rice Meals': { names: ['Solo', 'Sharing'], base: 'Solo' },
+};
+
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
   const [msg, setMsg] = useState('');
@@ -310,13 +324,15 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
     name: item?.name || '',
     price: item?.price || '',
     description: item?.description || '',
-    category_id: item?.category_id || categories[0]?.id || '',
+    category_id: item?.category_id || '',
     is_available: item?.is_available ?? true,
   });
   const [photoFile, setPhotoFile] = useState(null);
   const [linked, setLinked] = useState(item?.ingredients || []);
-  // Variants ("Hot" / "Iced"). Rows loaded from the server keep their id so the
-  // save can delete exactly those; rows added here have no id yet.
+  // Two-form variants for the categories in VARIANT_PRESETS. Rows loaded from the
+  // server keep their id so a re-price updates them in place rather than
+  // recreating them -- recreating would break the FK from past order_items rows.
+  // Rows added by the toggle have no id yet.
   const [optionRows, setOptionRows] = useState(item?.options || []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -330,39 +346,83 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const setOption = (i, patch) =>
-    setOptionRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  const addOption = () =>
-    setOptionRows((rows) => [...rows, { name: '', price: '', is_available: true, _new: true }]);
-  const removeOption = (i) => setOptionRows((rows) => rows.filter((_, idx) => idx !== i));
+// ── Two-form variants (Hot / Iced, Solo / Sharing) ────────────────────
+const categoryName = categories.find((c) => Number(c.id) === Number(form.category_id))?.name;
+  const preset = VARIANT_PRESETS[categoryName] || null;
 
-  // Names are how staff recognise a variant, so a blank one is never sent --
-  // it would collide with the UNIQUE(menu_item_id, name) guard on save.
-  const blankOptionName = optionRows.find((r) => !String(r.name || '').trim());
+  const rowFor = (name) =>
+    optionRows.find((r) => String(r.name).toLowerCase() === String(name).toLowerCase());
+
+  const rowA = preset ? rowFor(preset.names[0]) : null;
+  const rowB = preset ? rowFor(preset.names[1]) : null;
+  // Requires BOTH rows, not just any row. If an item somehow carries leftover
+  // options from another pair the toggle reads OFF and the save archives them,
+  // rather than showing an ON toggle with two unresolvable price boxes.
+  const variantsOn = Boolean(preset && rowA && rowB);
+
+  const setVariant = (row, value) =>
+    setOptionRows((rows) => rows.map((r) => (r === row ? { ...r, price: value } : r)));
+
+  const setVariants = (on) => {
+    if (!on || !preset) {
+      // Empty options archives the saved variants server-side, so past orders
+      // keep resolving their variant name while the item returns to one price.
+      setOptionRows([]);
+      return;
+    }
+    // Seed both from the current price so switching the toggle on rarely leaves
+    // an empty box -- staff normally only need to bump the second one.
+    const seed = String(form.price ?? '');
+    setOptionRows(preset.names.map((n) => ({ name: n, price: seed, is_available: true, _new: true })));
+  };
+
+  // Moving an item to a category whose pair does not match the saved rows must
+  // drop them, otherwise a Rice Meal would silently keep making the cashier
+  // pick Hot or Iced. Also covers moving between two variant categories.
+  const setCategory = (value) => {
+    const id = value === '' ? '' : Number(value);
+    setForm((f) => ({ ...f, category_id: id }));
+    const next = VARIANT_PRESETS[categories.find((c) => Number(c.id) === id)?.name];
+    const matches = Boolean(
+      next && rowA && rowB &&
+      String(rowA.name).toLowerCase() === next.names[0].toLowerCase() &&
+      String(rowB.name).toLowerCase() === next.names[1].toLowerCase()
+    );
+    if (!matches) setOptionRows([]);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) { setError('Item name is required.'); return; }
-    if (!form.price || Number(form.price) <= 0) { setError('Enter a valid price.'); return; }
-    if (blankOptionName) {
-      setTab('options');
-      setError('Every option needs a name.');
-      return;
+    if (!form.category_id) { setError('Select a category.'); return; }
+
+    const [nameA, nameB] = preset ? preset.names : [null, null];
+
+    if (variantsOn) {
+      if (!(Number(rowA.price) > 0)) { setError(`Enter a valid ${nameA} price.`); return; }
+      if (!(Number(rowB.price) > 0)) { setError(`Enter a valid ${nameB} price.`); return; }
+    } else if (!form.price || Number(form.price) <= 0) {
+      setError('Enter a valid price.'); return;
     }
+
+    // menu_items.price is NOT NULL and is what every price display reads, so it
+    // tracks whichever variant the preset nominates as this category's base.
+    const baseRow = preset && preset.base.toLowerCase() === nameA.toLowerCase() ? rowA : rowB;
+
     setLoading(true); setError('');
     try {
       const image_url = photoFile ? `https://placehold.co/400x300?text=${encodeURIComponent(form.name)}` : (item?.image_url || null);
       await onSave({
         ...form,
-        price: Number(form.price),
+        price: variantsOn ? Number(baseRow.price) : Number(form.price),
         image_url,
         ingredients: linked,
-        options: optionRows.map((o) => ({
-          id: o.id,
-          name: String(o.name).trim(),
-          price: Number(o.price) || 0,
-          is_available: o.is_available !== false,
-        })),
+        options: variantsOn
+          ? [
+              { id: rowA.id, name: nameA, price: Number(rowA.price), is_available: rowA.is_available !== false },
+              { id: rowB.id, name: nameB, price: Number(rowB.price), is_available: rowB.is_available !== false },
+            ]
+          : [],
       }, isEdit ? item.id : null);
       onClose();
     } catch (err) {
@@ -385,7 +445,6 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
         <div className="mn-modal__tabs">
           {[
             { id: 'details', label: 'Details' },
-            { id: 'options', label: `Options${optionRows.length ? ` (${optionRows.length})` : ''}` },
             { id: 'ingredients', label: `Ingredients${linked.length ? ` (${linked.length})` : ''}` },
           ].map(({ id, label }) => (
             <button key={id} type="button" onClick={() => setTab(id)} className={`mn-modal__tab${tab === id ? ' mn-modal__tab--active' : ''}`}>{label}</button>
@@ -405,17 +464,72 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                     <label htmlFor="mn-name" className="mn-field__label">Name *</label>
                     <input id="mn-name" type="text" value={form.name} onChange={(e) => set('name')(e.target.value)} className="mn-field__input" placeholder="e.g. Tapsilog" required autoFocus={!isEdit} />
                   </div>
-                  <div className="mn-field">
-                    <label htmlFor="mn-price" className="mn-field__label">Price (₱) *</label>
-                    <input id="mn-price" type="number" min="0" step="0.5" value={form.price} onChange={(e) => set('price')(e.target.value)} className="mn-field__input" placeholder="e.g. 120" required />
-                  </div>
-                  <div className="mn-field">
+                  {!variantsOn && (
+                    <div className="mn-field">
+                      <label htmlFor="mn-price" className="mn-field__label">Price (₱) *</label>
+                      <input id="mn-price" type="number" min="0" step="0.5" value={form.price} onChange={(e) => set('price')(e.target.value)} className="mn-field__input" placeholder="e.g. 120" required />
+                    </div>
+                  )}
+
+                  <div className={`mn-field${variantsOn ? ' mn-grid-2__full' : ''}`}>
                     <label htmlFor="mn-cat" className="mn-field__label">Category *</label>
-                    <select id="mn-cat" value={form.category_id} onChange={(e) => set('category_id')(Number(e.target.value))} className="mn-field__input">
+                    <select id="mn-cat" value={form.category_id} onChange={(e) => setCategory(e.target.value)} className="mn-field__input" required>
+                      <option value="" disabled>Select category</option>
                       {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                 </div>
+
+                {preset && (
+                  <div className="mn-price-variant">
+                    <div>
+                      <p className="mn-field__label">{preset.names.join(' / ')}</p>
+                      <p className="mn-field__hint">{preset.names.join(' and ')}, separate prices</p>
+                    </div>
+                    <Toggle
+                      checked={variantsOn}
+                      onChange={setVariants}
+                      label={`Toggle ${preset.names.join(' and ')} pricing`}
+                      title={`Sell this item as ${preset.names[0]} or ${preset.names[1]} at its own price`}
+                    />
+                  </div>
+                )}
+
+                {variantsOn && (
+                  <div className="mn-grid-2">
+                    <div className="mn-field">
+                      <label htmlFor="mn-price-a" className="mn-field__label">{preset.names[0]} price (₱) *</label>
+                      <input
+                        id="mn-price-a"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={rowA?.price ?? ''}
+                        onChange={(e) => setVariant(rowA, e.target.value)}
+                        className="mn-field__input"
+                        required
+                      />
+                    </div>
+                    <div className="mn-field">
+                      <label htmlFor="mn-price-b" className="mn-field__label">{preset.names[1]} price (₱) *</label>
+                      <input
+                        id="mn-price-b"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={rowB?.price ?? ''}
+                        onChange={(e) => setVariant(rowB, e.target.value)}
+                        className="mn-field__input"
+                        required
+                      />
+                    </div>
+                    <p className="mn-field__hint mn-grid-2__full">
+                      The cashier must pick {preset.names[0]} or {preset.names[1]} when ordering this item.
+                      The item price shown elsewhere is the {preset.base} price.
+                    </p>
+                  </div>
+                )}
+
                 <div className="mn-field">
                   <label htmlFor="mn-desc" className="mn-field__label">Description</label>
                   <textarea id="mn-desc" value={form.description} onChange={(e) => set('description')(e.target.value)} className="mn-field__input mn-field__textarea" placeholder="Short description shown to customers…" rows={2} />
@@ -433,78 +547,6 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                   </div>
                 </div>
               </>
-            ) : tab === 'options' ? (
-              <div className="mn-field">
-                <p className="mn-field__label">Options</p>
-                <p className="mn-field__hint">
-                  Sell this item in more than one form at its own price — e.g. Hot and Iced.
-                  Once an item has options, the cashier must pick one when ordering.
-                </p>
-
-                {optionRows.length === 0 ? (
-                  <p className="mn-field__hint">
-                    No options. This item is ordered as a single product.
-                  </p>
-                ) : (
-                  <div className="mn-opts">
-                    {optionRows.map((opt, i) => (
-                      <div className="mn-opt" key={opt.id || `new-${i}`}>
-                        <div className="mn-opt__main">
-                          <input
-                            type="text"
-                            value={opt.name}
-                            onChange={(e) => setOption(i, { name: e.target.value })}
-                            className="mn-field__input"
-                            placeholder="Hot"
-                            aria-label="Option name"
-                          />
-                          <div className="mn-opt__price">
-                            <span className="mn-opt__peso">&#8369;</span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.5"
-                              value={opt.price}
-                              onChange={(e) => setOption(i, { price: e.target.value })}
-                              className="mn-field__input"
-                              placeholder="0.00"
-                              aria-label="Option price"
-                            />
-                          </div>
-                        </div>
-                        <div className="mn-opt__side">
-                          <span className={`mn-badge${opt.is_available !== false ? ' mn-badge--ok' : ' mn-badge--off'}`}>
-                            {opt.is_available !== false ? 'Available' : 'Unavailable'}
-                          </span>
-                          <Toggle
-                            checked={opt.is_available !== false}
-                            onChange={(v) => setOption(i, { is_available: v })}
-                            label={`Availability for ${opt.name || 'option'}`}
-                          />
-                          <button
-                            type="button"
-                            className="mn-btn mn-btn--ghost mn-btn--sm"
-                            onClick={() => removeOption(i)}
-                            aria-label={`Remove ${opt.name || 'option'}`}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <button type="button" className="mn-btn mn-btn--ghost" onClick={addOption}>
-                  + Add option
-                </button>
-
-                {optionRows.length > 0 && (
-                  <p className="mn-field__hint">
-                    Removing an option hides it from the menu. Orders that already sold it keep it.
-                  </p>
-                )}
-              </div>
             ) : (
               <div className="mn-field">
                 <p className="mn-field__label">Linked Ingredients</p>

@@ -713,60 +713,32 @@
   color: var(--color-destructive);
 }
 
-/* ─── Menu item options (variants: Hot / Iced) ──────────────────────── */
-.mn-opts {
+/* ─── Hot / Iced price toggle ───────────────────────────────────────── */
+/* Sits inline in the price half of the Details grid, level with the Category
+   select. The box metrics mirror .mn-field__input so the row lines up with the
+   neighbouring inputs by construction rather than by a hardcoded height. */
+.mn-price-variant {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.mn-opt {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--color-border);
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1.5px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--color-background);
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  color: var(--color-foreground);
 }
 
-.mn-opt__main {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
+.mn-price-variant .mn-field__label {
+    margin: 0 0 2px;
+  }
 
-.mn-opt__main > .mn-field__input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.mn-opt__price {
-  position: relative;
-  flex: 0 0 108px;
-  display: flex;
-  align-items: center;
-}
-
-.mn-opt__price > .mn-field__input {
-  width: 100%;
-  padding-left: 22px;
-}
-
-.mn-opt__peso {
-  position: absolute;
-  left: 9px;
-  font-size: 0.8125rem;
-  color: var(--color-muted-foreground);
-  pointer-events: none;
-}
-
-.mn-opt__side {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
+  .mn-price-variant .mn-field__hint {
+    margin: 0;
+    line-height: 1.35;
+  }
 
 .mn-modal__footer {
   padding: 14px 20px;

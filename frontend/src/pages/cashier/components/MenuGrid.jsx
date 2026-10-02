@@ -39,8 +39,8 @@ export default function MenuGrid({ items, loading, error, onAdd, onRetry, draft 
 }
 
 function MenuCard({ item, onAdd, draft }) {
-  // Totals across every variant of this item: the card has no variant of its
-// own, so a customer with 1 Hot and 2 Iced in the cart should see 3 here.
+// Totals across every variant of this item: the card has no variant of its
+  // own, so a customer with 1 Solo and 2 Sharing in the cart should see 3 here.
 const qty = draft
     .filter((d) => d.id === item.id)
     .reduce((sum, d) => sum + d.qty, 0);

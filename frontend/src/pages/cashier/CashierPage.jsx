@@ -20,7 +20,7 @@ export default function CashierPage() {
   const [menuItems, setMenuItems]         = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
   const [draft, setDraft]                 = useState([]);        // [{ ...item, lineKey, menu_item_option_id, optionName, price, qty, note }]
-  const [variantPick, setVariantPick]   = useState(null);      // { item, options } while choosing Hot/Iced
+  const [variantPick, setVariantPick]   = useState(null);      // { item, options } while choosing a variant
   const [search, setSearch]               = useState('');
   const [menuLoading, setMenuLoading]     = useState(true);
   const [menuError, setMenuError]         = useState('');
@@ -76,7 +76,7 @@ export default function CashierPage() {
 
   // ─── Cart operations ──────────────────────────────────────────────
   // A line is identified by the item AND the variant chosen for it, so
-  // "Hot Cappuccino x1" and "Iced Cappuccino x2" stay separate lines. Keying
+  // "Solo Tapsilog x1" and "Sharing Tapsilog x2" stay separate lines. Keying
   // on item id alone merged them and quietly charged one price for both.
   const lineKeyFor = (itemId, optionId) =>
     optionId ? `${itemId}:${optionId}` : String(itemId);
@@ -116,9 +116,9 @@ export default function CashierPage() {
 
   //  ─── Draft changed since last confirm? ───────────────────────────
   // Simple check: compare sorted line keys+qty+note against the snapshot.
-  // lineKey, not id: switching Hot to Iced is a different line, so it has to
-  // count as a change or the PATCH would be skipped and the kitchen would
-  // make the drink the cashier had just replaced.
+  // lineKey, not id: switching a variant (Solo to Sharing, Hot to Iced) is a
+  // different line, so it has to count as a change or the PATCH would be
+  // skipped and the kitchen would make the item the cashier had just replaced.
   const draftChangedSinceConfirm = () => {
     if (!confirmedOrder) return true; // never confirmed yet → treat as changed
     const snap  = confirmedOrder.snapshotDraft;
@@ -306,7 +306,7 @@ export default function CashierPage() {
         )}
       </main>
 
-      {/* Variant picker — Hot / Iced and friends */}
+      {/* Variant picker — Hot / Iced, Solo / Sharing and friends */}
       {variantPick && (
         <VariantPicker
           item={variantPick.item}
@@ -339,8 +339,8 @@ export default function CashierPage() {
 }
 
 // ─── Variant picker ────────────────────────────────────────────────────────
-// Shown when the cashier taps an item that has options (Hot / Iced, sizes,
-// flavours). There is deliberately no preselected option: guessing one would
+// Shown when the cashier taps an item that has options (Hot / Iced, Solo /
+// Sharing, sizes, flavours). There is deliberately no preselected option: guessing one would
 // quietly charge the wrong price, which is exactly what variants exist to
 // prevent. The backend also refuses an optionless order for such an item, so
 // this dialog is the only way through.
