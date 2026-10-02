@@ -40,7 +40,7 @@
   color: var(--color-muted-foreground);
 }
 
-.th-toolbar__filters { display: flex; gap: 0.375rem; }
+.th-toolbar__filters { display: flex; gap: 0.375rem; flex-wrap: wrap; }
 
 .th-filter-btn {
   padding: 0.3rem 0.75rem;
@@ -236,6 +236,13 @@
   font-size: 0.8125rem;
   color: var(--color-muted-foreground);
   gap: 1rem;
+  min-width: 0;
+}
+
+/* The item name can be long; the price must stay put. */
+.th-expanded__line > :first-child {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .th-expanded__note {
@@ -269,6 +276,21 @@
   .th-toolbar { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
   .th-toolbar__left { flex-direction: column; gap: 0.2rem; }
   .th-table-wrap { padding: 0 0.5rem 1rem; }
+
+  /* Six columns do not fit a phone. Drop the two that are redundant there:
+     Items is an ellipsised summary of what the expanded row already lists in
+     full, and Time is the least useful of the rest. Scoped to real rows so
+     the loading skeleton keeps its six blocks. */
+  .th-table { min-width: 0; }
+  .th-table thead th:nth-child(2),
+  .th-table thead th:nth-child(6),
+  .th-table tbody tr:not(.th-skel-row) > td:nth-child(2),
+  .th-table tbody tr:not(.th-skel-row) > td:nth-child(6) { display: none; }
+
+  .th-table th,
+  .th-table td { padding: 0.625rem 0.5rem; }
+  .th-order-num { font-size: 0.8125rem; }
+  .th-status { font-size: 0.625rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

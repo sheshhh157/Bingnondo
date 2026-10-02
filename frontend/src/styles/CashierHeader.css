@@ -4,8 +4,14 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 1.25rem;
-  padding: 0 1.25rem;
-  height: 54px;
+  /* Safe-area insets: without these the header sits under the notch on a
+     phone and under the rounded corners in landscape. Nothing in the app
+     accounted for them before. */
+  padding: env(safe-area-inset-top)
+           calc(1.25rem + env(safe-area-inset-right))
+           0
+           calc(1.25rem + env(safe-area-inset-left));
+  height: calc(54px + env(safe-area-inset-top));
   background: var(--color-primary);
   border-bottom: 2px solid rgba(253,230,138,0.25);
   flex-shrink: 0;

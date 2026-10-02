@@ -207,7 +207,7 @@ function TransactionSkeleton() {
         </thead>
         <tbody>
           {Array.from({ length: 6 }).map((_, i) => (
-            <tr key={i} className="th-row">
+            <tr key={i} className="th-row th-skel-row">
               {Array.from({ length: 6 }).map((__, j) => (
                 <td key={j}><div className="th-skel" /></td>
               ))}
