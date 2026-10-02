@@ -142,6 +142,93 @@ const withVariedItem = async ({ price = 50, options = [], order = null }, fn) =>
 const HOT = { name: 'Hot', price: 50 };
 const ICED = { name: 'Iced', price: 55 };
 
+test('an option name can be reused after it has been archived', { skip }, async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+  const staff = await staffAccount();
+  if (!staff) return t.skip('no active staff account');
+  const tok = signFor(staff.id, 'staff');
+
+  // This is the staff modal's Hot/Iced toggle being switched off and back on.
+  // The table-level UNIQUE (menu_item_id, name) shipped in migration 008 also
+  // counted ARCHIVED rows, so the second switch-on tried to insert a second
+  // "Hot" and failed with duplicate key ... a bare 500, leaving the toggle
+  // looking permanently stuck once it had ever been used. Migration 009 makes
+  // uniqueness apply to live rows only.
+  await withVariedItem({ price: 55, options: [HOT, ICED] }, async ({ itemId }) => {
+    const off = await call('PUT', `/api/menu/${itemId}`, { tok, body: { price: 55, options: [] } });
+    assert.equal(off.status, 200, 'toggling the variants off archives them');
+    assert.deepEqual(off.body.options, []);
+
+    const on = await call('PUT', `/api/menu/${itemId}`, {
+      tok,
+      body: { price: 55, options: [{ name: 'Hot', price: 50 }, { name: 'Iced', price: 55 }] },
+    });
+    assert.equal(on.status, 200, 'turning the variants back on must not hit a duplicate key');
+    assert.deepEqual(
+      on.body.options.map((o) => [o.name, Number(o.price)]),
+      [['Hot', 50], ['Iced', 55]]
+    );
+
+    // Exactly one LIVE row per name; the archived pair is still there for the
+    // receipts that point at it.
+    const live = await db.query(
+      `SELECT name FROM menu_item_options
+        WHERE menu_item_id = $1 AND archived_at IS NULL ORDER BY sort_order`,
+      [itemId]
+    );
+    assert.deepEqual(live.rows.map((r) => r.name), ['Hot', 'Iced']);
+
+    const dupes = await db.query(
+      `SELECT name FROM menu_item_options
+        WHERE menu_item_id = $1 AND archived_at IS NULL
+        GROUP BY name HAVING count(*) > 1`,
+      [itemId]
+    );
+    assert.deepEqual(dupes.rows, [], 'no duplicate live names');
+
+    // Re-adding a name that is already live is still refused, so the staff page
+    // cannot end up listing the same variant twice.
+    const dupe = await call('POST', `/api/menu/${itemId}/options`, {
+      tok, body: { name: 'Hot', price: 99 },
+    });
+    assert.equal(dupe.status, 409);
+  });
+});
+
+test('a sold variant survives an off/on toggle cycle', { skip }, async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+  const staff = await staffAccount();
+  if (!staff) return t.skip('no active staff account');
+  const tok = signFor(staff.id, 'staff');
+
+  // The row an order points at must keep resolving even after the name has been
+  // archived and reused by a newer row with a different id.
+  await withVariedItem({ price: 55, options: [HOT, ICED] }, async ({ itemId, optionIds }) => {
+    const sold = await call('POST', '/api/orders', {
+      tok,
+      body: { items: [{ menu_item_id: itemId, menu_item_option_id: optionIds.Iced, quantity: 1 }] },
+    });
+    assert.equal(sold.status, 201);
+
+    await call('PUT', `/api/menu/${itemId}`, { tok, body: { price: 55, options: [] } });
+    await call('PUT', `/api/menu/${itemId}`, {
+      tok, body: { price: 55, options: [{ name: 'Hot', price: 50 }, { name: 'Iced', price: 60 }] },
+    });
+
+    const hist = await db.query(
+      `SELECT oi.unit_price, mo.name
+         FROM order_items oi
+         LEFT JOIN menu_item_options mo ON mo.id = oi.menu_item_option_id
+        WHERE oi.order_id = $1`,
+      [sold.body.id]
+    );
+    assert.equal(hist.rows[0].name, 'Iced', 'the old receipt still names its variant');
+    assert.equal(Number(hist.rows[0].unit_price), 55, 'at the price it was sold for');
+
+    await db.query('DELETE FROM orders WHERE id = $1', [sold.body.id]);
+  });
+});
+
 test('staff can add options with their own absolute prices', { skip }, async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
   const staff = await staffAccount();

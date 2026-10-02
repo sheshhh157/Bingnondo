@@ -40,15 +40,22 @@ CREATE TABLE IF NOT EXISTS menu_item_options (
   sort_order    integer NOT NULL DEFAULT 0,
   archived_at   timestamptz,
   created_at    timestamptz NOT NULL DEFAULT now(),
-  updated_at    timestamptz NOT NULL DEFAULT now(),
-  -- One "Hot" per item. Re-adding an archived variant updates it instead
-  -- of creating a near-duplicate the staff page would list twice.
-  UNIQUE (menu_item_id, name)
+  updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
 COMMENT ON TABLE menu_item_options IS
   'Sellable variants of a menu item (e.g. Hot / Iced for one coffee). '
   'price is the absolute amount charged for this variant.';
+
+-- One "Hot" per item -- but only among LIVE rows. This has to be a partial
+-- index rather than a table-level UNIQUE (menu_item_id, name): a plain UNIQUE
+-- also counts archived rows, so switching a drink's Hot/Iced toggle off and
+-- back on again would hit a duplicate-key error and fail the save. With a
+-- partial index the name is reusable once the old row is archived, and the
+-- archived row stays put so old receipts still resolve.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_item_options_active_name
+  ON menu_item_options (menu_item_id, name)
+  WHERE archived_at IS NULL;
 
 -- Recorded on the order line so a receipt can still say which variant was
 -- sold after the option is archived.
