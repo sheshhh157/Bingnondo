@@ -393,21 +393,7 @@ let MOCK_STAFF_ACCOUNTS = [
 ];
 let staffAccountCounter = 200;
 
-let MOCK_SETTINGS = {
-  paymongo_key:    '',
-  openai_key:      '',
-  gemini_key:      '',
-  business_hours:  {
-    Monday:    { open:'07:00', close:'22:00', closed:false },
-    Tuesday:   { open:'07:00', close:'22:00', closed:false },
-    Wednesday: { open:'07:00', close:'22:00', closed:false },
-    Thursday:  { open:'07:00', close:'22:00', closed:false },
-    Friday:    { open:'07:00', close:'23:00', closed:false },
-    Saturday:  { open:'08:00', close:'23:00', closed:false },
-    Sunday:    { open:'08:00', close:'21:00', closed:false },
-  },
-  menu_categories: ['Silog Meals','Rice Meals','Merienda','Drinks','Add-ons'],
-};
+// MOCK_SETTINGS removed — business_hours and menu_categories now use real API endpoints.
 
 let MOCK_DEVICES = [
   { id: 1, device_code: 'ESP32-KITCHEN-01', location_label: 'Main Kitchen', is_online: true  },
@@ -549,31 +535,45 @@ export const adminAPI = {
     return apiRequest(`/admin/audit-log${qs ? `?${qs}` : ''}`);
   },
 
-  // ── Settings (still mock until backend ready) ────────────────────────────────
-  getSettings: async () => {
-    const MOCK_SETTINGS = {
-      paymongo_key: '', openai_key: '', gemini_key: '',
-      business_hours: {
-        Monday:    { open:'07:00', close:'22:00', closed:false },
-        Tuesday:   { open:'07:00', close:'22:00', closed:false },
-        Wednesday: { open:'07:00', close:'22:00', closed:false },
-        Thursday:  { open:'07:00', close:'22:00', closed:false },
-        Friday:    { open:'07:00', close:'23:00', closed:false },
-        Saturday:  { open:'08:00', close:'23:00', closed:false },
-        Sunday:    { open:'08:00', close:'21:00', closed:false },
-      },
-      menu_categories: ['Silog Meals','Rice Meals','Merienda','Drinks','Add-ons'],
-    };
-    return { data: { ...MOCK_SETTINGS } };
-  },
+  // ── Business Hours ──────────────────────────────────────────────────────────
+  getBusinessHours: () =>
+    apiRequest('/admin/system-settings/business-hours'),
 
-  updateSettings: async (updates) => {
-    return { data: { success: true } };
-  },
+  saveBusinessHours: (hours) =>
+    apiRequest('/admin/system-settings/business-hours', {
+      method: 'PUT',
+      body: JSON.stringify({ hours }),
+    }),
 
-  listDevices: async () => ({ data: [] }),
-  registerDevice: async (data) => ({ data: { id: Date.now(), ...data, is_online: false } }),
-  removeDevice: async () => ({ data: { success: true } }),
+  // ── Menu Categories ─────────────────────────────────────────────────────────
+  listCategories: () =>
+    apiRequest('/admin/system-settings/menu-categories'),
+
+  createCategory: (name) =>
+    apiRequest('/admin/system-settings/menu-categories', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteCategory: (id) =>
+    apiRequest(`/admin/system-settings/menu-categories/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // ── ESP32 Devices ───────────────────────────────────────────────────────────
+  listDevices: () =>
+    apiRequest('/admin/system-settings/esp32-devices'),
+
+  registerDevice: (data) =>
+    apiRequest('/admin/system-settings/esp32-devices', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  removeDevice: (id) =>
+    apiRequest(`/admin/system-settings/esp32-devices/${id}`, {
+      method: 'DELETE',
+    }),
 };
 
 export const deliveryAPI = {

@@ -15,8 +15,9 @@ const ordersRoutes      = require('./src/modules/orders/orders.routes');
 const paymentsRoutes    = require('./src/modules/payments/payments.routes');
 const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
 // NEW ▼
-const adminStaffRoutes  = require('./src/modules/admin/admin.routes');
-const adminConfigRoutes = require('./src/modules/admin/admin.switch-config.routes');
+const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
+const adminConfigRoutes   = require('./src/modules/admin/admin.switch-config.routes');
+const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
 
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
@@ -63,6 +64,8 @@ app.use('/api/kitchen',  kitchenRoutes);
 app.use('/api/admin/staff-accounts', adminStaffRoutes);
 // Switch config (per-staff and per-dashboard PIN requirement toggles)
 app.use('/api/admin/switch-config',  adminConfigRoutes);
+// System settings: ESP32 devices, business hours, menu categories
+app.use('/api/admin/system-settings', adminSettingsRoutes);
 
 // PayMongo webhook — no auth middleware (signed by PayMongo header)
 const paymentsCtrl = require('./src/modules/payments/payments.controller');
@@ -141,4 +144,7 @@ server.listen(PORT, () => {
   console.log(`              GET/PUT  /api/admin/staff-accounts/:id/dashboard-access`);
   console.log(`              POST     /api/admin/staff-accounts/:id/switch-pin`);
   console.log(`              GET/PUT  /api/admin/switch-config`);
+  console.log(`Settings:     GET/POST/PATCH/DELETE /api/admin/system-settings/esp32-devices`);
+  console.log(`              GET/PUT              /api/admin/system-settings/business-hours`);
+  console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);
 });
