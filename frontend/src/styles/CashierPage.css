@@ -3,15 +3,18 @@
   display: flex;
   flex-direction: column;
   height: 100dvh;
+  width: 100vw;
   background: var(--color-background);
   overflow: hidden;
 }
 
 .cashier-main {
-  flex: 1;
+  flex: 1 1 auto;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* ─── Workspace (Order view) ─────────────────────────────────────────── */
@@ -20,6 +23,8 @@
   grid-template-columns: 1fr 356px;
   height: 100%;
   overflow: hidden;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* ─── Menu Panel (Left) ──────────────────────────────────────────────── */
@@ -28,6 +33,9 @@
   flex-direction: column;
   overflow: hidden;
   border-right: 1.5px solid var(--color-border);
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 0%;
 }
 
 .cashier-menu-toolbar {
@@ -37,6 +45,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
+  /* The grid below is the only thing that should give up height. */
+  flex-shrink: 0;
 }
 
 /* Search */
@@ -118,6 +128,7 @@
   background: var(--color-card);
   overflow: hidden;
   border-left: 1.5px solid var(--color-border);
+  min-height: 0;
 }
 
 /* ─── Toast ─────────────────────────────────────────────────────────── */
@@ -256,6 +267,20 @@
   }
   .cashier-cartbar__meta {
     font-size: 0.875rem;
+  }
+}
+
+/* Narrow phones: keep all category tabs on one scrollable row and make the
+   scroll affordance visible. The mask is viewport-fixed, so it marks the edge
+   without intercepting taps. Snap is deliberately left out: snap points fight
+   the active-tab scrollIntoView and can leave the active tab partly hidden. */
+@media (max-width: 480px) {
+  .cashier-categories {
+    flex-wrap: nowrap;
+    scroll-padding-right: 1.25rem;
+    padding-right: 1.25rem;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent 100%);
   }
 }
 

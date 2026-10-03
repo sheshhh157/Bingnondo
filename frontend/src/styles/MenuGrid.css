@@ -1,16 +1,28 @@
 /* ─── Grid ───────────────────────────────────────────────────────────── */
-.menu-grid {
-  flex: 1;
+.menu-grid--scroll {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  grid-auto-rows: max-content;
   gap: 0.75rem;
   padding: 1rem 1.25rem;
   overflow-y: auto;
+  overscroll-behavior: contain;
   align-content: start;
+  align-items: stretch;
+  justify-content: stretch;
 }
 
 /* ─── Card ───────────────────────────────────────────────────────────── */
-.menu-card {
+/* Cards keep their natural height. Text is clamped, while the image and footer
+   keep fixed, non-shrinking boxes. Grid stretch equalizes cards in the same
+   row; rows are allowed to grow and scroll instead of squeezing cards. */
+/* Cashier cards share generic manager class names, so these selectors are scoped
+   to this grid. That keeps the staff/manager menu stylesheet from changing the
+   cashier layout when both stylesheets are in the production bundle. */
+.menu-grid--scroll .menu-card {
   background: var(--color-card);
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -20,6 +32,9 @@
   transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
   cursor: pointer;
   position: relative;
+  height: auto;
+  min-height: min-content;
+  min-width: 0;
 }
 
 .menu-card:hover:not(.menu-card--unavailable):not(.menu-card--skeleton) {
@@ -41,7 +56,12 @@
 /* ─── Image ──────────────────────────────────────────────────────────── */
 .menu-card__img-wrap {
   position: relative;
+  width: 100%;
   aspect-ratio: 4/3;
+  /* The image box must not change size when text grows. It is pinned outside
+     the flexible body, so every card image uses the same 4/3 box. */
+  flex: 0 0 auto;
+  min-height: 0;
   background: var(--color-muted);
   overflow: hidden;
 }
@@ -104,60 +124,92 @@
 }
 
 /* ─── Body ───────────────────────────────────────────────────────────── */
-.menu-card__body {
+.menu-grid--scroll .menu-card__body {
   padding: 0.625rem 0.75rem 0.6875rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  flex: 1;
+  gap: 0.4rem;
+  flex: 1 0 auto;
+  min-height: 0;
+  min-width: 0;
 }
 
-.menu-card__name {
+.menu-grid--scroll .menu-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.menu-grid--scroll .menu-card__name {
   font-family: var(--font-body);
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--color-foreground);
   margin: 0;
   line-height: 1.35;
-  /* Full name, no line clamp. */
-  overflow-wrap: break-word;
-  word-break: break-word;
-}
-
-.menu-card__desc {
-  font-family: var(--font-body);
-  font-size: 0.6875rem;
-  color: var(--color-muted-foreground);
-  margin: 0;
-  line-height: 1.4;
-  /* Full description. The high clamp is a safety valve only, so a
-     pathologically long description cannot make one card swallow the row. */
   display: -webkit-box;
-  -webkit-line-clamp: 5;
-  line-clamp: 5;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: break-word;
   word-break: break-word;
 }
 
-.menu-card__footer {
+.menu-grid--scroll .menu-card__desc {
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  color: var(--color-muted-foreground);
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.menu-grid--scroll .menu-card__desc:empty {
+  display: none;
+}
+
+.menu-grid--scroll .menu-card__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
   margin-top: auto;
   padding-top: 0.4rem;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
-.menu-card__price {
+.menu-grid--scroll .menu-card__price {
   font-family: var(--font-heading);
   font-size: 0.9375rem;
   font-weight: 700;
   color: var(--color-foreground);
   letter-spacing: -0.01em;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.menu-card__add {
+.menu-grid--scroll .menu-card__price--empty {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  opacity: 0.75;
+  font-weight: 500;
+}
+
+.menu-grid--scroll .menu-card__price--variant {
+  font-size: 0.8125rem;
+}
+
+.menu-grid--scroll .menu-card__add {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -172,18 +224,18 @@
   flex-shrink: 0;
 }
 
-.menu-card__add:hover:not(:disabled) {
+.menu-grid--scroll .menu-card__add:hover:not(:disabled) {
   background: #991B1B;
   transform: scale(1.08);
 }
 
-.menu-card__add:disabled {
+.menu-grid--scroll .menu-card__add:disabled {
   background: var(--color-muted);
   color: var(--color-muted-foreground);
   cursor: not-allowed;
 }
 
-.menu-card__add:focus-visible {
+.menu-grid--scroll .menu-card__add:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
@@ -239,14 +291,17 @@
   border-radius: var(--radius-sm);
 }
 
-.skeleton-block { width: 100%; aspect-ratio: 4/3; border-radius: 0; }
-.skeleton-line { height: 12px; width: 100%; }
-.skeleton-line--md { width: 80%; }
+.skeleton-block { width: 100%; aspect-ratio: 4/3; border-radius: 0; flex: 0 0 auto; }
+.skeleton-line { height: 12px; width: 100%; flex-shrink: 0; }
 .skeleton-line--sm { height: 10px; width: 60%; }
+/* Same two-line boxes as the cashier name and description, so a skeleton card is
+   exactly as tall as the card that replaces it. */
+.menu-grid--scroll .skeleton-line--name { height: calc(1.35 * 0.8125rem * 2); width: 85%; }
+.menu-grid--scroll .skeleton-line--desc { height: calc(1.4 * 0.6875rem * 2); width: 100%; }
 
 /* ─── RESPONSIVE ─────────────────────────────────────────────────────── */
 @media (max-width: 1023px) {
-  .menu-grid {
+  .menu-grid--scroll {
     grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
     gap: 0.625rem;
     padding: 0.75rem 1rem;
@@ -254,18 +309,28 @@
 }
 
 @media (max-width: 639px) {
-  .menu-grid {
+  .menu-grid--scroll {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 0.5rem;
     padding: 0.625rem 0.875rem;
   }
-  .menu-card__body { padding: 0.5rem 0.625rem 0.5625rem; }
-  .menu-card__price { font-size: 0.875rem; }
+  .menu-grid--scroll .menu-card__body { padding: 0.5rem 0.625rem 0.5625rem; }
+  .menu-grid--scroll .menu-card__price { font-size: 0.875rem; }
+}
+
+/* Narrow phones: product names may use three lines. This only changes the
+   name clamp; card, footer, grid, and image sizing stay as they are. */
+@media (max-width: 480px) {
+  .menu-grid--scroll .menu-card__name {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+  .menu-grid--scroll .skeleton-line--name { height: calc(1.35 * 0.8125rem * 3); }
 }
 
 /* Touch screens: 28px is a small target for the button that adds an item. */
 @media (pointer: coarse) {
-  .menu-card__add {
+  .menu-grid--scroll .menu-card__add {
     width: 36px;
     height: 36px;
   }

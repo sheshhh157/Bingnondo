@@ -2,35 +2,29 @@ import '../../../styles/MenuGrid.css';
 
 export default function MenuGrid({ items, loading, error, onAdd, onRetry, draft }) {
   if (loading) return <MenuSkeleton />;
-
-  if (error) {
-    return (
-      <div className="menu-state menu-state--error">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        <p>{error}</p>
-        <button className="menu-retry-btn" onClick={onRetry}>Try again</button>
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <div className="menu-state">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
-          <line x1="3" y1="6" x2="21" y2="6"/>
-        </svg>
-        <p>Nothing here yet.</p>
-      </div>
-    );
-  }
+  if (error) return (
+    <div className="menu-state menu-state--error">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <p>{error}</p>
+      <button className="menu-retry-btn" onClick={onRetry}>Try again</button>
+    </div>
+  );
+  if (items.length === 0) return (
+    <div className="menu-state">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+      </svg>
+      <p>Nothing here yet.</p>
+    </div>
+  );
 
   return (
-    <div className="menu-grid" role="list" aria-label="Menu items">
+    <div className="menu-grid--scroll" role="list" aria-label="Menu items">
       {items.map((item) => (
         <MenuCard key={item.id} item={item} onAdd={onAdd} draft={draft} />
       ))}
@@ -45,6 +39,11 @@ const qty = draft
     .filter((d) => d.id === item.id)
     .reduce((sum, d) => sum + d.qty, 0);
   const unavailable = !item.is_available;
+  const optionPrices = (item.options || [])
+    .map((option) => Number(option.price))
+    .filter((price) => Number.isFinite(price));
+  const startingPrice = optionPrices.length > 0 ? Math.min(...optionPrices) : null;
+  const unitPrice = Number(item.price);
 
   return (
     <article
@@ -87,14 +86,20 @@ const qty = draft
 
       {/* Info */}
       <div className="menu-card__body">
-        <p className="menu-card__name">{item.name}</p>
-        {item.description && (
-          <p className="menu-card__desc">{item.description}</p>
-        )}
+        <div className="menu-card__text">
+          <p className="menu-card__name" title={item.name}>{item.name}</p>
+          <p className="menu-card__desc" title={item.description || undefined}>
+            {item.description || ''}
+          </p>
+        </div>
         <div className="menu-card__footer">
-          <span className="menu-card__price">
-            ₱{Number(item.price).toFixed(2)}
-          </span>
+          {startingPrice !== null ? (
+            <span className="menu-card__price menu-card__price--variant">Starts at ₱{startingPrice.toFixed(2)}</span>
+          ) : Number.isFinite(unitPrice) ? (
+            <span className="menu-card__price">₱{unitPrice.toFixed(2)}</span>
+          ) : (
+            <span className="menu-card__price menu-card__price--empty">Tap to choose</span>
+          )}
           <button
             className="menu-card__add"
             onClick={() => onAdd(item)}
@@ -114,13 +119,15 @@ const qty = draft
 
 function MenuSkeleton() {
   return (
-    <div className="menu-grid" aria-busy="true" aria-label="Loading menu">
+    <div className="menu-grid--scroll" aria-busy="true" aria-label="Loading menu">
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i} className="menu-card menu-card--skeleton">
           <div className="menu-card__img-wrap skeleton-block" />
           <div className="menu-card__body">
-            <div className="skeleton-line skeleton-line--md" />
-            <div className="skeleton-line skeleton-line--sm" />
+            {/* Heights match the real name/description boxes so the grid does
+                not reflow when the data arrives. */}
+            <div className="skeleton-line skeleton-line--name" />
+            <div className="skeleton-line skeleton-line--desc" />
             <div className="menu-card__footer">
               <div className="skeleton-line skeleton-line--sm" style={{ width: '4rem' }} />
             </div>

@@ -28,6 +28,7 @@ export default function CashierPage() {
   const [placingOrder, setPlacingOrder]   = useState(false);
   const [toastMsg, setToastMsg]           = useState('');
   const toastRef = useRef(null);
+  const activeCategoryRef = useRef(null);
   // Below 1024px the menu and the order draft cannot share the screen
   // side by side, so exactly one of them is shown and this decides which.
   // Above that the CSS ignores it and shows both, as before.
@@ -57,6 +58,20 @@ export default function CashierPage() {
   }, [activeCategory]);
 
   useEffect(() => { fetchMenu(); }, []);
+
+  // Keep the selected category visible in the narrow, horizontally scrolling
+  // tab row. On wider layouts the row does not overflow, so this is a no-op.
+  useEffect(() => {
+    if (!activeCategory) return;
+    const node = activeCategoryRef.current;
+    if (!node) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    node.scrollIntoView({
+      behavior: reduceMotion ? 'auto' : 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    });
+  }, [activeCategory]);
 
   // ─── Socket: real-time menu updates ──────────────────────────────
   useEffect(() => {
@@ -271,6 +286,7 @@ export default function CashierPage() {
                     {categories.map((cat) => (
                       <button
                         key={cat.id}
+                        ref={activeCategory === cat.id ? activeCategoryRef : null}
                         className={`cashier-cat-btn${activeCategory === cat.id ? ' cashier-cat-btn--active' : ''}`}
                         onClick={() => setActiveCategory(cat.id)}
                         aria-pressed={activeCategory === cat.id}
