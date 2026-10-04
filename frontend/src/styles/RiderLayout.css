@@ -1,0 +1,417 @@
+/* ─── RiderLayout.css ────────────────────────────────────────────────────────
+ *
+ * Theme: Light / Outdoor-readable
+ * Palette: Clean white base, deep navy text, signal orange accent
+ * Designed for: mobile-first, direct sunlight legibility
+ * No gradients. No emojis. SVG icons only.
+ *
+ * Breakpoints:
+ *   < 768px    → bottom nav only, no sidebar, full-width main
+ *   768–1023px → icon-only sidebar (68px)
+ *   1024px+    → full sidebar (224px)
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+
+/* ── Design tokens ────────────────────────────────────────────────────────── */
+.rl-root {
+  /* Surfaces */
+  --rl-bg:           #F1F5F9;
+  --rl-surface:      #FFFFFF;
+  --rl-surface-2:    #F8FAFC;
+  --rl-surface-3:    #E2E8F0;
+
+  /* Borders */
+  --rl-border:       #CBD5E1;
+  --rl-border-strong:#94A3B8;
+
+  /* Brand */
+  --rl-primary:      #EA580C;   /* deep orange — visible in sunlight */
+  --rl-primary-dim:  #C2410C;
+  --rl-primary-tint: #FFF7ED;
+  --rl-primary-ring: rgba(234,88,12,0.2);
+
+  /* Text — high contrast for outdoor use */
+  --rl-text:         #0F172A;   /* near-black, 16:1 on white */
+  --rl-text-muted:   #475569;
+  --rl-text-subtle:  #64748B;
+
+  /* Semantic */
+  --rl-success:      #16A34A;
+  --rl-success-tint: #F0FDF4;
+  --rl-warning:      #D97706;
+  --rl-destructive:  #DC2626;
+
+  /* Layout */
+  --rl-sidebar-w:    224px;
+  --rl-bottom-nav-h: 68px;
+  --rl-radius:       10px;
+  --rl-radius-lg:    14px;
+
+  /* Shadows — crisp, no blur bloat */
+  --rl-shadow-sm:    0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.06);
+  --rl-shadow-md:    0 4px 12px rgba(15,23,42,0.10);
+
+  display: flex;
+  min-height: 100dvh;
+  background: var(--rl-bg);
+  color: var(--rl-text);
+  font-family: 'Source Sans 3', 'Lexend', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+.rl-sidebar {
+  width: var(--rl-sidebar-w);
+  min-height: 100dvh;
+  background: var(--rl-surface);
+  border-right: 1px solid var(--rl-border);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  gap: 6px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 100;
+  box-shadow: var(--rl-shadow-sm);
+}
+
+/* Brand */
+.rl-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 18px;
+  border-bottom: 1px solid var(--rl-border);
+  margin-bottom: 6px;
+}
+.rl-sidebar__brand-icon {
+  flex-shrink: 0;
+}
+.rl-sidebar__brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.rl-sidebar__brand-name {
+  font-family: 'Lexend', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--rl-text);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.rl-sidebar__brand-role {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--rl-primary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Rider card */
+.rl-sidebar__rider-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--rl-surface-2);
+  border: 1px solid var(--rl-border);
+  border-radius: var(--rl-radius);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.rl-sidebar__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--rl-primary);
+  color: #fff;
+  font-family: 'Lexend', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.rl-sidebar__rider-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rl-sidebar__rider-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--rl-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rl-sidebar__rider-status {
+  font-size: 0.7rem;
+  color: var(--rl-success);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rl-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rl-success);
+  flex-shrink: 0;
+}
+
+/* Nav links */
+.rl-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.rl-sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--rl-radius);
+  color: var(--rl-text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 150ms ease, color 150ms ease;
+  cursor: pointer;
+  min-height: 44px;
+}
+.rl-sidebar__link:hover {
+  background: var(--rl-surface-2);
+  color: var(--rl-text);
+}
+.rl-sidebar__link--active {
+  background: var(--rl-primary-tint);
+  color: var(--rl-primary);
+  font-weight: 700;
+}
+.rl-sidebar__link:focus-visible {
+  outline: 2px solid var(--rl-primary);
+  outline-offset: 2px;
+}
+
+/* Logout */
+.rl-sidebar__logout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--rl-radius);
+  color: var(--rl-text-subtle);
+  font-size: 0.82rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 150ms ease, color 150ms ease;
+  margin-top: 6px;
+  min-height: 44px;
+  font-family: inherit;
+}
+.rl-sidebar__logout:hover {
+  background: #FEF2F2;
+  color: var(--rl-destructive);
+}
+.rl-sidebar__logout:focus-visible {
+  outline: 2px solid var(--rl-destructive);
+  outline-offset: 2px;
+}
+
+/* ── Main content ─────────────────────────────────────────────────────────── */
+.rl-main {
+  flex: 1;
+  margin-left: var(--rl-sidebar-w);
+  min-height: 100dvh;
+  padding: 28px 28px 28px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+/* ── Mobile top bar ───────────────────────────────────────────────────────── */
+.rl-top-bar {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: var(--rl-surface);
+  border-bottom: 1px solid var(--rl-border);
+  z-index: 100;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  padding-top: env(safe-area-inset-top, 0px);
+  box-shadow: var(--rl-shadow-sm);
+}
+.rl-top-bar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Lexend', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--rl-text);
+}
+.rl-top-bar__cat-icon {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.rl-sidebar__cat-icon {
+  width: 35px;
+  height: 35px;
+  object-fit: contain;
+}
+.rl-top-bar__brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  line-height: 1;
+}
+.rl-top-bar__brand-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--rl-text);
+  line-height: 1.1;
+}
+.rl-top-bar__brand-sub {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--rl-primary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+.rl-top-bar__rider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rl-top-bar__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--rl-primary);
+  color: #fff;
+  font-family: 'Lexend', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Bottom nav (mobile only) ─────────────────────────────────────────────── */
+.rl-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--rl-bottom-nav-h);
+  background: var(--rl-surface);
+  border-top: 2px solid var(--rl-border);
+  z-index: 200;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -2px 12px rgba(15,23,42,0.08);
+}
+.rl-bottom-nav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 1;
+  color: var(--rl-text-subtle);
+  text-decoration: none;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 8px 4px 4px;
+  transition: color 150ms ease, background 150ms ease;
+  cursor: pointer;
+  min-width: 64px;
+  min-height: 48px;
+  border-radius: 0;
+  position: relative;
+}
+.rl-bottom-nav__item:hover { color: var(--rl-text-muted); }
+.rl-bottom-nav__item--active {
+  color: var(--rl-primary);
+  font-weight: 700;
+}
+.rl-bottom-nav__item--active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 2.5px;
+  background: var(--rl-primary);
+  border-radius: 0 0 3px 3px;
+}
+.rl-bottom-nav__label {
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+.rl-bottom-nav__item:focus-visible {
+  outline: 2px solid var(--rl-primary);
+  outline-offset: -2px;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+
+/* Tablet: icon-only sidebar */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .rl-sidebar {
+    width: 68px;
+    padding: 18px 10px;
+    align-items: center;
+  }
+  .rl-sidebar__brand-text,
+  .rl-sidebar__rider-info,
+  .rl-sidebar__link span,
+  .rl-sidebar__logout span { display: none; }
+  .rl-sidebar__brand { justify-content: center; padding-bottom: 14px; }
+  .rl-sidebar__brand-icon { margin: 0 auto; }
+  .rl-sidebar__rider-card { padding: 8px; justify-content: center; }
+  .rl-sidebar__link { padding: 10px; justify-content: center; }
+  .rl-sidebar__logout { padding: 10px; justify-content: center; }
+  .rl-main { margin-left: 68px; padding: 20px 18px; }
+  .rl-bottom-nav { display: none; }
+  .rl-top-bar { display: none; }
+}
+
+/* Mobile: top bar + bottom nav, no sidebar */
+@media (max-width: 767px) {
+  .rl-sidebar { display: none; }
+  .rl-top-bar { display: flex; }
+  .rl-main {
+    margin-left: 0;
+    padding-top: calc(56px + env(safe-area-inset-top, 0px) + 16px);
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-bottom: calc(var(--rl-bottom-nav-h) + env(safe-area-inset-bottom, 0px) + 16px);
+  }
+  .rl-bottom-nav { display: flex; }
+}
+
+/* Large desktop */
+@media (min-width: 1280px) {
+  .rl-main { padding: 32px 40px; }
+}

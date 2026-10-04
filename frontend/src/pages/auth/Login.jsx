@@ -23,8 +23,23 @@ export default function Login() {
     setLoading(true); setError('');
     try {
       const userData = await login(form);
-      const routes = { cashier: '/cashier', kitchen_staff: '/kitchen', staff: '/staff', owner: '/manager', admin: '/admin', manager: '/manager' };
-      navigate(routes[userData.role] || '/');
+
+      // Rider → /rider/active
+      if (userData.type === 'rider') {
+        navigate('/rider/active', { replace: true });
+        return;
+      }
+
+      // Staff → role-based redirect
+      const routes = {
+        cashier:       '/cashier',
+        kitchen_staff: '/kitchen',
+        staff:         '/staff',
+        owner:         '/manager',
+        admin:         '/admin',
+        manager:       '/manager',
+      };
+      navigate(routes[userData.role] || '/', { replace: true });
     } catch (err) {
       const msg = err.response?.data?.message || 'Invalid credentials. Try again.';
       setError(msg.includes('suspended') ? 'Account suspended. Contact your administrator.' : msg);
@@ -34,42 +49,23 @@ export default function Login() {
   return (
     <div className="login-root">
 
-      {/* ── LEFT: Brand panel ─────────────────────────────────────── */}
+      {/* ── LEFT: Brand panel ─────────────────────────────────── */}
       <div className="login-brand" aria-hidden="true">
-
-        {/* Single combined SVG — landscape + dragon already composited */}
         <div className="login-brand__deco" aria-hidden="true">
-          <img
-            src={bgCombined}
-            alt=""
-            className="login-brand__scene"
-            draggable="false"
-          />
+          <img src={bgCombined} alt="" className="login-brand__scene" draggable="false" />
         </div>
-
-        {/* Decorative: concentric ink circles top-right */}
         <div className="login-brand__ink-circle" aria-hidden="true" />
-
-        {/* Decorative: bottom-left glow pool */}
         <div className="login-brand__shadow-pool" aria-hidden="true" />
-
-        {/* Decorative: vertical column lines */}
         <div className="login-brand__columns" aria-hidden="true">
           <div className="login-brand__col-line" />
           <div className="login-brand__col-line" />
           <div className="login-brand__col-line" />
         </div>
 
-        {/* Main content sits above the decorators */}
         <div className="login-brand__inner">
           <div className="login-brand__logo">
-            <img
-              src={logo}
-              alt="Bingnondo Cafe"
-              className="login-brand__lucky-cat"
-            />
+            <img src={logo} alt="Bingnondo Cafe" className="login-brand__lucky-cat" />
           </div>
-
           <div className="login-brand__text-group">
             <div className="login-brand__charm">
               <div className="login-brand__charm-bar" />
@@ -77,9 +73,7 @@ export default function Login() {
                 Every great dish<br />starts at the counter.
               </p>
             </div>
-
             <div className="login-brand__rule" />
-
             <div className="login-brand__tickets">
               <Ticket label="Counter Orders" />
               <Ticket label="Quick Checkout" />
@@ -88,7 +82,6 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Bottom-right 3×3 dot lattice */}
         <div className="login-brand__lattice" aria-hidden="true">
           {Array.from({ length: 9 }).map((_, i) => (
             <span key={i} className="login-brand__dot" />
@@ -96,7 +89,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* ── RIGHT: Form panel ─────────────────────────────────────── */}
+      {/* ── RIGHT: Form panel ─────────────────────────────────── */}
       <div className="login-form-panel">
         <div className="login-form-panel__inner">
 
@@ -105,7 +98,7 @@ export default function Login() {
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
               </svg>
-              Staff Portal
+              Staff &amp; Rider Portal
             </span>
             <h1 className="login-form__title">Sign in to<br />your station</h1>
             <p className="login-form__sub">Bingnondo Cafe — Internal System</p>
