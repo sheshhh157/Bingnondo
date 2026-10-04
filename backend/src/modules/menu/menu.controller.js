@@ -25,7 +25,7 @@ async function _getEnrichedItem(id) {
          mi.updated_at
        FROM menu_items mi
        JOIN menu_categories mc ON mc.id = mi.category_id
-       WHERE mi.id = $1`,
+       WHERE mi.id = $1 AND mi.is_deleted = FALSE`,
       [id]
     ),
     db.query(
@@ -77,6 +77,7 @@ async function getPublicMenu(req, res, next) {
           mi.is_available
         FROM menu_items mi
         JOIN menu_categories mc ON mc.id = mi.category_id
+        WHERE mi.is_deleted = FALSE
         ORDER BY mc.name ASC, mi.name ASC
       `),
     ]);
@@ -110,6 +111,7 @@ async function getStaffMenu(req, res, next) {
           mi.updated_at
         FROM menu_items mi
         JOIN menu_categories mc ON mc.id = mi.category_id
+        WHERE mi.is_deleted = FALSE
         ORDER BY mc.name ASC, mi.name ASC
       `),
       db.query(`
@@ -329,14 +331,23 @@ async function setAvailability(req, res, next) {
 }
 
 // ─── DELETE /api/menu/:id ─────────────────────────────────────────────────────
-// Staff: remove an item (cascade deletes ingredient links via FK)
+// Staff: soft-delete — sets is_deleted = TRUE instead of hard DELETE.
+// Cannot hard-delete because order_items.menu_item_id references this table,
+// and order history must be preserved.
 async function deleteMenuItem(req, res, next) {
   try {
     const result = await db.query(
-      'DELETE FROM menu_items WHERE id = $1 RETURNING id, name',
+      `UPDATE menu_items
+       SET is_deleted  = TRUE,
+           is_available = FALSE,
+           deleted_at  = NOW()
+       WHERE id = $1 AND is_deleted = FALSE
+       RETURNING id, name`,
       [req.params.id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ message: 'Menu item not found.' });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Menu item not found.' });
+    }
 
     if (_io) _io.emit('menu_item_deleted', { id: result.rows[0].id });
     res.json({ message: 'Menu item removed.', deleted: result.rows[0] });

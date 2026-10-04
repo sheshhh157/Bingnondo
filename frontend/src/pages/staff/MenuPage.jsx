@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { staffMenuAPI, inventoryAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
-import '../../styles/MenuPage.css';
+import '../../styles/StaffMenuPage.css';
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
@@ -431,15 +431,24 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
 
 // ─── Confirm dialog ───────────────────────────────────────────────────────────
 function ConfirmDialog({ item, onClose, onConfirm }) {
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleKey = (e) => { if (e.key === 'Escape' && !loading) onClose(); };
     document.addEventListener('keydown', handleKey);
     document.body.style.overflow = 'hidden';
     return () => { document.removeEventListener('keydown', handleKey); document.body.style.overflow = ''; };
-  }, [onClose]);
+  }, [onClose, loading]);
+
+  async function handleConfirm() {
+    if (loading) return;
+    setLoading(true);
+    try { await onConfirm(); }
+    finally { setLoading(false); }
+  }
 
   return (
-    <div className="mn-modal-overlay" onClick={onClose}>
+    <div className="mn-modal-overlay" onClick={loading ? undefined : onClose}>
       <div className="mn-confirm" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="mn-confirm-title">
         <div className="mn-confirm__icon" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -447,10 +456,15 @@ function ConfirmDialog({ item, onClose, onConfirm }) {
           </svg>
         </div>
         <h3 id="mn-confirm-title" className="mn-confirm__title">Remove Menu Item</h3>
-        <p className="mn-confirm__msg">Remove <strong>{item.name}</strong> from the menu? This cannot be undone.</p>
+        <p className="mn-confirm__msg">
+          Remove <strong>{item.name}</strong> from the menu?
+          It will no longer appear to customers but order history will be preserved.
+        </p>
         <div className="mn-confirm__actions">
-          <button className="mn-btn mn-btn--ghost" onClick={onClose}>Cancel</button>
-          <button className="mn-btn mn-btn--danger" onClick={onConfirm}>Remove</button>
+          <button className="mn-btn mn-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="mn-btn mn-btn--danger" onClick={handleConfirm} disabled={loading}>
+            {loading ? 'Removing…' : 'Remove'}
+          </button>
         </div>
       </div>
     </div>
@@ -750,9 +764,13 @@ export default function MenuPage() {
     try {
       await staffMenuAPI.remove(deleteTarget.id);
       setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
-      showToast('Item removed.');
-    } catch { showToast('Failed to remove item.', 'error'); }
-    finally { setDeleteTarget(null); }
+      setDeleteTarget(null);
+      showToast(`"${deleteTarget.name}" removed from the menu.`);
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Failed to remove item.';
+      showToast(msg, 'error');
+      // Keep dialog open on error so user can retry or cancel
+    }
   };
 
   if (error && !loading) return (
