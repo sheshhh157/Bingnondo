@@ -6,6 +6,7 @@ import { ToastProvider } from './context/ToastContext';
 import Login from './pages/auth/Login';
 import CashierPage from './pages/cashier/CashierPage';
 import StaffLayout from './pages/staff/StaffLayout';
+import PaymentVerificationPage from './pages/staff/PaymentVerificationPage';
 import InventoryPage from './pages/staff/InventoryPage';
 import MenuPage from './pages/staff/MenuPage';
 import DeliveryPage from './pages/staff/DeliveryPage';
@@ -54,7 +55,7 @@ function RoleRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'cashier')       return <Navigate to="/cashier" replace />;
-  if (user.role === 'staff')         return <Navigate to="/staff/inventory" replace />;
+  if (user.role === 'staff')         return <Navigate to="/staff/payments" replace />;
   if (user.role === 'owner')         return <Navigate to="/manager/dashboard" replace />;
   if (user.role === 'kitchen_staff') return <Navigate to="/kitchen" replace />;
   if (user.role === 'admin')         return <Navigate to="/admin/accounts" replace />;
@@ -90,7 +91,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/staff/inventory" replace />} />
+            <Route index element={<Navigate to="/staff/payments" replace />} />
+            <Route path="payments"  element={<PaymentVerificationPage />} />
             <Route path="inventory" element={<InventoryPage />} />
             <Route path="menu"      element={<MenuPage />} />
             <Route path="delivery"  element={<DeliveryPage />} />

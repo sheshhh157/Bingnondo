@@ -290,6 +290,150 @@ export const ordersAPI = {
   },
 };
 
+// ─── PAYMENT VERIFICATION MOCK DATA (§4.0) ────────────────────────────────────
+// Staff-side: review GCash receipts before orders hit the kitchen.
+
+let MOCK_PENDING_PAYMENTS = [
+  {
+    id: 2001,
+    order_id: 2001,
+    order_number: 'ORD-2001',
+    customer_id: 201,
+    customer_name: 'Liza Ramos',
+    customer_mobile: '+63 917 555 0101',
+    total_amount: 265,
+    payment_status: 'awaiting_verification',
+    gcash_ref_number: '9876543210',
+    receipt_image_url: null,
+    submitted_at: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+    rejection_reason: null,
+    items: [
+      { name: 'Tapsilog',   quantity: 1, unit_price: 120 },
+      { name: 'Iced Tea',   quantity: 2, unit_price: 45  },
+      { name: 'Extra Rice', quantity: 1, unit_price: 20  },
+    ],
+  },
+  {
+    id: 2002,
+    order_id: 2002,
+    order_number: 'ORD-2002',
+    customer_id: 202,
+    customer_name: 'Dante Cruz',
+    customer_mobile: '+63 918 555 0202',
+    total_amount: 150,
+    payment_status: 'awaiting_verification',
+    gcash_ref_number: null,  // OCR failed
+    receipt_image_url: null,
+    submitted_at: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+    rejection_reason: null,
+    items: [
+      { name: 'Sinigang Set', quantity: 1, unit_price: 150 },
+    ],
+  },
+  {
+    id: 2003,
+    order_id: 2003,
+    order_number: 'ORD-2003',
+    customer_id: 203,
+    customer_name: 'Grace Mendoza',
+    customer_mobile: '+63 919 555 0303',
+    total_amount: 320,
+    payment_status: 'rejected',
+    gcash_ref_number: '1234567890',
+    receipt_image_url: null,
+    submitted_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+    rejection_reason: 'Blurry screenshot',
+    items: [
+      { name: 'Bangsilog',    quantity: 1, unit_price: 130 },
+      { name: 'Longsilog',    quantity: 1, unit_price: 110 },
+      { name: 'Coke Regular', quantity: 1, unit_price: 40  },
+      { name: 'Extra Egg',    quantity: 2, unit_price: 20  },
+    ],
+  },
+  {
+    id: 2004,
+    order_id: 2004,
+    order_number: 'ORD-2004',
+    customer_id: 204,
+    customer_name: 'Mark Tan',
+    customer_mobile: '+63 920 555 0404',
+    total_amount: 75,
+    payment_status: 'awaiting_verification',
+    gcash_ref_number: '5566778899',
+    receipt_image_url: null,
+    submitted_at: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+    rejection_reason: null,
+    items: [
+      { name: 'Pancit Bihon', quantity: 1, unit_price: 75 },
+    ],
+  },
+];
+
+// ─── PAYMENT VERIFICATION API (§4.0) ─────────────────────────────────────────
+// Switch between mock and real backend by toggling USE_REAL_API below.
+// When backend is ready: set USE_REAL_API = true and remove the mock branches.
+const PV_USE_REAL_API = false;
+
+export const paymentVerificationAPI = {
+  /**
+   * GET /api/payments/pending
+   * Returns all orders with payment_status in ('awaiting_verification', 'rejected')
+   * that staff must act on before they can proceed to the kitchen.
+   */
+  getPending: async () => {
+    if (PV_USE_REAL_API) {
+      return apiRequest('/payments/pending');
+    }
+    await delay(450);
+    return { data: { payments: [...MOCK_PENDING_PAYMENTS] } };
+  },
+
+  /**
+   * POST /api/payments/:orderId/verify
+   * Staff confirms the GCash receipt is valid.
+   * Backend: sets payment.status = 'paid', order.status = 'confirmed',
+   *          emits Socket.io `new_order` → Kitchen Display.
+   */
+  verify: async (orderId) => {
+    if (PV_USE_REAL_API) {
+      return apiRequest(`/payments/${orderId}/verify`, { method: 'POST' });
+    }
+    await delay(500);
+    const idx = MOCK_PENDING_PAYMENTS.findIndex(p => p.id === orderId);
+    if (idx === -1) {
+      const err = new Error('Payment record not found.');
+      err.response = { data: { message: 'Payment record not found.' }, status: 404 };
+      throw err;
+    }
+    MOCK_PENDING_PAYMENTS.splice(idx, 1);
+    return { data: { success: true, message: 'Payment verified. Order sent to kitchen.' } };
+  },
+
+  /**
+   * POST /api/payments/:orderId/reject
+   * Staff rejects the receipt — customer is notified to re-upload.
+   * Body: { reason: string }
+   */
+  reject: async (orderId, reason) => {
+    if (PV_USE_REAL_API) {
+      return apiRequest(`/payments/${orderId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
+    }
+    await delay(400);
+    const payment = MOCK_PENDING_PAYMENTS.find(p => p.id === orderId);
+    if (!payment) {
+      const err = new Error('Payment record not found.');
+      err.response = { data: { message: 'Payment record not found.' }, status: 404 };
+      throw err;
+    }
+    payment.payment_status   = 'rejected';
+    payment.rejection_reason = reason;
+    return { data: { success: true, message: 'Receipt rejected. Customer notified.' } };
+  },
+};
+
 // ─── PAYMENTS ─────────────────────────────────────────────────────────────────
 export const paymentsAPI = {
   process: async ({ order_id, method }) => {

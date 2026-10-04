@@ -114,7 +114,9 @@ export const del   = (path)         => request('DELETE', path);
  */
 export const authClient = {
   staffLogin: async (credentials) => {
-    const res = await post('/api/auth/staff/login', credentials);
+    // Use request() with retry=false so a 401 (wrong credentials) is treated
+    // as a plain error — NOT as an expired token that triggers auth:expired + reload.
+    const res = await request('POST', '/api/auth/staff/login', credentials, false);
     // res = { accessToken, refreshToken, user, message }
     setTokens(res.accessToken, res.refreshToken);
     return res;
