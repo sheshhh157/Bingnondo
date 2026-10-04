@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bingnondo
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: bingnondo
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_ACCESS_SECRET: ci_access_secret_not_for_production
+      JWT_REFRESH_SECRET: ci_refresh_secret_not_for_production
+      JWT_ACCESS_EXPIRY: 30m
+      JWT_REFRESH_EXPIRY: 7d
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - name: Restore canonical schema
+        run: PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d bingnondo -v ON_ERROR_STOP=1 -f bingnondo_database.sql
+      - name: Mark migrations applied
+        run: node scripts/migrate.js --mark-all-applied
+        working-directory: backend
+      - name: Migrations are no-op on a canonical schema
+        run: npm run migrate
+        working-directory: backend
+      - run: npm test
+        working-directory: backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: http://localhost:5000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run lint
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend

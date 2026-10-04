@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import '../../../styles/OrderDraft.css';
 
 const fmt = (n) => `₱${Number(n).toFixed(2)}`;
@@ -16,6 +16,24 @@ export default function OrderDraft({
   loading,
 }) {
   const itemCount = draft.reduce((s, d) => s + d.qty, 0);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const clearBtnRef = useRef(null);
+  const keepBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (confirmClear) {
+      keepBtnRef.current?.focus();
+      const onKey = (e) => { if (e.key === 'Escape') setConfirmClear(false); };
+      document.addEventListener('keydown', onKey);
+      return () => document.removeEventListener('keydown', onKey);
+    }
+    const btn = clearBtnRef.current;
+    return () => btn?.focus();
+  }, [confirmClear]);
+
+  const openConfirm = useCallback(() => setConfirmClear(true), []);
+  const closeConfirm = useCallback(() => setConfirmClear(false), []);
+  const handleClear = useCallback(() => { setConfirmClear(false); onClear(); }, [onClear]);
 
   return (
     <div className="od-root">
@@ -32,8 +50,9 @@ export default function OrderDraft({
         </div>
         {draft.length > 0 && (
           <button
+            ref={clearBtnRef}
             className="od-clear-btn"
-            onClick={onClear}
+            onClick={openConfirm}
             aria-label="Clear order"
           >
             Clear
@@ -91,6 +110,31 @@ export default function OrderDraft({
           </button>
         </div>
       )}
+
+      {confirmClear && (
+        <div className="od-confirm-overlay" onClick={closeConfirm}>
+          <div
+            className="od-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="od-confirm-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="od-confirm-title" className="od-confirm__title">Clear order?</h3>
+            <p className="od-confirm__body">
+              This removes all {itemCount} items ({fmt(total)}) from the current order.
+            </p>
+            <div className="od-confirm__actions">
+              <button ref={keepBtnRef} className="od-confirm__btn od-confirm__btn--secondary" onClick={closeConfirm}>
+                Keep order
+              </button>
+              <button className="od-confirm__btn od-confirm__btn--danger" onClick={handleClear}>
+                Clear order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -102,24 +146,34 @@ function DraftItem({ item, onQty, onRemove, onNote }) {
     <div className="od-item">
       <div className="od-item__main">
         <div className="od-item__info">
-          <p className="od-item__name">
+          <p className="od-item__name" title={item.name}>
             {item.name}
-            {/* The variant is part of what the cashier is selling, so it has
-                to read on the ticket -- "Cappuccino" alone is ambiguous. */}
             {item.optionName && <span className="od-item__variant">{item.optionName}</span>}
+            {item.flavorName && <span className="od-item__variant">{item.flavorName} flavor</span>}
           </p>
           <p className="od-item__unit">₱{Number(item.price).toFixed(2)} each</p>
         </div>
+
+        <span className="od-item__line-total">{fmt(item.price * item.qty)}</span>
 
         <div className="od-item__controls">
           <button
             className="od-item__qty-btn"
             onClick={() => onQty(item.qty - 1)}
-            aria-label={`Decrease ${item.name} quantity`}
+            aria-label={item.qty === 1 ? `Remove ${item.name} from order` : `Decrease ${item.name} quantity`}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
+            {item.qty === 1 ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            )}
           </button>
           <span className="od-item__qty" aria-label={`Quantity: ${item.qty}`}>{item.qty}</span>
           <button
@@ -134,53 +188,53 @@ function DraftItem({ item, onQty, onRemove, onNote }) {
           </button>
         </div>
 
-        <div className="od-item__right">
-          <span className="od-item__line-total">{fmt(item.price * item.qty)}</span>
-          <div className="od-item__actions">
-            <button
-              className={`od-item__note-btn${noteOpen || item.note ? ' od-item__note-btn--active' : ''}`}
-              onClick={() => setNoteOpen((v) => !v)}
-              aria-label={`${noteOpen ? 'Hide' : 'Add'} note for ${item.name}`}
-              title="Add note"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-                <line x1="10" y1="9" x2="8" y2="9"/>
-              </svg>
-            </button>
-            <button
-              className="od-item__remove-btn"
-              onClick={onRemove}
-              aria-label={`Remove ${item.name} from order`}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                <path d="M10 11v6M14 11v6"/>
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-              </svg>
-            </button>
-          </div>
+        <div className="od-item__actions">
+          <button
+            className={`od-item__note-btn${noteOpen || item.note ? ' od-item__note-btn--active' : ''}`}
+            onClick={() => setNoteOpen((v) => !v)}
+            aria-label={`${noteOpen ? 'Hide' : 'Add'} note for ${item.name}`}
+            title="Add note"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <line x1="10" y1="9" x2="8" y2="9"/>
+            </svg>
+          </button>
+          <button
+            className="od-item__remove-btn"
+            onClick={onRemove}
+            aria-label={`Remove ${item.name} from order`}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+          </button>
         </div>
-      </div>
 
-      {/* Note input (collapsible) */}
-      {noteOpen && (
-        <div className="od-item__note-wrap">
-          <input
-            className="od-item__note-input"
-            type="text"
-            placeholder="e.g. no onions, extra spicy…"
-            value={item.note}
-            onChange={(e) => onNote(e.target.value)}
-            maxLength={120}
-            aria-label={`Note for ${item.name}`}
-          />
-        </div>
-      )}
+        {!noteOpen && item.note && (
+          <p className="od-item__note-display">Note: {item.note}</p>
+        )}
+
+        {noteOpen && (
+          <div className="od-item__note-wrap">
+            <input
+              className="od-item__note-input"
+              type="text"
+              placeholder="e.g. no onions, extra spicy…"
+              value={item.note}
+              onChange={(e) => onNote(e.target.value)}
+              maxLength={120}
+              aria-label={`Note for ${item.name}`}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

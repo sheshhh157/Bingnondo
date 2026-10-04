@@ -1,4 +1,5 @@
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const db = require('../../config/db');
 const {
   storeOtp,
@@ -19,6 +20,11 @@ const BCRYPT_ROUNDS = 12;
 function sanitizeStaff(row) {
   const { password_hash, ...safe } = row;
   return safe;
+}
+
+// Only the hash is stored, so the database never holds a usable token.
+function tokenHash(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,6 +60,14 @@ exports.staffLogin = async (req, res) => {
     const payload = { sub: staff.id, type: 'staff', role: staff.role };
     const accessToken = signAccessToken(payload);
     const refreshToken = signRefreshToken(payload);
+
+    const familyId = crypto.randomUUID();
+    const decoded = require('jsonwebtoken').decode(refreshToken);
+    await db.query(
+      `INSERT INTO refresh_tokens (staff_account_id, token_hash, family_id, expires_at)
+       VALUES ($1, $2, $3, to_timestamp($4))`,
+      [staff.id, tokenHash(refreshToken), familyId, decoded.exp]
+    );
 
     return res.status(200).json({
       message: 'Login successful.',
@@ -158,6 +172,28 @@ exports.refreshToken = async (req, res) => {
       return res.status(401).json({ message: 'Invalid or expired refresh token.' });
     }
 
+    const { rows: tokenRows } = await db.query(
+      'SELECT * FROM refresh_tokens WHERE token_hash = $1',
+      [tokenHash(refreshToken)]
+    );
+    const stored = tokenRows[0];
+    if (!stored) {
+      return res.status(401).json({ message: 'Invalid or expired refresh token.' });
+    }
+
+    // A revoked token came back — someone is replaying an old lineage. Kill the
+    // whole family so both copies of the thief and the real user stop working.
+    if (stored.revoked_at) {
+      await db.query(
+        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE family_id = $1 AND revoked_at IS NULL',
+        [stored.family_id]
+      );
+      return res.status(401).json({ message: 'Refresh token reuse detected. Please sign in again.' });
+    }
+    if (new Date(stored.expires_at).getTime() <= Date.now()) {
+      return res.status(401).json({ message: 'Refresh token expired. Please sign in again.' });
+    }
+
     // Verify the staff account still exists and is active
     const { rows } = await db.query(
       'SELECT id, status, role FROM staff_accounts WHERE id = $1',
@@ -170,6 +206,17 @@ exports.refreshToken = async (req, res) => {
     const newPayload = { sub: decoded.sub, type: decoded.type, role: decoded.role };
     const newAccessToken = signAccessToken(newPayload);
     const newRefreshToken = signRefreshToken(newPayload);
+    const newDecoded = require('jsonwebtoken').decode(newRefreshToken);
+
+    const { rows: inserted } = await db.query(
+      `INSERT INTO refresh_tokens (staff_account_id, token_hash, family_id, expires_at)
+       VALUES ($1, $2, $3, to_timestamp($4)) RETURNING id`,
+      [decoded.sub, tokenHash(newRefreshToken), stored.family_id, newDecoded.exp]
+    );
+    await db.query(
+      'UPDATE refresh_tokens SET revoked_at = NOW(), replaced_by = $1 WHERE id = $2',
+      [inserted[0].id, stored.id]
+    );
 
     return res.status(200).json({
       accessToken: newAccessToken,
@@ -186,9 +233,20 @@ exports.refreshToken = async (req, res) => {
 // POST /api/auth/logout  (requires valid access token)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.logout = async (req, res) => {
-  // req.user is set by authenticateToken middleware
-  // Stateless JWT: nothing to invalidate server-side unless you implement
-  // a token blacklist table. For now, client simply deletes stored tokens.
+  // The client should pass the refresh token it wants retired. Without it the
+  // session row survives — but that is strictly weaker than stateless tokens,
+  // not worse.
+  const { refreshToken } = req.body || {};
+  if (refreshToken) {
+    try {
+      await db.query(
+        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL',
+        [tokenHash(refreshToken)]
+      );
+    } catch (err) {
+      console.error('[logout]', err);
+    }
+  }
   return res.status(200).json({ message: 'Logged out successfully.' });
 };
 

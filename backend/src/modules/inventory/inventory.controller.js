@@ -16,26 +16,101 @@ function broadcastMenuAvailability(rows) {
     .catch((err) => console.error('[inventory] menu availability broadcast failed:', err.message));
 }
 
+// ─── Category helpers ─────────────────────────────────────────────────────────
+// Normalise a category_ids payload into a clean array of positive integers,
+// deduplicated. Anything unparseable, non-integer or non-positive is rejected
+// rather than silently dropped, so a typo in the payload cannot quietly leave an
+// ingredient in a state the caller did not ask for.
+//
+// An absent field yields null ("not mentioned"), which is different from [] ("no
+// categories"). updateItem needs that distinction; an empty array is a real
+// request to strip every tag.
+function parseCategoryIds(raw) {
+  if (raw === undefined || raw === null) return null;
+  if (!Array.isArray(raw)) throw Object.assign(new Error('category_ids must be an array.'), { status: 400 });
+
+  const ids = [];
+  for (const value of raw) {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n <= 0) {
+      throw Object.assign(new Error('Category must be a valid menu category.'), { status: 400 });
+    }
+    if (!ids.includes(n)) ids.push(n);
+  }
+  return ids;
+}
+
+// Confirm every id names a real menu category, in one round trip. Returns the
+// id -> name map so the caller can respond without querying again.
+async function loadCategories(ids, res) {
+  if (ids.length === 0) return new Map();
+
+  const result = await db.query('SELECT id, name FROM menu_categories WHERE id = ANY($1)', [ids]);
+  if (result.rows.length !== ids.length) {
+    res.status(400).json({ message: 'Category must be a valid menu category.' });
+    return null;
+  }
+  return new Map(result.rows.map((r) => [Number(r.id), r.name]));
+}
+
+// Replace an ingredient's full set of category links. Delete-then-insert inside
+// the caller's transaction, so a failure part-way leaves the old set intact.
+async function replaceCategoryLinks(client, ingredientId, ids) {
+  await client.query('DELETE FROM inventory_item_categories WHERE inventory_item_id = $1', [ingredientId]);
+  if (ids.length === 0) return;
+  await client.query(
+    `INSERT INTO inventory_item_categories (inventory_item_id, menu_category_id)
+     SELECT $1, unnest($2::int[])`,
+    [ingredientId, ids]
+  );
+}
+
+// The shape the client consumes: ids sorted for comparison, names sorted for
+// display. Both already alphabetical from the query, kept parallel by position.
+function categoryPayload(ids, nameById) {
+  const pairs = ids
+    .map((id) => ({ id: Number(id), name: nameById.get(Number(id)) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    category_ids: pairs.map((p) => p.id),
+    category_names: pairs.map((p) => p.name),
+  };
+}
+
 // ─── GET /api/inventory ───────────────────────────────────────────────────────
 // Staff: all inventory items with low-stock flag
 async function getAll(req, res, next) {
   try {
+    // Categories come back as two parallel arrays rather than a joined string:
+    // the filter matches on ids, the display joins the names. Ordered by name so
+    // the rendered order is stable regardless of insertion order.
     const result = await db.query(`
       SELECT
-        id,
-        name,
-        unit,
-        current_stock,
-        reorder_level,
-        updated_at,
-        (current_stock <= reorder_level) AS is_low_stock
-      FROM inventory_items
-      ORDER BY name ASC
+        i.id,
+        i.name,
+        i.unit,
+        i.current_stock,
+        i.reorder_level,
+        i.updated_at,
+        (i.current_stock <= i.reorder_level) AS is_low_stock,
+        COALESCE(cat.ids, '{}')   AS category_ids,
+        COALESCE(cat.names, '{}') AS category_names
+      FROM inventory_items i
+      LEFT JOIN LATERAL (
+        SELECT
+          array_agg(c.id ORDER BY c.name)   AS ids,
+          array_agg(c.name ORDER BY c.name) AS names
+        FROM inventory_item_categories iic
+        JOIN menu_categories c ON c.id = iic.menu_category_id
+        WHERE iic.inventory_item_id = i.id
+      ) cat ON TRUE
+      ORDER BY i.name ASC
     `);
 
     res.json({
       items: result.rows.map((r) => ({
         ...r,
+        category_ids: r.category_ids.map(Number),
         current_stock: parseFloat(r.current_stock),
         reorder_level: parseFloat(r.reorder_level),
       })),
@@ -49,9 +124,20 @@ async function getAll(req, res, next) {
 async function getById(req, res, next) {
   try {
     const result = await db.query(
-      `SELECT id, name, unit, current_stock, reorder_level, updated_at,
-              (current_stock <= reorder_level) AS is_low_stock
-       FROM inventory_items WHERE id = $1`,
+      `SELECT i.id, i.name, i.unit, i.current_stock, i.reorder_level, i.updated_at,
+              (i.current_stock <= i.reorder_level) AS is_low_stock,
+              COALESCE(cat.ids, '{}')   AS category_ids,
+              COALESCE(cat.names, '{}') AS category_names
+       FROM inventory_items i
+       LEFT JOIN LATERAL (
+         SELECT
+           array_agg(c.id ORDER BY c.name)   AS ids,
+           array_agg(c.name ORDER BY c.name) AS names
+         FROM inventory_item_categories iic
+         JOIN menu_categories c ON c.id = iic.menu_category_id
+         WHERE iic.inventory_item_id = i.id
+       ) cat ON TRUE
+       WHERE i.id = $1`,
       [req.params.id]
     );
     if (result.rows.length === 0) {
@@ -60,6 +146,7 @@ async function getById(req, res, next) {
     const r = result.rows[0];
     res.json({
       ...r,
+      category_ids: r.category_ids.map(Number),
       current_stock: parseFloat(r.current_stock),
       reorder_level: parseFloat(r.reorder_level),
     });
@@ -70,36 +157,199 @@ async function getById(req, res, next) {
 
 // ─── POST /api/inventory ──────────────────────────────────────────────────────
 // Staff: create a new ingredient
-// Body: { name, unit, current_stock?, reorder_level? }
+// Body: { name, unit, current_stock?, reorder_level?, category_ids? }
+//
+// category_ids may hold any number of menu category ids, including none. An
+// ingredient shared between two menu categories is tagged with both, so it
+// turns up under either one in the inventory filter.
 async function createItem(req, res, next) {
+  // One transaction: the INSERT and its category links either both land or
+  // neither does, so an ingredient can never exist with a partial tag set.
+  const client = await db.getClient();
   try {
     const { name, unit, current_stock = 0, reorder_level = 0 } = req.body;
 
     if (!name?.trim()) return res.status(400).json({ message: 'Ingredient name is required.' });
     if (!unit?.trim()) return res.status(400).json({ message: 'Unit is required (e.g. kg, pcs, liters).' });
 
-    const result = await db.query(
+    const categoryIds = parseCategoryIds(req.body.category_ids) ?? [];
+    const nameById = await loadCategories(categoryIds, res);
+    if (nameById === null) return;
+
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `INSERT INTO inventory_items (name, unit, current_stock, reorder_level)
        VALUES ($1, $2, $3, $4)
-       RETURNING *`,
+       RETURNING id, name, unit, current_stock, reorder_level, updated_at`,
       [name.trim(), unit.trim(), Number(current_stock), Number(reorder_level)]
     );
 
     const r = result.rows[0];
+    await replaceCategoryLinks(client, r.id, categoryIds);
+
+    await client.query('COMMIT');
+
     res.status(201).json({
       ...r,
+      ...categoryPayload(categoryIds, nameById),
       current_stock: parseFloat(r.current_stock),
       reorder_level: parseFloat(r.reorder_level),
     });
   } catch (err) {
+    await client.query('ROLLBACK');
     if (err.code === '23505') {
       return res.status(409).json({ message: 'An ingredient with that name already exists.' });
     }
+    if (err.status === 400) return res.status(400).json({ message: err.message });
     next(err);
+  } finally {
+    client.release();
   }
 }
 
-// ─── POST /api/inventory/:id/transaction ─────────────────────────────────────
+// ─── PATCH /api/inventory/:id ─────────────────────────────────────────────────
+// Staff: edit an ingredient's details (name, unit, category).
+//
+// Deliberately narrow. It does not touch current_stock or reorder_level: stock
+// only ever moves through a logged transaction, so allowing an edit here would
+// create a second, silent path into the number that the whole low-stock cascade
+// and the audit trail depend on.
+//
+// That restraint is also why a unit change is a relabelling and nothing more.
+// current_stock is stored as a bare number, so switching an ingredient from
+// 'pcs' to 'kilogram' does not convert 500 pcs into a weight - 500 simply starts
+// meaning kilograms. The client warns before saving; converting the quantity is
+// left to a deliberate adjustment, which is logged.
+//
+// Safe to rename. menu_item_ingredients joins on inventory_item_id, so recipe
+// links and menu availability follow the rename automatically.
+async function updateItem(req, res, next) {
+  // Transactional, because a category change is a delete-then-insert over the
+  // join table. Without one, a failure between the two would leave the
+  // ingredient with some of its old tags and none of the new ones.
+  const client = await db.getClient();
+  try {
+    const { id } = req.params;
+    const updates = {};
+
+    if (req.body.name !== undefined) {
+      const name = req.body.name?.trim();
+      if (!name) return res.status(400).json({ message: 'Ingredient name is required.' });
+      updates.name = name;
+    }
+
+    if (req.body.unit !== undefined) {
+      const unit = req.body.unit?.trim();
+      if (!unit) return res.status(400).json({ message: 'Unit is required (e.g. kg, pcs, liters).' });
+      updates.unit = unit;
+    }
+
+    // null means "leave the tags alone", [] means "strip every tag". Both are
+    // legitimate: a rename should not silently recategorise the ingredient.
+    const categoryIds = parseCategoryIds(req.body.category_ids);
+    let nameById = null;
+    if (categoryIds !== null) {
+      nameById = await loadCategories(categoryIds, res);
+      if (nameById === null) return;
+    }
+
+    // The SET list is built from the fields actually present. COALESCE cannot be
+    // used here: it cannot tell an omitted field from one explicitly set to
+    // null. Column names are literals from this whitelist; every value is still
+    // a bound parameter.
+    const sets = [];
+    const params = [id];
+    for (const [col, val] of [
+      ['name', updates.name],
+      ['unit', updates.unit],
+    ]) {
+      if (val === undefined) continue;
+      params.push(val);
+      sets.push(`${col} = $${params.length}`);
+    }
+
+    if (sets.length === 0 && categoryIds === null) {
+      return res.status(400).json({ message: 'Nothing to update.' });
+    }
+
+    await client.query('BEGIN');
+
+    if (sets.length > 0) {
+      sets.push('updated_at = NOW()');
+      const result = await client.query(
+        `UPDATE inventory_items
+            SET ${sets.join(', ')}
+          WHERE id = $1
+          RETURNING id, name, unit, current_stock, reorder_level, updated_at`,
+        params
+      );
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Inventory item not found.' });
+      }
+      updates.row = result.rows[0];
+    } else {
+      // Category-only edit still has to confirm the ingredient exists.
+      const existing = await client.query(
+        'SELECT id, name, unit, current_stock, reorder_level, updated_at FROM inventory_items WHERE id = $1',
+        [id]
+      );
+      if (existing.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Inventory item not found.' });
+      }
+      updates.row = existing.rows[0];
+    }
+
+    if (categoryIds !== null) {
+      await replaceCategoryLinks(client, Number(id), categoryIds);
+    }
+
+    // Report the tags the row actually ends up with: the requested set when one
+    // was sent, otherwise re-read whatever is there now.
+    const finalIds = categoryIds !== null
+      ? categoryIds
+      : (await client.query(
+          `SELECT menu_category_id FROM inventory_item_categories
+            WHERE inventory_item_id = $1 ORDER BY menu_category_id`, [id]
+        )).rows.map((r) => Number(r.menu_category_id));
+
+    const finalNames = nameById !== null && categoryIds !== null
+      ? nameById
+      : await loadCategories(finalIds, res);
+    if (finalNames === null) {
+      await client.query('ROLLBACK');
+      return;
+    }
+
+    await client.query('COMMIT');
+
+    const r = updates.row;
+    socketHub.emitInventoryUpdate({ itemId: Number(id), id: Number(id) });
+
+    res.json({
+      ...r,
+      ...categoryPayload(finalIds, finalNames),
+      current_stock: parseFloat(r.current_stock),
+      reorder_level: parseFloat(r.reorder_level),
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err.status === 400) return res.status(400).json({ message: err.message });
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'An ingredient with that name already exists.' });
+    }
+    if (err.code === '23503') {
+      return res.status(400).json({ message: 'Category must be a valid menu category.' });
+    }
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+    // ─── POST /api/inventory/:id/transaction ─────────────────────────────────────
 // Staff: log a stock movement (restock / adjustment / deduction)
 // Body: { change_type, quantity, note? }
 async function createTransaction(req, res, next) {
@@ -362,4 +612,4 @@ async function getTransactions(req, res, next) {
   }
 }
 
-module.exports = { getAll, getById, createItem, createTransaction, outOfStock, deleteItem, getTransactions };
+module.exports = { getAll, getById, createItem, updateItem, createTransaction, outOfStock, deleteItem, getTransactions };

@@ -99,6 +99,11 @@ export default function OrderCard({ order, lane, onStatusChange }) {
             <span className="kp-card__qty">{item.quantity}×</span>
             <div className="kp-card__item-body">
               <span className="kp-card__item-name">{item.menu_item?.name || item.name}</span>
+              {(item.option?.name || item.flavor?.name) && (
+                <span className="kp-card__note" aria-label="Item choices">
+                  {[item.option?.name, item.flavor?.name ? `${item.flavor.name} flavor` : null].filter(Boolean).join(' · ')}
+                </span>
+              )}
               {item.notes && (
                 <span className="kp-card__note" aria-label={`Note: ${item.notes}`}>
                   {item.notes}

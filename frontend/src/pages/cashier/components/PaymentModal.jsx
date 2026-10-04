@@ -168,9 +168,11 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
                 <div className="pm-summary">
                   <div className="pm-summary__items">
                     {draft.map((item) => (
-                      <div key={item.id} className="pm-summary__row">
+                      <div key={item.lineKey || item.id} className="pm-summary__row">
                         <span className="pm-summary__name">
                           {item.name}
+                          {item.optionName ? ` · ${item.optionName}` : ''}
+                          {item.flavorName ? ` · ${item.flavorName} flavor` : ''}
                           <span className="pm-summary__qty"> ×{item.qty}</span>
                         </span>
                         <span className="pm-summary__val">{fmt(item.price * item.qty)}</span>
@@ -342,8 +344,13 @@ function Receipt({ orderNumber, draft, total, method, cashGiven, change, onDone 
         <div className="pm-receipt__divider" aria-hidden="true" />
 
         {draft.map((item) => (
-          <div key={item.id} className="pm-receipt__line">
-            <span>{item.name} <span className="pm-receipt__qty">×{item.qty}</span></span>
+          <div key={item.lineKey || item.id} className="pm-receipt__line">
+            <span>
+              {item.name}
+              {item.optionName ? ` · ${item.optionName}` : ''}
+              {item.flavorName ? ` · ${item.flavorName} flavor` : ''}{' '}
+              <span className="pm-receipt__qty">×{item.qty}</span>
+            </span>
             <span>₱{Number(item.price * item.qty).toFixed(2)}</span>
           </div>
         ))}

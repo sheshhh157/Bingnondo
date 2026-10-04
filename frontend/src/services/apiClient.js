@@ -120,7 +120,7 @@ export const authClient = {
     return res;
   },
   logout: async () => {
-    try { await post('/api/auth/logout', {}); } catch { /* ignore */ }
+    try { await post('/api/auth/logout', { refreshToken: getRefreshToken() }); } catch { /* ignore */ }
     clearTokens();
   },
   me: () => get('/api/auth/me'),

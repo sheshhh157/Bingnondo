@@ -174,7 +174,12 @@ export default function TransactionHistory() {
                           <div className="th-expanded">
                             {(order.items || []).map((item, idx) => (
                               <div key={idx} className="th-expanded__line">
-                                <span>{item.name || item.menu_item?.name} ×{item.quantity}</span>
+                                <span>
+                                  {item.name || item.menu_item?.name}
+                                  {item.option_name ? ` · ${item.option_name}` : ''}
+                                  {item.flavor_name ? ` · ${item.flavor_name} flavor` : ''}
+                                  ×{item.quantity}
+                                </span>
                                 <span>{fmt((item.unit_price || item.price || 0) * item.quantity)}</span>
                               </div>
                             ))}

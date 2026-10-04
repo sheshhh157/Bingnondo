@@ -295,10 +295,10 @@ async function createMenuItem(req, res, next) {
     // Options carry their own absolute price, so they are inserted after the
     // item exists and in the same transaction -- a half-created item with no
     // variants is not a state the staff page should ever be able to save.
-    // 5 values per row: id, name, price, is_available, sort_order.
+    // 6 values per row: menu_item_id, name, price, is_available, sort_order, option_kind.
     if (Array.isArray(options) && options.length > 0) {
       const values = options
-        .map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`)
+        .map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`)
         .join(', ');
       const params = options.flatMap((opt, i) => [
         newId,
@@ -306,9 +306,10 @@ async function createMenuItem(req, res, next) {
         Number(opt.price) || 0,
         opt.is_available !== false,
         i,
+        opt.option_kind === 'flavor' ? 'flavor' : 'variant',
       ]);
       await client.query(
-        `INSERT INTO menu_item_options (menu_item_id, name, price, is_available, sort_order)
+        `INSERT INTO menu_item_options (menu_item_id, name, price, is_available, sort_order, option_kind)
          VALUES ${values}`,
         params
       );
@@ -396,14 +397,16 @@ async function updateMenuItem(req, res, next) {
         if (!Number.isInteger(optId)) continue;
         const updated = await client.query(
           `UPDATE menu_item_options
-              SET name = $1, price = $2, is_available = $3, sort_order = $4, updated_at = NOW()
-            WHERE id = $5 AND menu_item_id = $6 AND archived_at IS NULL
+              SET name = $1, price = $2, is_available = $3, sort_order = $4,
+                  option_kind = $5, updated_at = NOW()
+            WHERE id = $6 AND menu_item_id = $7 AND archived_at IS NULL
             RETURNING id`,
           [
             String(opt.name).trim(),
             Number(opt.price) || 0,
             opt.is_available !== false,
             i,
+            opt.option_kind === 'flavor' ? 'flavor' : 'variant',
             optId,
             id,
           ]
@@ -422,7 +425,7 @@ async function updateMenuItem(req, res, next) {
       );
       if (inserts.length > 0) {
         const values = inserts
-          .map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`)
+          .map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`)
           .join(', ');
         const params = inserts.flatMap((opt, i) => [
           id,
@@ -430,9 +433,10 @@ async function updateMenuItem(req, res, next) {
           Number(opt.price) || 0,
           opt.is_available !== false,
           i,
+          opt.option_kind === 'flavor' ? 'flavor' : 'variant',
         ]);
         const added = await client.query(
-          `INSERT INTO menu_item_options (menu_item_id, name, price, is_available, sort_order)
+          `INSERT INTO menu_item_options (menu_item_id, name, price, is_available, sort_order, option_kind)
            VALUES ${values} RETURNING id`,
           params
         );
@@ -585,7 +589,7 @@ async function fetchOptionsForItems(ids) {
   if (unique.length === 0) return new Map();
 
   const { rows } = await db.query(
-    `SELECT id, menu_item_id, name, price, is_available, sort_order
+    `SELECT id, menu_item_id, name, price, is_available, sort_order, option_kind
        FROM menu_item_options
       WHERE menu_item_id = ANY($1::int[])
         AND archived_at IS NULL
@@ -601,6 +605,7 @@ async function fetchOptionsForItems(ids) {
       name: r.name,
       price: parseFloat(r.price),
       is_available: r.is_available,
+      option_kind: r.option_kind === 'flavor' ? 'flavor' : 'variant',
     });
   }
   return byItem;
@@ -622,7 +627,7 @@ async function createOption(req, res, next) {
   const client = await db.getClient();
   try {
     const { id } = req.params;
-    const { name, price, is_available = true, sort_order = 0 } = req.body;
+    const { name, price, is_available = true, sort_order = 0, option_kind } = req.body;
 
     if (!name?.trim()) return res.status(400).json({ message: 'Option name is required.' });
     if (price === undefined || price === null || Number(price) < 0) {
@@ -634,10 +639,10 @@ async function createOption(req, res, next) {
 
     await client.query('BEGIN');
     const result = await client.query(
-      `INSERT INTO menu_item_options (menu_item_id, name, price, is_available, sort_order)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, menu_item_id, name, price, is_available, sort_order`,
-      [id, name.trim(), Number(price), is_available, Number(sort_order) || 0]
+      `INSERT INTO menu_item_options (menu_item_id, name, price, is_available, sort_order, option_kind)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, menu_item_id, name, price, is_available, sort_order, option_kind`,
+      [id, name.trim(), Number(price), is_available, Number(sort_order) || 0, option_kind === 'flavor' ? 'flavor' : 'variant']
     );
     await client.query('COMMIT');
 
@@ -664,10 +669,13 @@ async function createOption(req, res, next) {
 async function updateOption(req, res, next) {
   try {
     const { id, optionId } = req.params;
-    const { name, price, is_available, sort_order } = req.body;
+    const { name, price, is_available, sort_order, option_kind } = req.body;
 
     if (name !== undefined && !name.trim()) {
       return res.status(400).json({ message: 'Option name cannot be empty.' });
+    }
+    if (option_kind !== undefined && option_kind !== 'variant' && option_kind !== 'flavor') {
+      return res.status(400).json({ message: 'option_kind must be "variant" or "flavor".' });
     }
     if (price !== undefined && (Number(price) < 0 || Number.isNaN(Number(price)))) {
       return res.status(400).json({ message: 'Price must be zero or more.' });
@@ -680,6 +688,7 @@ async function updateOption(req, res, next) {
     if (price       !== undefined) { sets.push(`price = $${n++}`);        params.push(Number(price)); }
     if (is_available!== undefined) { sets.push(`is_available = $${n++}`); params.push(is_available); }
     if (sort_order  !== undefined) { sets.push(`sort_order = $${n++}`);   params.push(Number(sort_order) || 0); }
+    if (option_kind !== undefined) { sets.push(`option_kind = $${n++}`);  params.push(option_kind); }
 
     if (sets.length === 0) {
       return res.status(400).json({ message: 'Nothing to update.' });
@@ -690,7 +699,7 @@ async function updateOption(req, res, next) {
     const result = await db.query(
       `UPDATE menu_item_options SET ${sets.join(', ')}
         WHERE id = $${n++} AND menu_item_id = $${n}
-        RETURNING id, menu_item_id, name, price, is_available, sort_order`,
+        RETURNING id, menu_item_id, name, price, is_available, sort_order, option_kind`,
       params
     );
 
@@ -781,6 +790,20 @@ async function deleteCategory(req, res, next) {
     if (parseInt(inUse.rows[0].count, 10) > 0) {
       return res.status(409).json({
         message: 'Cannot delete a category that still has menu items. Reassign or remove the items first.',
+      });
+    }
+
+    // Ingredients carry the same categories and can sit in several at once, so
+    // this needs its own check. Without it the join table's ON DELETE CASCADE
+    // would quietly strip the tag off every ingredient in this category - the
+    // ingredient survives, but it drops out of that category's filter with no
+    // trace and no warning.
+    const inIngredients = await db.query(
+      'SELECT COUNT(*) FROM inventory_item_categories WHERE menu_category_id = $1', [id]
+    );
+    if (parseInt(inIngredients.rows[0].count, 10) > 0) {
+      return res.status(409).json({
+        message: 'Cannot delete a category that still has inventory items. Remove it from those ingredients first.',
       });
     }
     const result = await db.query('DELETE FROM menu_categories WHERE id = $1 RETURNING id, name', [id]);

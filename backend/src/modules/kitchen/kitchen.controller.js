@@ -47,13 +47,17 @@ json_agg(
               -- ticket just said "Cappuccino" and the kitchen had to guess.
               -- LEFT JOIN: items with no options must still produce a line.
               'option',    CASE WHEN mio.id IS NULL THEN NULL
-                                ELSE json_build_object('name', mio.name) END
+                                ELSE json_build_object('name', mio.name) END,
+              -- Flavor add-on picked on top of the variant, if any.
+              'flavor',    CASE WHEN mfio.id IS NULL THEN NULL
+                                ELSE json_build_object('name', mfio.name) END
             ) ORDER BY oi.id
           ) AS order_items
         FROM orders o
         JOIN order_items oi ON oi.order_id = o.id
         JOIN menu_items  mi ON mi.id = oi.menu_item_id
         LEFT JOIN menu_item_options mio ON mio.id = oi.menu_item_option_id
+        LEFT JOIN menu_item_options mfio ON mfio.id = oi.menu_item_flavor_id
          WHERE o.status IN (${inClause})
        GROUP BY o.id
        ORDER BY o.created_at ASC`

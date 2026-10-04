@@ -97,20 +97,23 @@ export default function CashierPage() {
   // A line is identified by the item AND the variant chosen for it, so
   // "Solo Tapsilog x1" and "Sharing Tapsilog x2" stay separate lines. Keying
   // on item id alone merged them and quietly charged one price for both.
-  const lineKeyFor = (itemId, optionId) =>
-    optionId ? `${itemId}:${optionId}` : String(itemId);
+  const lineKeyFor = (itemId, variantId, flavorId) =>
+    [itemId, variantId, flavorId].filter((x) => x != null).join(':');
 
   // Clicking a variant-bearing item opens the picker instead of adding
   // straight away: there is no single price to fall back on.
-  const addItem = (item, option) => {
+  const addItem = (item, selection) => {
     if (!item.is_available) return;
     const options = item.options || [];
-    if (option === undefined && options.length > 0) {
-      setVariantPick({ item, options });
+    const hasVariants = options.some((o) => o.option_kind !== 'flavor');
+    const hasFlavors = options.some((o) => o.option_kind === 'flavor');
+    if (selection === undefined && (hasVariants || hasFlavors)) {
+      setVariantPick({ item });
       return;
     }
-    const chosen = option || null;
-    const lineKey = lineKeyFor(item.id, chosen?.id);
+    const variant = selection?.variant || null;
+    const flavor = selection?.flavor || null;
+    const lineKey = lineKeyFor(item.id, variant?.id ?? null, flavor?.id ?? null);
     setVariantPick(null);
     setDraft((prev) => {
       const existing = prev.find((d) => d.lineKey === lineKey);
@@ -118,9 +121,11 @@ export default function CashierPage() {
       return [...prev, {
         ...item,
         lineKey,
-        menu_item_option_id: chosen?.id ?? null,
-        optionName: chosen?.name ?? null,
-        price: chosen ? chosen.price : item.price,
+        menu_item_option_id: variant?.id ?? null,
+        menu_item_flavor_id: flavor?.id ?? null,
+        optionName: variant?.name ?? null,
+        flavorName: flavor?.name ?? null,
+        price: (variant ? Number(variant.price) : Number(item.price)) + (flavor ? Number(flavor.price) : 0),
         qty: 1,
         note: '',
       }];
@@ -155,9 +160,10 @@ export default function CashierPage() {
     if (draft.length === 0) return;
     setPlacingOrder(true);
     try {
-      const items = draft.map(({ id, menu_item_option_id, qty, note }) => ({
+      const items = draft.map(({ id, menu_item_option_id, menu_item_flavor_id, qty, note }) => ({
       menu_item_id: id,
       menu_item_option_id: menu_item_option_id ?? null,
+      menu_item_flavor_id: menu_item_flavor_id ?? null,
       quantity: qty,
       notes: note,
     }));
@@ -355,8 +361,7 @@ export default function CashierPage() {
       {variantPick && (
         <VariantPicker
           item={variantPick.item}
-          options={variantPick.options}
-          onPick={(opt) => addItem(variantPick.item, opt)}
+          onPick={(selection) => addItem(variantPick.item, selection)}
           onClose={() => setVariantPick(null)}
         />
       )}
@@ -389,14 +394,51 @@ export default function CashierPage() {
 // quietly charge the wrong price, which is exactly what variants exist to
 // prevent. The backend also refuses an optionless order for such an item, so
 // this dialog is the only way through.
-function VariantPicker({ item, options, onPick, onClose }) {
-  const usable = options.filter((o) => o.is_available !== false);
+function VariantPicker({ item, onPick, onClose }) {
+  const options  = item.options || [];
+  const variants = options.filter((o) => o.option_kind !== 'flavor' && o.is_available !== false);
+  const flavors  = options.filter((o) => o.option_kind === 'flavor' && o.is_available !== false);
+  const [variant, setVariant] = useState(null);
+  const [flavor,  setFlavor]  = useState(null);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  const needsVariant = variants.length > 0;
+  const ready = !needsVariant || variant != null;
+  // Flavor prices stack on top of the variant (or base) price — the preview
+  // shows exactly what the line will charge.
+  const total = (variant ? Number(variant.price) : Number(item.price)) + (flavor ? Number(flavor.price) : 0);
+
+  // Only one decision to make (just a variant, or just a flavor): tapping the
+  // choice adds the line straight away, like before. Two decisions need the
+  // explicit Add button so the cashier can set both before committing.
+  const singleDecision = (needsVariant && flavors.length === 0) || (!needsVariant && flavors.length > 0);
+
+  const optionButton = (opt, kind) => (
+    <button
+      key={opt.id}
+      type="button"
+      className="cashier-variant__opt"
+      onClick={() => {
+        if (singleDecision) {
+          onPick(kind === 'variant' ? { variant: opt, flavor: null } : { variant: null, flavor: opt });
+        } else if (kind === 'variant') {
+          setVariant(opt);
+        } else {
+          setFlavor(opt);
+        }
+      }}
+    >
+      <span className="cashier-variant__name">{opt.name}</span>
+      <span className="cashier-variant__price">
+        {kind === 'flavor' ? `+₱${Number(opt.price).toFixed(2)}` : `₱${Number(opt.price).toFixed(2)}`}
+      </span>
+    </button>
+  );
 
   return (
     <div className="cashier-variant-overlay" onClick={onClose}>
@@ -410,25 +452,49 @@ function VariantPicker({ item, options, onPick, onClose }) {
         <h3 id="cashier-variant-title" className="cashier-variant__title">
           {item.name}
         </h3>
-        <p className="cashier-variant__hint">Choose an option</p>
 
-        {usable.length === 0 ? (
-          <p className="cashier-variant__hint">No options are available right now.</p>
-        ) : (
-          <div className="cashier-variant__list">
-            {usable.map((opt, i) => (
-              <button
-                key={opt.id}
-                type="button"
-                className="cashier-variant__opt"
-                onClick={() => onPick(opt)}
-                autoFocus={i === 0}
-              >
-                <span className="cashier-variant__name">{opt.name}</span>
-                <span className="cashier-variant__price">{Number(opt.price).toFixed(2)}</span>
-              </button>
-            ))}
-          </div>
+        {variants.length > 0 && (
+          <>
+            <p className="cashier-variant__hint">Choose {variants.map((v) => v.name).join(' or ')}</p>
+            <div className="cashier-variant__list">
+              {variants.map((v) => optionButton(v, 'variant'))}
+            </div>
+          </>
+        )}
+
+        {flavors.length > 0 && (
+          <>
+            <p className="cashier-variant__hint">Flavor {singleDecision ? '' : '(optional)'}</p>
+            <div className="cashier-variant__list">
+              {flavors.map((f) => optionButton(f, 'flavor'))}
+              {!singleDecision && (
+                <button type="button" className="cashier-variant__opt" onClick={() => setFlavor(null)}>
+                  <span className="cashier-variant__name">No flavor</span>
+                  <span className="cashier-variant__price">+₱0.00</span>
+                </button>
+              )}
+              {!needsVariant && singleDecision && (
+                <button type="button" className="cashier-variant__opt" onClick={() => onPick({ variant: null, flavor: null })}>
+                  <span className="cashier-variant__name">No flavor</span>
+                  <span className="cashier-variant__price">₱{Number(item.price).toFixed(2)}</span>
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {!singleDecision && (
+          <>
+            <p className="cashier-variant__hint">Total: ₱{total.toFixed(2)}</p>
+            <button
+              type="button"
+              className="cashier-variant__cancel"
+              disabled={!ready}
+              onClick={() => onPick({ variant, flavor })}
+            >
+              Add{ready ? ` — ₱${total.toFixed(2)}` : ''}
+            </button>
+          </>
         )}
 
         <button type="button" className="cashier-variant__cancel" onClick={onClose}>

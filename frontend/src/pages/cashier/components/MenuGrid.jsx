@@ -39,10 +39,14 @@ const qty = draft
     .filter((d) => d.id === item.id)
     .reduce((sum, d) => sum + d.qty, 0);
   const unavailable = !item.is_available;
-  const optionPrices = (item.options || [])
+  // Flavors are optional add-ons, so the "from" figure ignores them —
+  // dragging it down to a flavor price would advertise a price that is not
+  // actually orderable on its own.
+  const variantPrices = (item.options || [])
+    .filter((option) => option.option_kind !== 'flavor')
     .map((option) => Number(option.price))
     .filter((price) => Number.isFinite(price));
-  const startingPrice = optionPrices.length > 0 ? Math.min(...optionPrices) : null;
+  const startingPrice = variantPrices.length > 0 ? Math.min(...variantPrices) : null;
   const unitPrice = Number(item.price);
 
   return (

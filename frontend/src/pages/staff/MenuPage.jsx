@@ -17,6 +17,8 @@ const VARIANT_PRESETS = {
   'Rice Meals': { names: ['Solo', 'Sharing'], base: 'Solo' },
 };
 
+const FLAVOR_CATEGORIES = ['Rice Meals', 'Appetizers', 'Student Meal', 'Student Platter'];
+
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
   const [msg, setMsg] = useState('');
@@ -329,11 +331,33 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
   });
   const [photoFile, setPhotoFile] = useState(null);
   const [linked, setLinked] = useState(item?.ingredients || []);
-  // Two-form variants for the categories in VARIANT_PRESETS. Rows loaded from the
-  // server keep their id so a re-price updates them in place rather than
-  // recreating them -- recreating would break the FK from past order_items rows.
-  // Rows added by the toggle have no id yet.
   const [optionRows, setOptionRows] = useState(item?.options || []);
+  const [flavorRows, setFlavorRows] = useState(() => {
+    if (!item?.options) return [];
+    // Prefer the kind column (post-migration 011); the name filter only saw
+    // Solo/Sharing-free rows before the column existed.
+    const hasKinds = item.options.some((o) => o.option_kind);
+    if (hasKinds) return item.options.filter((o) => o.option_kind === 'flavor').map((o) => ({ ...o }));
+    const presetNames = VARIANT_PRESETS[
+      categories?.find((c) => Number(c.id) === Number(item?.category_id))?.name
+    ]?.names || [];
+    return item.options
+      .filter((o) => !presetNames.some((n) => n.toLowerCase() === String(o.name).toLowerCase()))
+      .map((o) => ({ ...o }));
+  });
+  // "Same price" = one shared price stamped onto every flavor row; "different"
+  // = each row carries its own price (the original per-row boxes).
+  const [flavorSamePrice, setFlavorSamePrice] = useState(() => {
+    if (!item?.options) return true;
+    const seen = item.options
+      .filter((o) => o.option_kind === 'flavor' || !o.option_kind)
+      .map((o) => String(o.price));
+    return seen.length === 0 || seen.every((p) => p === seen[0]);
+  });
+  const [sharedFlavorPrice, setSharedFlavorPrice] = useState(() => {
+    const first = item?.options?.find((o) => o.option_kind === 'flavor');
+    return first ? String(first.price) : '';
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -347,7 +371,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
 // ── Two-form variants (Hot / Iced, Solo / Sharing) ────────────────────
-const categoryName = categories.find((c) => Number(c.id) === Number(form.category_id))?.name;
+  const categoryName = categories?.find((c) => Number(c.id) === Number(form.category_id))?.name;
   const preset = VARIANT_PRESETS[categoryName] || null;
 
   const rowFor = (name) =>
@@ -367,6 +391,7 @@ const categoryName = categories.find((c) => Number(c.id) === Number(form.categor
     if (!on || !preset) {
       // Empty options archives the saved variants server-side, so past orders
       // keep resolving their variant name while the item returns to one price.
+      // Flavors survive on their own: they no longer depend on the variant toggle.
       setOptionRows([]);
       return;
     }
@@ -376,9 +401,6 @@ const categoryName = categories.find((c) => Number(c.id) === Number(form.categor
     setOptionRows(preset.names.map((n) => ({ name: n, price: seed, is_available: true, _new: true })));
   };
 
-  // Moving an item to a category whose pair does not match the saved rows must
-  // drop them, otherwise a Rice Meal would silently keep making the cashier
-  // pick Hot or Iced. Also covers moving between two variant categories.
   const setCategory = (value) => {
     const id = value === '' ? '' : Number(value);
     setForm((f) => ({ ...f, category_id: id }));
@@ -389,6 +411,36 @@ const categoryName = categories.find((c) => Number(c.id) === Number(form.categor
       String(rowB.name).toLowerCase() === next.names[1].toLowerCase()
     );
     if (!matches) setOptionRows([]);
+    setFlavorRows([]);
+    setFlavorSamePrice(true);
+    setSharedFlavorPrice('');
+  };
+
+  const flavorsAllowed = FLAVOR_CATEGORIES.includes(categoryName);
+  const flavorsOn = flavorsAllowed;
+
+  const setFlavor = (idx, field, value) =>
+    setFlavorRows((rows) => rows.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
+
+  const addFlavorRow = () =>
+    setFlavorRows((rows) => [...rows, { name: '', price: flavorSamePrice ? sharedFlavorPrice : '', is_available: true, _new: true }]);
+
+  const removeFlavorRow = (idx) =>
+    setFlavorRows((rows) => rows.filter((_, i) => i !== idx));
+
+  // Shared mode stamps one price onto every row, so switching back to "same"
+  // always leaves a single sensible figure rather than a stale mix.
+  const applySharedFlavorPrice = (value) => {
+    setSharedFlavorPrice(value);
+    setFlavorRows((rows) => rows.map((r) => ({ ...r, price: value })));
+  };
+
+  const toggleSamePrice = (same) => {
+    if (same) {
+      const seed = sharedFlavorPrice || (flavorRows.find((r) => r.price)?.price ?? '');
+      applySharedFlavorPrice(seed);
+    }
+    setFlavorSamePrice(same);
   };
 
   const handleSubmit = async (e) => {
@@ -405,9 +457,27 @@ const categoryName = categories.find((c) => Number(c.id) === Number(form.categor
       setError('Enter a valid price.'); return;
     }
 
-    // menu_items.price is NOT NULL and is what every price display reads, so it
-    // tracks whichever variant the preset nominates as this category's base.
+    const validFlavors = flavorsOn ? flavorRows.filter((f) => f.name.trim()) : [];
+    for (const f of validFlavors) {
+      if (!(Number(f.price) > 0)) { setError(`Enter a valid price for flavor "${f.name}".`); return; }
+    }
+
     const baseRow = preset && preset.base.toLowerCase() === nameA.toLowerCase() ? rowA : rowB;
+
+    const variantOptions = variantsOn
+      ? [
+          { id: rowA.id, name: nameA, price: Number(rowA.price), is_available: rowA.is_available !== false, option_kind: 'variant' },
+          { id: rowB.id, name: nameB, price: Number(rowB.price), is_available: rowB.is_available !== false, option_kind: 'variant' },
+        ]
+      : [];
+
+    const flavorOptions = validFlavors.map((f) => ({
+      id: f.id,
+      name: f.name.trim(),
+      price: flavorSamePrice ? Number(sharedFlavorPrice) : Number(f.price),
+      is_available: f.is_available !== false,
+      option_kind: 'flavor',
+    }));
 
     setLoading(true); setError('');
     try {
@@ -417,12 +487,7 @@ const categoryName = categories.find((c) => Number(c.id) === Number(form.categor
         price: variantsOn ? Number(baseRow.price) : Number(form.price),
         image_url,
         ingredients: linked,
-        options: variantsOn
-          ? [
-              { id: rowA.id, name: nameA, price: Number(rowA.price), is_available: rowA.is_available !== false },
-              { id: rowB.id, name: nameB, price: Number(rowB.price), is_available: rowB.is_available !== false },
-            ]
-          : [],
+        options: [...variantOptions, ...flavorOptions],
       }, isEdit ? item.id : null);
       onClose();
     } catch (err) {
@@ -527,6 +592,84 @@ const categoryName = categories.find((c) => Number(c.id) === Number(form.categor
                       The cashier must pick {preset.names[0]} or {preset.names[1]} when ordering this item.
                       The item price shown elsewhere is the {preset.base} price.
                     </p>
+                  </div>
+                )}
+
+                {flavorsAllowed && (
+                  <div className="mn-flavors">
+                    <div className="mn-flavors__header">
+                    <div>
+                      <p className="mn-field__label">Flavors</p>
+                      <p className="mn-field__hint">Optional — added on top of the item's price</p>
+                    </div>
+                      {flavorsOn && (
+                        <button type="button" onClick={addFlavorRow} className="mn-flavors__add">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                          </svg>
+                          Add flavor
+                        </button>
+                      )}
+                    </div>
+                    <div className="mn-flavors__mode">
+                      <p className="mn-flavors__hint">{flavorSamePrice ? 'All flavors share one price' : 'Each flavor has its own price'}</p>
+                      <Toggle
+                        checked={!flavorSamePrice}
+                        onChange={(different) => toggleSamePrice(!different)}
+                        label="Toggle per-flavor pricing"
+                        title="On: each flavor sets its own price. Off: one shared price for all flavors."
+                      />
+                    </div>
+                    {flavorsOn && flavorSamePrice && flavorRows.length > 0 && (
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={sharedFlavorPrice}
+                        onChange={(e) => applySharedFlavorPrice(e.target.value)}
+                        className="mn-field__input mn-flavors__shared"
+                        placeholder="Shared price (₱)"
+                        aria-label="Shared flavor price"
+                      />
+                    )}
+                    {flavorsOn && flavorRows.length > 0 && (
+                      <div className="mn-flavors__list">
+                        {flavorRows.map((flavor, idx) => (
+                          <div key={idx} className={`mn-flavors__row${flavorSamePrice ? ' mn-flavors__row--shared' : ''}`}>
+                            <input
+                              type="text"
+                              value={flavor.name}
+                              onChange={(e) => setFlavor(idx, 'name', e.target.value)}
+                              className="mn-field__input mn-flavors__name"
+                              placeholder="Flavor name"
+                              aria-label={`Flavor ${idx + 1} name`}
+                            />
+                            {!flavorSamePrice && (
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={flavor.price}
+                                onChange={(e) => setFlavor(idx, 'price', e.target.value)}
+                                className="mn-field__input mn-flavors__price"
+                                placeholder="₱"
+                                aria-label={`Flavor ${idx + 1} price`}
+                              />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeFlavorRow(idx)}
+                              className="mn-flavors__remove"
+                              aria-label={`Remove flavor ${idx + 1}`}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

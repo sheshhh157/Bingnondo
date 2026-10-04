@@ -32,9 +32,10 @@ socketHub.setIO(io);   // NEW: socket hub for orders, kitchen alerts, etc.
 
 // ─── Global Middleware ─────────────────────────────────────────────────────────
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? undefined : 'http://localhost:5173'),
   credentials: true,
 }));
+
 app.use(express.json());
 app.use('/api', generalApiLimiter);
 
@@ -52,10 +53,6 @@ app.use('/api/orders',   ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/kitchen',  kitchenRoutes);
 app.use('/api/esp32',    require('./src/modules/kitchen/esp32.routes'));
-
-// PayMongo webhook — no auth middleware (signed by PayMongo header)
-const paymentsCtrl = require('./src/modules/payments/payments.controller');
-app.post('/api/webhooks/paymongo', paymentsCtrl.paymongoWebhook);
 
 // ─── Health / test ─────────────────────────────────────────────────────────────
 app.get('/api/test', (_req, res) => {

@@ -111,10 +111,46 @@ function Pagination({ page, totalPages, total, from, to, onPage }) {
   );
 }
 
+// An ingredient can sit in several categories at once - Chicken Siomai serves
+// both a Student Meal and a Student Platter item - so the tag list is a set of
+// checkboxes rather than a single <select>. A native multi-select hides the
+// other options behind a scroll on the tablets staff actually use.
+function CategoryPicker({ categories, selected, onToggle }) {
+  return (
+    <div className="inv-catpick" role="group" aria-label="Categories">
+      {categories.map((c) => {
+        const on = selected.includes(Number(c.id));
+        return (
+          <label key={c.id} className={`inv-catpick__opt${on ? ' inv-catpick__opt--on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={on}
+              onChange={() => onToggle(Number(c.id))}
+            />
+            <span className="inv-catpick__box" aria-hidden="true">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </span>
+            <span className="inv-catpick__label">{c.name}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Transaction Modal ────────────────────────────────────────────────────────
-function TransactionModal({ item, type, onClose, onSubmit }) {
+function TransactionModal({ item, type, categories, onClose, onSubmit, onSaveDetails }) {
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
+  const [name, setName] = useState(item.name);
+  const [unit, setUnit] = useState(item.unit);
+  // Ids are kept sorted so set comparison against the item's tags is stable
+  // regardless of the order the boxes were ticked in.
+  const [categoryIds, setCategoryIds] = useState(() => [...(item.category_ids || [])].sort((a, b) => a - b));
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef(null);
@@ -131,6 +167,43 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
   }, [onClose]);
 
   const isRestock = type === 'restock';
+
+  // Name, unit and category are saved together, separately from the stock
+  // movement, so a correction of a typo never gets logged as a restock or
+  // adjustment.
+  const unitChanged = unit.trim() !== item.unit;
+
+  const toggleCategory = (id) => {
+    setError('');
+    setCategoryIds((prev) =>
+      (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]).sort((a, b) => a - b)
+    );
+  };
+
+  // Set equality, not array equality: ticking boxes in a different order is not
+  // a change worth enabling Save for.
+  const categoriesChanged =
+    categoryIds.length !== (item.category_ids?.length || 0) ||
+    categoryIds.some((id) => !(item.category_ids || []).includes(id));
+
+  const detailsChanged =
+    name.trim() !== item.name || unitChanged || categoriesChanged;
+
+  const handleSaveDetails = async () => {
+    if (!name.trim()) { setError('Ingredient name is required.'); return; }
+    if (!unit.trim()) { setError('Unit is required.'); return; }
+    setSavingDetails(true); setError('');
+    try {
+      await onSaveDetails(item.id, {
+        name: name.trim(),
+        unit: unit.trim(),
+        category_ids: categoryIds,
+      });
+      setEditingDetails(false);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not save the changes.');
+    } finally { setSavingDetails(false); }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -167,12 +240,87 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
 
         <div className="inv-modal__body">
           <div className="inv-modal__item-card">
-            <span className="inv-modal__item-name">{item.name}</span>
+            {editingDetails ? (
+              <input
+                type="text"
+                className="inv-modal__name-input"
+                value={name}
+                onChange={(e) => { setName(e.target.value); setError(''); }}
+                aria-label="Ingredient name"
+              />
+            ) : (
+              <div className="inv-modal__name-row">
+                <span className="inv-modal__item-name">{name.trim() || item.name}</span>
+                <button
+                  type="button"
+                  className="inv-modal__edit-btn"
+                  onClick={() => { setEditingDetails(true); setError(''); }}
+                  aria-label={`Edit details for ${item.name}`}
+                  title="Edit name, unit and categories"
+                >
+<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 20h9"/>
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                  </svg>
+                </button>
+              </div>
+            )}
             <div className="inv-modal__item-meta">
               <span>Current: <strong>{item.current_stock} {item.unit}</strong></span>
               <StockBadge current={item.current_stock} reorder={item.reorder_level} />
             </div>
           </div>
+
+          {editingDetails && (
+            <>
+              <div className="inv-field">
+                <label htmlFor="txn-unit" className="inv-field__label">Unit</label>
+                <select
+                  id="txn-unit"
+                  value={unit}
+                  onChange={(e) => { setUnit(e.target.value); setError(''); }}
+                  className="inv-field__input"
+                >
+                  {UNIT_OPTIONS.map((u) => (
+                    <option key={u.value} value={u.value}>{u.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="inv-field">
+                <span className="inv-field__label" id="txn-cat-label">
+                  Categories
+                  {categoryIds.length > 1 && (
+                    <span className="inv-field__optional"> (pick any)</span>
+                  )}
+                </span>
+                <CategoryPicker
+                  categories={categories}
+                  selected={categoryIds}
+                  onToggle={toggleCategory}
+                />
+                <p className="inv-field__hint">
+                  An ingredient can sit in more than one. Tick every category it
+                  belongs to and it will show up in each of those lists.
+                </p>
+              </div>
+
+              {unitChanged && item.current_stock > 0 && (
+                <p className="inv-modal__warn" role="alert">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  <span>
+                    Changing the unit does not convert the quantity. The stored{' '}
+                    <strong>{item.current_stock}</strong> will now be read as{' '}
+                    <strong>{unit}</strong>, not {item.unit}. Use Adjust afterwards to set the
+                    correct figure.
+                  </span>
+                </p>
+              )}
+            </>
+          )}
 
           <form id="txn-form" onSubmit={handleSubmit} noValidate>
             <div className="inv-field">
@@ -224,7 +372,18 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
         </div>
 
         <div className="inv-modal__footer">
-          <button className="inv-btn inv-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
+          {editingDetails && (
+            <button
+              className="inv-btn inv-btn--secondary"
+              type="button"
+              onClick={handleSaveDetails}
+              disabled={savingDetails || !detailsChanged}
+              aria-busy={savingDetails}
+            >
+              {savingDetails ? <span className="inv-spinner" aria-label="Saving…" /> : 'Save details'}
+            </button>
+          )}
+          <button className="inv-btn inv-btn--ghost" onClick={onClose} disabled={loading || savingDetails}>Cancel</button>
           <button className="inv-btn inv-btn--primary" form="txn-form" type="submit" disabled={loading} aria-busy={loading}>
             {loading ? <span className="inv-spinner" aria-label="Saving…" /> : isRestock ? 'Restock' : 'Adjust'}
           </button>
@@ -243,6 +402,13 @@ function InventoryCard({ item, onRestock, onAdjust, onOutOfStock, onDelete }) {
         <div>
           <p className="inv-card__name">{item.name}</p>
           <p className="inv-card__unit">Unit: {item.unit}</p>
+          {item.category_names?.length > 0 ? (
+            <p className="inv-card__category">
+              {item.category_names.join(', ')}
+            </p>
+          ) : (
+            <p className="inv-card__category inv-card__category--none">Uncategorized</p>
+          )}
         </div>
         <StockBadge current={item.current_stock} reorder={item.reorder_level} />
       </div>
@@ -334,9 +500,10 @@ function DeleteIngredientDialog({ item, onClose, onConfirm, loading }) {
 }
 
 // ─── Add Ingredient Modal ─────────────────────────────────────────────────────
-function AddIngredientModal({ onClose, onSubmit }) {
+function AddIngredientModal({ categories, onClose, onSubmit }) {
   const [name, setName]               = useState('');
   const [unit, setUnit]               = useState('');
+  const [categoryIds, setCategoryIds] = useState([]);
   const [currentStock, setCurrentStock] = useState('');
   const [reorderLevel, setReorderLevel] = useState('');
   const [loading, setLoading]         = useState(false);
@@ -358,11 +525,13 @@ function AddIngredientModal({ onClose, onSubmit }) {
     e.preventDefault();
     if (!name.trim()) { setError('Ingredient name is required.'); return; }
     if (!unit)        { setError('Please select a unit.'); return; }
+    if (categoryIds.length === 0) { setError('Select at least one category.'); return; }
     setLoading(true); setError('');
     try {
       await onSubmit({
         name:          name.trim(),
         unit:          unit.trim(),
+        category_ids:  categoryIds,
         current_stock: Number(currentStock) || 0,
         reorder_level: Number(reorderLevel) || 0,
       });
@@ -420,6 +589,23 @@ function AddIngredientModal({ onClose, onSubmit }) {
                   <option key={u.value} value={u.value}>{u.label}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="inv-field">
+              <span className="inv-field__label">Categories <span className="inv-field__required">*</span></span>
+              <CategoryPicker
+                categories={categories}
+                selected={categoryIds}
+                onToggle={(id) => {
+                  setError('');
+                  setCategoryIds((prev) =>
+                    (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]).sort((a, b) => a - b)
+                  );
+                }}
+              />
+              <p className="inv-field__hint">
+                Tick every category this ingredient belongs to.
+              </p>
             </div>
 
             <div className="inv-field-row">
@@ -485,6 +671,8 @@ export default function InventoryPage() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [categories, setCategories] = useState([]);
+  const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [modal, setModal] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -505,6 +693,16 @@ export default function InventoryPage() {
   }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  // Ingredient categories are the menu's categories, fetched rather than
+  // hardcoded so a new menu category shows up here without a frontend change.
+  useEffect(() => {
+    let cancelled = false;
+    inventoryAPI.getCategories()
+      .then(({ data }) => { if (!cancelled) setCategories(data.categories || []); })
+      .catch(() => { if (!cancelled) setCategories([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Real-time socket sync
   useEffect(() => {
@@ -533,6 +731,12 @@ export default function InventoryPage() {
   const handleAddIngredient = async (payload) => {
     await inventoryAPI.create(payload);
     showToast(`"${payload.name}" added to inventory.`);
+    await fetchItems();
+  };
+
+  const handleSaveDetails = async (id, payload) => {
+    await inventoryAPI.update(id, payload);
+    showToast(`"${payload.name}" updated.`);
     await fetchItems();
   };
 
@@ -590,16 +794,31 @@ export default function InventoryPage() {
     if (filterStatus === 'out') r = r.filter((i) => i.current_stock <= 0);
     else if (filterStatus === 'low') r = r.filter((i) => i.current_stock > 0 && i.current_stock <= i.reorder_level);
     else if (filterStatus === 'ok') r = r.filter((i) => i.current_stock > i.reorder_level);
+    // 'uncategorized' is its own option: ingredients added before categories
+    // existed, or cleared when a category was deleted, still need to be findable.
+    if (filterCategory === 'uncategorized') r = r.filter((i) => !i.category_ids?.length);
+    // A single category is picked, but an item can hold several. Matching on
+    // membership rather than equality is what makes an ingredient tagged with
+    // three categories show up under all three.
+    else if (filterCategory !== 'all') {
+      const want = Number(filterCategory);
+      r = r.filter((i) => (i.category_ids || []).includes(want));
+    }
     return [...r].sort((a, b) => {
       if (sortBy === 'name') return a.name.localeCompare(b.name);
+      // Names arrive alphabetically, so comparing the first is a stable order
+      // for items carrying more than one category.
+      if (sortBy === 'category') {
+        return (a.category_names?.[0] || 'zzz').localeCompare(b.category_names?.[0] || 'zzz');
+      }
       if (sortBy === 'stock_asc') return a.current_stock - b.current_stock;
       if (sortBy === 'stock_desc') return b.current_stock - a.current_stock;
       return 0;
     });
-  }, [items, search, filterStatus, sortBy]);
+  }, [items, search, filterStatus, filterCategory, sortBy]);
 
   // Reset to page 1 when filters/search/perPage change
-  useEffect(() => { setPage(1); }, [search, filterStatus, sortBy, perPage]);
+  useEffect(() => { setPage(1); }, [search, filterStatus, filterCategory, sortBy, perPage]);
 
   // Paginated slices — single perPage for both table and cards
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
@@ -704,6 +923,13 @@ export default function InventoryPage() {
             aria-label="Search ingredients"
           />
         </div>
+        <select className="inv-select" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label="Filter by category">
+          <option value="all">All categories</option>
+          <option value="uncategorized">Uncategorized</option>
+          {categories.map((c) => (
+            <option key={c.id} value={String(c.id)}>{c.name}</option>
+          ))}
+        </select>
         <select className="inv-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Filter by status">
           <option value="all">All items</option>
           <option value="ok">In stock</option>
@@ -712,6 +938,7 @@ export default function InventoryPage() {
         </select>
         <select className="inv-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
           <option value="name">Sort: Name</option>
+          <option value="category">Sort: Category</option>
           <option value="stock_asc">Stock: Low first</option>
           <option value="stock_desc">Stock: High first</option>
         </select>
@@ -775,6 +1002,7 @@ export default function InventoryPage() {
           <thead>
             <tr>
               <th className="inv-table__th">Ingredient</th>
+              <th className="inv-table__th">Category</th>
               <th className="inv-table__th">Unit</th>
               <th className="inv-table__th">Stock level</th>
               <th className="inv-table__th">Reorder at</th>
@@ -786,7 +1014,7 @@ export default function InventoryPage() {
             {loading
               ? Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i} aria-hidden="true">
-                    {Array.from({ length: 6 }).map((__, j) => (
+                    {Array.from({ length: 7 }).map((__, j) => (
                       <td key={j} className="inv-table__td">
                         <div className="inv-skeleton-row" style={{ width: `${55 + Math.random() * 35}%` }} />
                       </td>
@@ -794,7 +1022,7 @@ export default function InventoryPage() {
                   </tr>
                 ))
               : filtered.length === 0
-                ? <tr><td colSpan={6}>
+                ? <tr><td colSpan={7}>
                     <div className="inv-empty">
                       <p>{search ? 'No items match your search.' : 'Inventory is empty.'}</p>
                     </div>
@@ -803,6 +1031,11 @@ export default function InventoryPage() {
                     <tr key={item.id} className="inv-table__row">
                       <td className="inv-table__td">
                         <span className="inv-table__name">{item.name}</span>
+                      </td>
+                      <td className="inv-table__td inv-table__td--muted">
+                        {item.category_names?.length
+                          ? item.category_names.join(', ')
+                          : 'Uncategorized'}
                       </td>
                       <td className="inv-table__td inv-table__td--muted">{item.unit}</td>
                       <td className="inv-table__td">
@@ -856,14 +1089,17 @@ export default function InventoryPage() {
         <TransactionModal
           item={modal.item}
           type={modal.type}
+          categories={categories}
           onClose={() => setModal(null)}
           onSubmit={handleTransaction}
+          onSaveDetails={handleSaveDetails}
         />
       )}
 
       {/* Add ingredient modal */}
       {showAddModal && (
         <AddIngredientModal
+          categories={categories}
           onClose={() => setShowAddModal(false)}
           onSubmit={handleAddIngredient}
         />

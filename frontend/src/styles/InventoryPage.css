@@ -211,6 +211,95 @@
   margin: 0;
 }
 
+/* Ingredient categories, shown under the unit. An ingredient can carry several,
+   so the names are joined into one pill that wraps rather than stacked - it keeps
+   the card's height predictable while the text stays readable. */
+.inv-card__category {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--color-muted-foreground);
+  background: var(--color-muted);
+  border-radius: 99px;
+  padding: 2px 8px;
+  margin: 4px 0 0;
+  max-width: 100%;
+}
+
+.inv-card__category--none {
+  font-style: italic;
+  opacity: 0.75;
+}
+
+/* Multi-category picker. A native <select multiple> hides the remaining
+   options behind a scroll and gives no affordance on touch, so the options are
+   laid out as tappable rows instead. */
+.inv-catpick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inv-catpick__opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--color-foreground);
+  background: var(--color-background);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.inv-catpick__opt:hover { background: var(--color-muted); }
+
+.inv-catpick__opt--on {
+  border-color: var(--color-primary);
+  background: var(--color-muted);
+}
+
+.inv-catpick__opt input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* The real checkbox is visually hidden above so the row stays one tap target,
+   but it keeps focus so the picker is still keyboard reachable. */
+.inv-catpick__opt:focus-within {
+  border-color: var(--color-primary);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.inv-catpick__box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border: 1.5px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-background);
+  color: transparent;
+}
+
+.inv-catpick__opt--on .inv-catpick__box {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.inv-catpick__label { white-space: nowrap; }
+
 .inv-card__stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -534,6 +623,50 @@
   color: var(--color-foreground);
 }
 
+/* Name plus the pencil that turns the row into an editor. The button keeps the
+   same shape as the close button in the header, only smaller and flat. */
+.inv-modal__name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inv-modal__edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.inv-modal__edit-btn:hover:not(:disabled) {
+  background: var(--color-muted);
+  color: var(--color-foreground);
+}
+
+.inv-modal__edit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.inv-modal__name-input {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+  background: var(--color-background);
+  border: 1.5px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  width: 100%;
+}
+
+.inv-modal__name-input:focus { outline: none; }
+
 .inv-modal__item-meta {
   display: flex;
   align-items: center;
@@ -542,6 +675,27 @@
   font-size: 0.8125rem;
   color: var(--color-muted-foreground);
 }
+
+/* A caution, not a failure: same shape as .inv-modal__error but amber, so it is
+   clearly distinct from the red validation message below it. */
+.inv-modal__warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px;
+  background: rgba(146, 64, 14, 0.06);
+  border: 1px solid rgba(146, 64, 14, 0.2);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #92400E;
+}
+
+.inv-modal__warn svg { flex-shrink: 0; margin-top: 2px; }
+
+.inv-modal__warn strong { font-weight: 600; }
 
 .inv-modal__error {
   display: flex;

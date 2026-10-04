@@ -103,6 +103,11 @@ export const inventoryAPI = {
   /** GET /api/inventory — all items with is_low_stock flag */
   getAll: () => apiRequest('/inventory'),
 
+  /** GET /api/menu/categories — the same categories the menu uses, so the
+   *  inventory filter and the add-ingredient form share one vocabulary.
+   *  An ingredient may hold several at once; see `category_ids`. */
+  getCategories: () => apiRequest('/menu/categories'),
+
   /** POST /api/inventory/:id/transaction — restock / adjustment / deduction */
   transaction: (id, payload) =>
     apiRequest(`/inventory/${id}/transaction`, {
@@ -116,6 +121,11 @@ export const inventoryAPI = {
   /** POST /api/inventory — create a new ingredient */
   create: (payload) =>
     apiRequest('/inventory', { method: 'POST', body: JSON.stringify(payload) }),
+
+  /** PATCH /api/inventory/:id — edit name / unit / categories (never stock).
+   *  category_ids replaces the whole set; omit it to leave tags untouched. */
+  update: (id, payload) =>
+    apiRequest(`/inventory/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
 
   /** POST /api/inventory/:id/out-of-stock — force to 0 + cascade menu unavailability */
   outOfStock: (id) =>

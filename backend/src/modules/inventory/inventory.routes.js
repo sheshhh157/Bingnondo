@@ -25,6 +25,10 @@ router.post('/', ...staffWrite, ctrl.createItem);
 // GET  /api/inventory/:id                 — single item detail
 router.get('/:id', ...staffAccess, ctrl.getById);
 
+// PATCH /api/inventory/:id                — edit name / category.
+// Cannot move stock: that only happens through a logged transaction.
+router.patch('/:id', ...staffWrite, ctrl.updateItem);
+
 // POST /api/inventory/:id/transaction     — restock / adjustment / deduction
 router.post('/:id/transaction', ...staffWrite, ctrl.createTransaction);
 
