@@ -363,6 +363,13 @@
 
 @keyframes pv-spin { to { transform: rotate(360deg); } }
 
+/* ── Shared grid template — header + every row bar must use this ─────────────── */
+/* columns: chevron | order# | customer | gcash-ref | amount | status+time       */
+.pv-table-head,
+.pv-row__bar {
+  --pv-cols: 28px 110px 1fr 170px 96px 190px;
+}
+
 /* ── Table column header (desktop) ──────────────────────────────────────────── */
 .pv-table-head {
   display: none;
@@ -371,7 +378,8 @@
 @media (min-width: 900px) {
   .pv-table-head {
     display: grid;
-    grid-template-columns: 28px 110px 1fr 160px 100px 200px;
+    grid-template-columns: var(--pv-cols);
+    align-items: center;
     gap: 0 12px;
     padding: 0 16px 8px;
     border-bottom: 1px solid var(--color-border);
@@ -418,7 +426,7 @@
   border-left: 3px solid #B91C1C;
 }
 
-/* Summary bar (clickable) */
+/* Summary bar (clickable) — flex on mobile, grid on desktop to match header */
 .pv-row__bar {
   display: flex;
   align-items: center;
@@ -431,6 +439,14 @@
   text-align: left;
   transition: background 0.12s;
   font-family: var(--font-body);
+}
+
+@media (min-width: 900px) {
+  .pv-row__bar {
+    display: grid;
+    grid-template-columns: var(--pv-cols);
+    gap: 0 12px;
+  }
 }
 
 .pv-row__bar:hover { background: var(--color-muted); }
@@ -452,25 +468,28 @@
 
 .pv-row__chevron--open { transform: rotate(180deg); }
 
-/* Columns inside bar */
+/* ── Row bar column cells ────────────────────────────────────────────────────── */
+/* Shared base styles (apply at all breakpoints) */
 .pv-row__order-no {
   font-size: 0.8125rem;
   font-weight: 700;
   color: var(--color-foreground);
   font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  width: 100px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* flex: keeps it visible on mobile */
+  flex-shrink: 0;
+  width: 90px;
 }
 
 .pv-row__customer {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
   min-width: 0;
+  /* flex: grow to fill remaining space on mobile */
+  flex: 1;
 }
 
 .pv-row__avatar {
@@ -496,10 +515,10 @@
   text-overflow: ellipsis;
 }
 
+/* Hidden on mobile, shown at ≥640px, grid-aligned at ≥900px */
 .pv-row__ref-wrap {
   display: none;
-  width: 150px;
-  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .pv-row__ref {
@@ -529,9 +548,11 @@
   font-weight: 700;
   color: var(--color-foreground);
   font-variant-numeric: tabular-nums;
-  width: 90px;
   text-align: right;
+  white-space: nowrap;
+  /* flex: fixed width on mobile */
   flex-shrink: 0;
+  width: 80px;
 }
 
 .pv-row__meta {
@@ -539,8 +560,10 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
+  white-space: nowrap;
+  /* flex: fixed width on mobile */
   flex-shrink: 0;
-  min-width: 120px;
+  min-width: 110px;
 }
 
 .pv-row__time {
@@ -548,8 +571,22 @@
   color: var(--color-muted-foreground);
 }
 
+/* Show ref column at ≥640px (flex mode) */
 @media (min-width: 640px) {
-  .pv-row__ref-wrap { display: block; }
+  .pv-row__ref-wrap {
+    display: block;
+    width: 150px;
+    flex-shrink: 0;
+  }
+}
+
+/* At ≥900px the bar is grid — remove flex overrides, grid template controls sizing */
+@media (min-width: 900px) {
+  .pv-row__order-no  { width: auto; flex-shrink: unset; }
+  .pv-row__customer  { flex: unset; }
+  .pv-row__ref-wrap  { display: block; width: auto; flex-shrink: unset; }
+  .pv-row__amount    { width: auto; flex-shrink: unset; text-align: left; }
+  .pv-row__meta      { min-width: unset; flex-shrink: unset; align-items: flex-start; }
 }
 
 /* ── Status Badge ────────────────────────────────────────────────────────────── */
