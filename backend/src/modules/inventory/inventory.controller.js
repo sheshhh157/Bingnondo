@@ -582,6 +582,10 @@ async function deleteItem(req, res, next) {
     });
   } catch (err) {
     await client.query('ROLLBACK');
+    // FK violation (23503) → the item still has history or other references.
+    if (err.code === '23503') {
+      return res.status(409).json({ message: 'Cannot delete: item is still referenced by inventory history or other records.' });
+    }
     next(err);
   } finally {
     client.release();

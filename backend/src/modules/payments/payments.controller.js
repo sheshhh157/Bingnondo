@@ -1,6 +1,44 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
 
+// Deduct linked ingredients from inventory after a successful payment.
+// Idempotent: a unique index on reference_order_id + inventory_item_id
+// prevents double deduction if the same payment is processed again.
+async function deductInventory(client, orderId, cashierId) {
+  const { rows } = await client.query(
+    `SELECT mii.inventory_item_id,
+            SUM(oi.quantity * mii.quantity_required) AS deduction
+     FROM order_items oi
+     JOIN menu_item_ingredients mii ON mii.menu_item_id = oi.menu_item_id
+     WHERE oi.order_id = $1
+       AND mii.quantity_required > 0
+     GROUP BY mii.inventory_item_id
+     ORDER BY mii.inventory_item_id`,
+    [orderId]
+  );
+  const updatedItems = [];
+  for (const row of rows) {
+    const ded = parseFloat(row.deduction);
+    const inserted = await client.query(
+      `INSERT INTO inventory_transactions (inventory_item_id, change_type, quantity, performed_by, reference_order_id)
+       VALUES ($1, 'deduction', $2, $3, $4)
+       ON CONFLICT (reference_order_id, inventory_item_id) WHERE change_type = 'deduction' AND reference_order_id IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [row.inventory_item_id, -ded, cashierId, orderId]
+    );
+    if (inserted.rows.length > 0) {
+      const update = await client.query(
+        'UPDATE inventory_items SET current_stock = current_stock - $1, updated_at = NOW() WHERE id = $2 RETURNING current_stock',
+        [ded, row.inventory_item_id]
+      );
+      const newStock = parseFloat(update.rows[0].current_stock);
+      updatedItems.push({ itemId: Number(row.inventory_item_id), currentStock: newStock });
+    }
+  }
+  return updatedItems;
+}
+
+
 // ─── POST /api/payments ───────────────────────────────────────────────────────
 // Cashier marks a counter order as paid (Cash only for now).
 // Flow:
@@ -34,12 +72,13 @@ async function processPayment(req, res, next) {
     // Fetch order + its payment record together
     const { rows } = await client.query(
       `SELECT o.id, o.status AS order_status, o.total_amount::float,
-              o.cashier_id,
-              p.id AS payment_id, p.status AS payment_status
-       FROM orders o
-       LEFT JOIN payments p ON p.order_id = o.id
-       WHERE o.id = $1
-       FOR UPDATE OF o`,
+              o.order_type,
+               o.cashier_id,
+               p.id AS payment_id, p.status AS payment_status
+        FROM orders o
+        LEFT JOIN payments p ON p.order_id = o.id
+        WHERE o.id = $1
+        FOR UPDATE OF o`,
       [Number(order_id)]
     );
 
@@ -49,6 +88,7 @@ async function processPayment(req, res, next) {
     }
 
     const { total_amount, payment_id, payment_status, order_status, cashier_id } = rows[0];
+    const orderType = rows[0].order_type || 'counter';
 
     // A cashier is confined to their own orders. owner / admin / staff act as
     // a supervisor override, mirroring the scoping `buildOrderFilters` applies
@@ -94,25 +134,44 @@ async function processPayment(req, res, next) {
       return res.status(409).json({ message: 'This order has been cancelled and cannot be paid.' });
     }
 
+    // Channel-method pairing: a counter order cannot be "cash on delivery"
+    // (the customer is standing at the counter), and COD is only offered for
+    // online orders. Without this, a POS slip could mark a walk-up order paid
+    // with a method where no money ever arrives, and still ring the buzzer.
+    if (orderType === 'counter' && method !== 'cash') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Counter orders can only be paid with cash.' });
+    }
+    if (method === 'cash_on_delivery' && orderType !== 'online') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Cash on delivery is only available for online orders.' });
+    }
+
     // Cash: validate cash_given covers the total
     if (method === 'cash') {
-      const given = parseFloat(cash_given);
-      if (isNaN(given) || given < total_amount) {
+      const givenCentavos = Math.round(parseFloat(cash_given) * 100);
+      const totalCentavos = Math.round(parseFloat(total_amount) * 100);
+      if (isNaN(givenCentavos) || givenCentavos < totalCentavos) {
         await client.query('ROLLBACK');
         return res.status(400).json({
-          message: `Cash given (₱${isNaN(given) ? '?' : given.toFixed(2)}) must be at least the total (₱${total_amount.toFixed(2)}).`,
+          message: `Cash given (₱${isNaN(givenCentavos) ? '?' : (givenCentavos/100).toFixed(2)}) must be at least the total (₱${(totalCentavos/100).toFixed(2)}).`,
         });
       }
     }
 
+    const cashCentavos = method === 'cash' ? Math.round(parseFloat(cash_given) * 100) : null;
+    const changeCentavos = method === 'cash' ? (cashCentavos - Math.round(parseFloat(total_amount) * 100)) : null;
+
     // Update the payment row
     const { rows: payRows } = await client.query(
       `UPDATE payments
-       SET method = $1, status = 'paid', paid_at = NOW()
+       SET method = $1, status = 'paid', paid_at = NOW(), cash_given = $3, change_given = $4
        WHERE id = $2
        RETURNING *`,
-      [method, payment_id]
+      [method, payment_id, cashCentavos !== null ? (cashCentavos / 100).toFixed(2) : null, changeCentavos !== null ? (changeCentavos / 100).toFixed(2) : null]
     );
+
+    const updatedItems = await deductInventory(client, order_id, cashier_id);
 
     // Paid -> ring the kitchen buzzer. Same transaction as the payment, so a
     // paid order always has its alert. If the device row is missing we skip the
@@ -132,7 +191,59 @@ async function processPayment(req, res, next) {
       alert = { ...alertRows[0], location_label: devRows[0].location_label };
     }
 
+    try {
+      await client.query('SAVEPOINT sp_audit');
+      await client.query(
+        `INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+         VALUES ($1, 'payment_paid', 'order', $2, $3)`,
+        [req.user.sub, order_id, JSON.stringify({ amount: parseFloat(total_amount).toFixed(2), method, cash_given, change: changeCentavos !== null ? (changeCentavos / 100).toFixed(2) : null })]
+      );
+      await client.query('RELEASE SAVEPOINT sp_audit');
+    } catch (err) {
+      console.error('[audit_log] insert failed during payment:', err);
+      try { await client.query('ROLLBACK TO SAVEPOINT sp_audit'); } catch {}
+    }
+
     await client.query('COMMIT');
+
+    // Counter orders are promoted to kitchen only once paid.
+    if (orderType === 'counter') {
+      const orderRes = await client.query(
+        `SELECT id, status, order_type, order_channel, total_amount::float, created_at, cashier_id
+         FROM orders WHERE id = $1`,
+        [Number(order_id)]
+      );
+      const itemsRes = await client.query(
+        `SELECT oi.id, oi.menu_item_id, mi.name, oi.quantity, oi.unit_price::float, oi.notes, oi.menu_item_option_id, moi.name AS option_name, oi.menu_item_flavor_id, mfi.name AS flavor_name
+         FROM order_items oi
+         JOIN menu_items mi ON mi.id = oi.menu_item_id
+         LEFT JOIN menu_item_options moi ON moi.id = oi.menu_item_option_id
+         LEFT JOIN menu_item_options mfi ON mfi.id = oi.menu_item_flavor_id
+         WHERE oi.order_id = $1
+         ORDER BY oi.id`,
+        [Number(order_id)]
+      );
+      const order = orderRes.rows[0];
+      order.order_number = `ORD-${String(order.id).padStart(4, '0')}`;
+      order.items = itemsRes.rows.map((row) => ({
+        menu_item_id: row.menu_item_id,
+        menu_item_option_id: row.menu_item_option_id,
+        option_name: row.option_name,
+        menu_item_flavor_id: row.menu_item_flavor_id,
+        flavor_name: row.flavor_name,
+        name: row.name,
+        unit_price: Number(row.unit_price),
+        quantity: row.quantity,
+        notes: row.notes,
+      }));
+      socketHub.emitNewOrder(order);
+    }
+
+    if (updatedItems && updatedItems.length > 0) {
+      for (const item of updatedItems) {
+        socketHub.emitInventoryUpdate({ itemId: item.itemId, currentStock: item.currentStock });
+      }
+    }
 
     if (alert) {
       socketHub.emitKitchenAlert({
@@ -146,7 +257,7 @@ async function processPayment(req, res, next) {
 
     const payment = payRows[0];
     const change = method === 'cash'
-      ? parseFloat((parseFloat(cash_given) - total_amount).toFixed(2))
+      ? (Math.round(parseFloat(cash_given) * 100) - Math.round(parseFloat(total_amount) * 100)) / 100
       : null;
 
     res.json({

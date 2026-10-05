@@ -26,6 +26,7 @@ jobs:
       DB_HOST: localhost
       DB_PORT: 5432
       DB_NAME: bingnondo
+      DB_NAME_TEST: bingnondo_test
       DB_USER: postgres
       DB_PASSWORD: postgres
       JWT_ACCESS_SECRET: ci_access_secret_not_for_production
@@ -41,13 +42,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
         working-directory: backend
-      - name: Restore canonical schema
-        run: PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d bingnondo -v ON_ERROR_STOP=1 -f bingnondo_database.sql
-      - name: Mark migrations applied
-        run: node scripts/migrate.js --mark-all-applied
-        working-directory: backend
-      - name: Migrations are no-op on a canonical schema
-        run: npm run migrate
+      - name: Setup test DB
+        run: npm run test:setup
         working-directory: backend
       - run: npm test
         working-directory: backend

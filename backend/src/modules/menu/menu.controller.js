@@ -336,7 +336,7 @@ async function updateMenuItem(req, res, next) {
     const { id } = req.params;
     const { name, price, description, category_id, is_available, image_url, ingredients, options } = req.body;
 
-    const existing = await db.query('SELECT id FROM menu_items WHERE id = $1', [id]);
+    const existing = await db.query('SELECT id, price FROM menu_items WHERE id = $1', [id]);
     if (existing.rows.length === 0) return res.status(404).json({ message: 'Menu item not found.' });
 
     if (name !== undefined && !name.trim()) return res.status(400).json({ message: 'Item name cannot be empty.' });
@@ -361,6 +361,22 @@ async function updateMenuItem(req, res, next) {
       await client.query(`UPDATE menu_items SET ${sets.join(', ')} WHERE id = $${n}`, params);
     }
 
+    if (price !== undefined && Number(price) !== Number(existing.rows[0].price)) {
+      try {
+        await client.query('SAVEPOINT sp_audit');
+        await client.query(
+          `INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+           VALUES ($1, 'menu_item_price_changed', 'menu_item', $2, $3)`,
+          [req.user.sub, id, JSON.stringify({ old_price: Number(existing.rows[0].price), new_price: Number(price) })]
+        );
+        await client.query('RELEASE SAVEPOINT sp_audit');
+      } catch (err) {
+        console.error('[audit_log] insert failed during menu update:', err);
+        try { await client.query('ROLLBACK TO SAVEPOINT sp_audit'); } catch {}
+      }
+    }
+
+    // Ingredients are linked per menu item, not per variant or flavor.
     // Replace ingredients if provided (delete-then-insert)
     if (ingredients !== undefined) {
       await client.query('DELETE FROM menu_item_ingredients WHERE menu_item_id = $1', [id]);
@@ -505,6 +521,16 @@ async function setAvailability(req, res, next) {
        RETURNING id, name, is_available`,
       [is_available, id]
     );
+
+    try {
+      await db.query(
+        `INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+         VALUES ($1, 'menu_availability_toggled', 'menu_item', $2, $3)`,
+        [req.user.sub, id, JSON.stringify({ is_available })]
+      );
+    } catch (auditErr) {
+      console.error('[audit_log] menu availability insert error:', auditErr);
+    }
 
     if (result.rows.length === 0) return res.status(404).json({ message: 'Menu item not found.' });
 

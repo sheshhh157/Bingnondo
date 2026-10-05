@@ -50,4 +50,26 @@ const isKnownStatus = (to) => Object.prototype.hasOwnProperty.call(TRANSITIONS, 
 const canTransition = (from, to) =>
   isKnownStatus(to) && (TRANSITIONS[from] || []).includes(to);
 
-module.exports = { TRANSITIONS, ALL_STATUSES, isKnownStatus, canTransition };
+// Supervisor roles may drive the full transition map. Cashiers close out
+// handoffs and nothing else; kitchen staff cook what the kitchen endpoint
+// already narrows to. Everyone else must not be able to set a status they
+// cannot actually produce.
+const ROLE_TRANSITIONS = {
+  cashier:       { ready: ['completed'] },
+  kitchen_staff: { confirmed: ['preparing'], preparing: ['ready'] },
+};
+const SUPERVISOR_ROLES = new Set(['staff', 'owner', 'admin', 'manager']);
+
+/**
+ * Role-aware transition check for PATCH /api/orders/:id/status.
+ * 'cancelled' is refused here for every role — cancellation runs through
+ * POST /api/orders/:id/cancel, which also guards paid orders.
+ */
+const canTransitionAs = (role, from, to) => {
+  if (!isKnownStatus(to) || to === 'cancelled') return false;
+  if (SUPERVISOR_ROLES.has(role)) return canTransition(from, to);
+  const rules = ROLE_TRANSITIONS[role];
+  return Boolean(rules) && (rules[from] || []).includes(to);
+};
+
+module.exports = { TRANSITIONS, ALL_STATUSES, isKnownStatus, canTransition, canTransitionAs };

@@ -141,6 +141,7 @@ const withConfirmedOrder = async (fn) => {
   try {
     return await fn(id);
   } finally {
+    await db.query('DELETE FROM inventory_transactions WHERE reference_order_id = $1', [id]);
     await db.query('DELETE FROM orders WHERE id = $1', [id]);
   }
 };
@@ -198,6 +199,43 @@ test('paying an already-paid order is refused, so it cannot ring twice', async (
       await openAlerts(id), 1,
       'the refused payment must not have opened a second alert');
   });
+});
+
+test('cash_on_delivery on a counter order is refused, online COD accepted', async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+
+  // Counter order (POS flow): COD must be refused, else the line books a sale
+  // no money backs.
+  await withConfirmedOrder(async (id) => {
+    const res = await call('POST', '/api/payments', {
+      body: { order_id: id, method: 'cash_on_delivery' },
+      role: 'cashier',
+    });
+    assert.equal(res.status, 400, `counter + cash_on_delivery must be refused, got ${JSON.stringify(res.body)}`);
+    assert.match(res.body.message, /counter orders can only be paid with cash/i);
+    assert.equal(await openAlerts(id), 0, 'a refused COD payment must not ring the buzzer');
+  });
+
+  // Same method is legitimate when the order is online.
+  const online = await db.query(
+    `INSERT INTO orders (order_type, status, order_channel, total_amount)
+     VALUES ('online', 'confirmed', 'web_online', 100) RETURNING id`
+  );
+  const onlineId = online.rows[0].id;
+  try {
+    await db.query(
+      `INSERT INTO payments (order_id, method, amount, status) VALUES ($1, 'cash_on_delivery', 100, 'pending')`,
+      [onlineId]
+    );
+    const res = await call('POST', '/api/payments', {
+      body: { order_id: onlineId, method: 'cash_on_delivery' },
+      role: 'cashier',
+    });
+    assert.equal(res.status, 200, `online + cash_on_delivery should be accepted, got ${JSON.stringify(res.body)}`);
+    assert.equal((await db.query('SELECT status FROM payments WHERE order_id = $1', [onlineId])).rows[0].status, 'paid');
+  } finally {
+    await db.query('DELETE FROM orders WHERE id = $1', [onlineId]);
+  }
 });
 
 test('Acknowledge is idempotent — a repeat tap never 409s', async (t) => {

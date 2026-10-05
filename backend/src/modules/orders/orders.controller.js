@@ -1,7 +1,7 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
 const { priceCart, CartError } = require('../../services/pricing.service');
-const { ALL_STATUSES, isKnownStatus, canTransition } = require('./status-transitions');
+const { ALL_STATUSES, isKnownStatus, canTransition, canTransitionAs } = require('./status-transitions');
 
 // ─── Helper: format order number ─────────────────────────────────────────────
 function orderNumber(id) {
@@ -31,11 +31,11 @@ function ownsOrder(req, cashierId) {
 
 const NOT_YOUR_ORDER = { message: 'You can only act on your own orders.' };
 
-// Reporting buckets default to the server's zone. Real clients always send
+// Reporting buckets default to Asia/Manila. Real clients always send
 // their own (see getOrderReport); this only covers callers like curl that
 // don't, and matching the server keeps it consistent with the `range=today`
 // preset, which Postgres evaluates against CURRENT_DATE in the server zone.
-const DEFAULT_REPORT_TZ = 'Asia/Kuala_Lumpur';
+const DEFAULT_REPORT_TZ = 'Asia/Manila';
 
 /**
  * Whether a string is an IANA timezone name this runtime understands.
@@ -124,7 +124,9 @@ async function createOrder(req, res, next) {
     order.items = validated;
     order.total_amount = parseFloat(order.total_amount);
 
-    socketHub.emitNewOrder(order);
+    if (order.order_type !== 'counter') {
+      socketHub.emitNewOrder(order);
+    }
 
     res.status(201).json(order);
   } catch (err) {
@@ -164,7 +166,7 @@ const MAX_ORDERS_LIMIT = 10000;
  */
 const LATEST_PAYMENT_JOIN = `
   LEFT JOIN LATERAL (
-    SELECT status, method, paid_at
+    SELECT status, method, paid_at, amount
     FROM payments
     WHERE order_id = o.id
     ORDER BY paid_at DESC NULLS LAST, id DESC
@@ -318,6 +320,7 @@ async function getOrders(req, res, next) {
          p.method     AS payment_method,
          p.status     AS payment_status,
          p.paid_at,
+         p.amount     AS payment_amount,
          json_agg(
            json_build_object(
              'id',           oi.id,
@@ -342,7 +345,7 @@ async function getOrders(req, res, next) {
        LEFT JOIN menu_item_options mo ON mo.id = oi.menu_item_option_id
        LEFT JOIN menu_item_options mf ON mf.id = oi.menu_item_flavor_id
        WHERE ${where}
-       GROUP BY o.id, sa.full_name, p.method, p.status, p.paid_at
+       GROUP BY o.id, sa.full_name, p.method, p.status, p.paid_at, p.amount
        ORDER BY o.created_at DESC
        LIMIT ${safeLimit} OFFSET ${safeOffset}`,
       params
@@ -386,7 +389,7 @@ async function getOrderTotals(req, res, next) {
 
     const { rows } = await db.query(
       `SELECT
-         COALESCE(SUM(o.total_amount), 0)::float AS total_revenue,
+         COALESCE(SUM(p.amount), 0)::float AS total_revenue,
          COUNT(*)::int                      AS collected_orders
        FROM orders o
        ${LATEST_PAYMENT_JOIN}
@@ -429,26 +432,24 @@ async function getOrderReport(req, res, next) {
     // figures, so it is intentionally not part of the shared filter here.
     const { where, params, nextIndex } = buildOrderFilters(req, { includeStatus: false });
 
-    // Bucket in the viewer's timezone, not the server's. The server runs
-    // Asia/Kuala_Lumpur and the browser runs Asia/Manila — both UTC+8 today, so
-    // a naive `created_at::date` happens to agree, and would silently stop
-    // agreeing the moment either side moved. The client sends its IANA zone.
-    // Validated below rather than interpolated.
+    // Bucket in the viewer's timezone, not the server's. The server defaults
+    // to Asia/Manila and the client sends its own IANA zone; the client's zone
+    // can differ from the server default if tz is passed explicitly. The client
+    // should send a zone that matches its local calendar boundaries.
     const tzRaw = String(req.query.tz || '').trim();
     const tz = tzRaw && isValidTimeZone(tzRaw) ? tzRaw : DEFAULT_REPORT_TZ;
 
-    const tzParam = `$${nextIndex}`;
-    const allParams = [...params, tz];
+    const allParams = params;
 
     const { rows } = await db.query(
       `WITH base AS (
          SELECT
            o.id,
            o.status,
-           o.total_amount::float          AS total_amount,
-           p.status                       AS pay_status,
-           p.method                       AS pay_method,
-           (o.created_at AT TIME ZONE ${tzParam}) AS local_ts
+           p.amount::float                   AS total_amount,
+           p.status                          AS pay_status,
+           p.method                          AS pay_method,
+           (p.paid_at AT TIME ZONE 'Asia/Manila')::timestamp AS local_ts
          FROM orders o
          ${LATEST_PAYMENT_JOIN}
          WHERE ${where}
@@ -491,6 +492,7 @@ async function getOrderReport(req, res, next) {
 
     res.json(rows[0]);
   } catch (err) {
+    console.error('getOrderReport error:', err);
     next(err);
   }
 }
@@ -506,6 +508,7 @@ async function getOrderById(req, res, next) {
          o.total_amount::float, o.special_request, o.created_at,
          o.cashier_id, sa.full_name AS cashier_name,
          p.method AS payment_method, p.status AS payment_status, p.paid_at,
+         p.amount AS payment_amount,
          json_agg(
            json_build_object(
              'id', oi.id, 'menu_item_id', oi.menu_item_id,
@@ -522,7 +525,7 @@ async function getOrderById(req, res, next) {
         LEFT JOIN menu_item_options mo ON mo.id = oi.menu_item_option_id
         LEFT JOIN menu_item_options mf ON mf.id = oi.menu_item_flavor_id
         WHERE o.id = $1
-        GROUP BY o.id, sa.full_name, p.method, p.status, p.paid_at`,
+        GROUP BY o.id, sa.full_name, p.method, p.status, p.paid_at, p.amount`,
       [req.params.id]
     );
 
@@ -571,11 +574,27 @@ async function updateOrderStatus(req, res, next) {
     // below so the audit trail doesn't gain a duplicate row.
     const unchanged = from === status;
 
-    if (!unchanged && !canTransition(from, status)) {
+    // Cancellation is deliberately NOT available here: PATCH used to accept it,
+    // which let staff void a PAID order past the cancel route's money check.
+    if (status === 'cancelled') {
       await client.query('ROLLBACK');
-      return res.status(409).json({
-        message: `Cannot move to "${status}" from "${from}".`,
+      return res.status(400).json({
+        message: 'Use POST /api/orders/:id/cancel to cancel an order.',
       });
+    }
+
+    if (!unchanged && !canTransitionAs(req.user.role, from, status)) {
+      await client.query('ROLLBACK');
+      if (req.user.role === 'cashier' || req.user.role === 'kitchen_staff') {
+        return res.status(403).json({
+          message: "You don't have permission to perform this action.",
+        });
+      }
+      if (!canTransition(from, status)) {
+        return res.status(409).json({
+          message: `Cannot move to "${status}" from "${from}".`,
+        });
+      }
     }
 
     if (unchanged) {
@@ -583,7 +602,8 @@ async function updateOrderStatus(req, res, next) {
         `UPDATE orders SET updated_at = NOW() WHERE id = $1 RETURNING *`,
         [req.params.id]
       );
-      await client.query('COMMIT');
+
+    await client.query('COMMIT');
       const order = existing[0];
       order.order_number = orderNumber(order.id);
       order.total_amount = parseFloat(order.total_amount);
@@ -663,6 +683,9 @@ async function cancelOrder(req, res, next) {
     // cancelling here would leave the payment 'paid' against a 'cancelled'
     // order — excluded from revenue, absent from any refund figure, and
     // effectively unaccounted for. A manager has to resolve that deliberately.
+    // NOTE: When a refund flow exists, it must reverse the inventory ledger
+    // deducted by processPayment (e.g. an 'adjustment' or positive 'restock'
+    // entry) for the order's items.
     if (rows[0].payment_status === 'paid') {
       await client.query('ROLLBACK');
       return res.status(409).json({
@@ -685,9 +708,36 @@ async function cancelOrder(req, res, next) {
       [req.params.id, req.user.sub]
     );
 
+    // Closing the order must also retire its buzzer: any open kitchen_alerts
+    // row for it would otherwise keep flagging unpaid-and-cancelled work on the
+    // ESP32 poll. Same transaction, so a cancel can never leave a stale alarm.
+    const { rows: closedAlerts } = await client.query(
+      `UPDATE kitchen_alerts
+          SET acknowledged_at = NOW()
+        WHERE order_id = $1 AND acknowledged_at IS NULL
+        RETURNING id`,
+      [req.params.id]
+    );
+
+    try {
+      await client.query('SAVEPOINT sp_audit');
+      await client.query(
+        `INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+         VALUES ($1, 'order_cancelled', 'order', $2, $3)`,
+        [req.user.sub, req.params.id, JSON.stringify({ status: 'cancelled' })]
+      );
+      await client.query('RELEASE SAVEPOINT sp_audit');
+    } catch (err) {
+      console.error('[audit_log] insert failed during cancel:', err);
+      try { await client.query('ROLLBACK TO SAVEPOINT sp_audit'); } catch {}
+    }
+
     await client.query('COMMIT');
 
     socketHub.emitOrderStatus({ orderId: rows[0].id, orderNumber: orderNumber(rows[0].id), status: 'cancelled' });
+    for (const alert of closedAlerts) {
+      socketHub.emitKitchenAlertAck({ alertId: alert.id });
+    }
 
     res.json({ message: 'Order cancelled.' });
   } catch (err) {

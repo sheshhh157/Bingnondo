@@ -37,7 +37,28 @@ function processQueue(token, error = null) {
   refreshQueue = [];
 }
 
-async function silentRefresh() {
+/** Shared in-flight refresh: the request-path, the socket connect_error
+ *  handler, and the socket server-forced-disconnect handler all ride the same
+ *  single refresh call instead of triggering three. */
+let inFlightRefresh = null;
+
+/** Exported for the socket layer: when a handshake fails with 'unauthorized'
+ * it needs the same silent refresh the request-path uses. */
+export async function refreshAccessToken() {
+  return silentRefresh();
+}
+
+export async function silentRefresh() {
+  if (inFlightRefresh) return inFlightRefresh;
+  inFlightRefresh = doRefresh();
+  try {
+    return await inFlightRefresh;
+  } finally {
+    inFlightRefresh = null;
+  }
+}
+
+async function doRefresh() {
   const refreshToken = getRefreshToken();
   if (!refreshToken) throw new Error('No refresh token.');
 

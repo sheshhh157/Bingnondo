@@ -44,12 +44,30 @@ exports.staffLogin = async (req, res) => {
       [email.toLowerCase().trim()]
     );
     if (rows.length === 0) {
+      try {
+        await db.query(
+          `INSERT INTO audit_log (actor_id, action, target_type, details)
+           VALUES (NULL, 'staff_login_failed', 'staff_account', $1)`,
+          [JSON.stringify({ email, reason: 'not_found' })]
+        );
+      } catch (auditErr) {
+        console.error('[audit_log] failed login insert error:', auditErr);
+      }
       return res.status(401).json({ message: 'Invalid credentials. Try again.' });
     }
     const staff = rows[0];
 
     const match = await bcrypt.compare(password, staff.password_hash);
     if (!match) {
+      try {
+        await db.query(
+          `INSERT INTO audit_log (actor_id, action, target_type, details)
+           VALUES (NULL, 'staff_login_failed', 'staff_account', $1)`,
+          [JSON.stringify({ email, reason: 'wrong_password' })]
+        );
+      } catch (auditErr) {
+        console.error('[audit_log] failed login insert error:', auditErr);
+      }
       return res.status(401).json({ message: 'Invalid credentials. Try again.' });
     }
 

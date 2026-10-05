@@ -4,7 +4,6 @@ import { getSocket, KITCHEN_EVENTS } from '../../services/socket';
 import KitchenHeader from './components/KitchenHeader';
 import OrderColumn from './components/OrderColumn';
 import OrderCard from './components/OrderCard';
-import ConnectionStatus from './components/ConnectionStatus';
 import '../../styles/KitchenPage.css';
 
 // ─── Reducers ────────────────────────────────────────────────────────────────
@@ -51,6 +50,11 @@ export default function KitchenPage() {
   const [reconnecting, setReconnecting] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Buzzer liveness from GET /api/kitchen/devices. `null` = no response yet —
+  // do not flash the banner during the first load or when the request itself
+  // errors (that failure is covered by ConnectionStatus instead).
+  const [buzzerOffline, setBuzzerOffline] = useState(false);
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -75,10 +79,39 @@ export default function KitchenPage() {
   // Socket.io
   useEffect(() => {
     const socket = getSocket();
-    socket.on('connect',         () => { setConnected(true); setReconnecting(false); });
-    socket.on('disconnect',       () => setConnected(false));
-    socket.on('reconnecting',     () => setReconnecting(true));
+    let firstConnect = true;
+
+    const refetchAll = async () => {
+      try {
+        const ordersRes = await kitchenAPI.getOrders();
+        const ordersData = ordersRes?.data ?? ordersRes ?? [];
+        dispatchOrders({ type: 'LOAD', payload: Array.isArray(ordersData) ? ordersData : [] });
+await kitchenAPI.getAlerts?.().catch(() => null);
+      } catch { /* ignore */ }
+    };
+
+    const onReconnecting    = () => setReconnecting(true);
+    const onReconnectedEvent = () => {
+      setConnected(true);
+      setReconnecting(false);
+      refetchAll();
+    };
+    socket.on('connect',         () => {
+      setConnected(true);
+      setReconnecting(false);
+      if (!firstConnect) refetchAll();
+      firstConnect = false;
+    });
+    socket.on('disconnect',       (reason) => {
+      setConnected(false);
+      if (reason === 'io server disconnect') setReconnecting(true);
+    });
+    socket.on('reconnecting',     onReconnecting);
     socket.on('reconnect_failed', () => setReconnecting(false));
+    // socket.js drives the refresh+reconnect cycle after a server kick;
+    // reflect its state in the page's indicator.
+    window.addEventListener('socket:reconnecting', onReconnecting);
+    window.addEventListener('socket:reconnected', onReconnectedEvent);
 
     // A new order arrives as 'pending' and the card appears in New Orders.
     // Deliberately silent: the buzzer and the beep are paid-only triggers, so
@@ -103,7 +136,33 @@ export default function KitchenPage() {
       socket.off(KITCHEN_EVENTS.NEW_ORDER);
       socket.off(KITCHEN_EVENTS.KITCHEN_ALERT);
       socket.off(KITCHEN_EVENTS.ORDER_STATUS_UPDATE);
+      window.removeEventListener('socket:reconnecting', onReconnecting);
+      window.removeEventListener('socket:reconnected', onReconnectedEvent);
     };
+  }, []);
+
+  // Poll the ESP32 registry so a dead buzzer can't silently block ringing.
+  // `devicesLoaded` gates the banner off before the first response arrives.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await kitchenAPI.getDevices();
+        if (cancelled) return;
+        const list = Array.isArray(res) ? res : (res?.data ?? []);
+        const anyOnline = list.some((d) => d.online === true);
+        setDevicesLoaded(true);
+        setBuzzerOffline(!anyOnline);
+      } catch {
+        // Request failure is not "buzzer offline" — the connection banner
+        // already covers that. Leave the buzzer banner hidden.
+        if (cancelled) return;
+        setBuzzerOffline(false);
+      }
+    };
+    load();
+    const t = setInterval(load, 10000);
+    return () => { cancelled = true; clearInterval(t); };
   }, []);
 
   const handleStatusChange = useCallback((orderId, newStatus) => {
@@ -126,12 +185,23 @@ export default function KitchenPage() {
 
   return (
     <div className="kp-root">
-      <ConnectionStatus connected={connected} reconnecting={reconnecting} />
-
       <KitchenHeader
         counterCount={counterOrders.length}
         onlineCount={onlineOrders.length}
+        connected={connected}
+        reconnecting={reconnecting}
       />
+
+      {devicesLoaded && buzzerOffline && (
+        <div className="kp-connection kp-connection--offline" role="alert" aria-live="assertive">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <line x1="1" y1="1" x2="12" y2="12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            <path d="M2 5A6 6 0 0112 9M1 3a9.5 9.5 0 0110 7M4.5 7.5A3 3 0 018 10.5"
+              stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+          Kitchen buzzer is offline. New orders will not ring. Watch the screen.
+        </div>
+      )}
 
       <main className="kp-main" id="main-content">
         {pageLoading ? (

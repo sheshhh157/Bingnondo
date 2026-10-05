@@ -176,7 +176,7 @@ export default function DashboardPage() {
   //  - windowRevenue is the sum over the loaded window, and is what the avg
   //    ticket, payment split and best-sellers are derived from. Mixing the two
   //    (all-time revenue divided by a windowed order count) would be nonsense.
-  const windowRevenue = revenueOrders.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+  const windowRevenue = revenueOrders.reduce((s, o) => s + Number(o.payment_amount || 0), 0);
   const allTimeRevenue = Number(totals?.total_revenue || 0);
   const allTimeCollected = Number(totals?.collected_orders || 0);
   const avgTicket = revenueOrders.length ? windowRevenue / revenueOrders.length : 0;
@@ -235,7 +235,7 @@ export default function DashboardPage() {
     const byKey = new Map(days.map((d) => [d.key, d]));
     for (const o of revenueOrders) {
       const bucket = byKey.get(dayKey(o.created_at));
-      if (bucket) bucket.revenue += Number(o.total_amount || 0);
+      if (bucket) bucket.revenue += Number(o.payment_amount || 0);
     }
     return days.map(({ name, revenue }) => ({ name, revenue }));
   }, [revenueOrders]);
@@ -245,7 +245,7 @@ export default function DashboardPage() {
     const m = { cash: 0, gcash: 0 };
     revenueOrders.forEach((o) => {
       const k = o.payment_method === 'gcash' ? 'gcash' : 'cash';
-      m[k] += Number(o.total_amount || 0);
+      m[k] += Number(o.payment_amount || 0);
     });
     return [
       { name: 'Cash', value: Math.round(m.cash) },
@@ -278,7 +278,7 @@ export default function DashboardPage() {
     () => revenueOrders.filter((o) => dayKey(o.created_at) === todayKey),
     [revenueOrders, todayKey],
   );
-  const todayRevenue = completedToday.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+  const todayRevenue = completedToday.reduce((s, o) => s + Number(o.payment_amount || 0), 0);
 
   // Orders sitting at 'ready' need pickup attention.
   const readyCount = useMemo(

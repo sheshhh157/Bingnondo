@@ -185,6 +185,8 @@ export const kitchenAPI = {
 
   getAlerts: () => apiClient.get('/api/kitchen/alerts'),
 
+  getDevices: () => apiClient.get('/api/kitchen/devices'),
+
   acknowledgeAlert: (alertId) =>
     apiClient.post(`/api/kitchen/alerts/${alertId}/acknowledge`),
 };

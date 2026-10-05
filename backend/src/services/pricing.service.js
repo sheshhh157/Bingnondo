@@ -65,7 +65,7 @@ async function priceCart(items) {
     optionMap = Object.fromEntries(optRes.rows.map((r) => [r.id, r]));
   }
 
-  let totalAmount = 0;
+  let totalCentavos = 0;
   const validated = [];
 
   for (const item of items) {
@@ -86,7 +86,7 @@ async function priceCart(items) {
     const itemVariants = itemOptions.filter((o) => o.option_kind !== 'flavor');
     const itemFlavors = itemOptions.filter((o) => o.option_kind === 'flavor');
 
-    let unitPrice = parseFloat(mi.price);
+    let unitPriceCentavos = Math.round(parseFloat(mi.price) * 100);
     let optionId = null;
     let optionName = null;
     let flavorId = null;
@@ -116,7 +116,7 @@ async function priceCart(items) {
 
       optionId = opt.id;
       optionName = opt.name;
-      unitPrice = parseFloat(opt.price);
+      unitPriceCentavos = Math.round(parseFloat(opt.price) * 100);
     } else if (item.menu_item_option_id != null && item.menu_item_option_id !== '') {
       // An option id for an item with no variants means a flavor id arrived in
       // the variant slot (or a stale payload). Reject rather than guess.
@@ -140,10 +140,10 @@ async function priceCart(items) {
 
       flavorId = opt.id;
       flavorName = opt.name;
-      unitPrice += parseFloat(opt.price);
+      unitPriceCentavos += Math.round(parseFloat(opt.price) * 100);
     }
 
-    totalAmount += unitPrice * qty;
+    totalCentavos += unitPriceCentavos * qty;
     validated.push({
       menu_item_id: mi.id,
       menu_item_option_id: optionId,
@@ -151,13 +151,13 @@ async function priceCart(items) {
       menu_item_flavor_id: flavorId,
       flavor_name: flavorName,
       name: mi.name,
-      unit_price: unitPrice,
+      unit_price: Number((unitPriceCentavos / 100).toFixed(2)),
       quantity: qty,
       notes: item.notes || null,
     });
   }
 
-  return { totalAmount, validated };
+  return { totalAmount: Number((totalCentavos / 100).toFixed(2)), validated };
 }
 
 module.exports = { priceCart, CartError };

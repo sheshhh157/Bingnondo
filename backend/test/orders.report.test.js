@@ -19,6 +19,7 @@
  */
 
 const test = require('node:test');
+const { before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 // Must precede the controller import: requiring the controller pulls in
@@ -204,6 +205,29 @@ test("'completed' is not a usable proxy for paid", async (t) => {
   );
 });
 
+let duplicateOrderId = null;
+before(async () => {
+  if (!(await canQuery())) return;
+  // Insert a throwaway op order for the duplicate-payment check.
+  const order = await db.query(
+    `INSERT INTO orders (order_type, customer_id, cashier_id, status, order_channel, total_amount, created_at, updated_at)
+     VALUES ('counter', NULL, NULL, 'pending', 'web_counter', 100, now(), now()) RETURNING id`
+  );
+  duplicateOrderId = order.rows[0].id;
+  await db.query(
+    `INSERT INTO payments (order_id, method, amount, status, paid_at) VALUES ($1, 'cash', 100, 'paid', now())`,
+    [duplicateOrderId]
+  );
+});
+
+after(async () => {
+  if (!(await canQuery())) return;
+  if (duplicateOrderId) {
+    await db.query('DELETE FROM payments WHERE order_id = $1', [duplicateOrderId]);
+    await db.query('DELETE FROM orders WHERE id = $1', [duplicateOrderId]);
+  }
+});
+
 test('the database refuses a second payment row for one order', async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
 
@@ -213,15 +237,8 @@ test('the database refuses a second payment row for one order', async (t) => {
   // all — the scenario is now prevented rather than defended against. The
   // LATERAL joins stay as defence in depth, but the real guarantee is that the
   // insert below is rejected.
-  const order = await db.query(`
-    SELECT o.id FROM orders o
-    JOIN LATERAL (SELECT status FROM payments WHERE order_id = o.id
-      ORDER BY paid_at DESC NULLS LAST, id DESC LIMIT 1) p ON TRUE
-    WHERE ${REVENUE_PREDICATE} ORDER BY o.id LIMIT 1`);
-  if (order.rowCount === 0) return t.skip('no paid order available to duplicate');
-
+  const id = duplicateOrderId;
   const client = await db.getClient();
-  const { id } = order.rows[0];
   try {
     await client.query('BEGIN');
     await assert.rejects(

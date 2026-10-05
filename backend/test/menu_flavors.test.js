@@ -58,6 +58,7 @@ const buildApp = () => {
   app.use('/api/menu', require('../src/modules/menu/menu.routes'));
   app.use('/api/orders', require('../src/modules/orders/orders.routes'));
   app.use('/api/kitchen', require('../src/modules/kitchen/kitchen.routes'));
+  app.use('/api/payments', require('../src/modules/payments/payments.routes'));
   return app;
 };
 
@@ -113,6 +114,7 @@ const withItem = async ({ price = 50, options = [] }, fn) => {
   try {
     return await fn({ itemId, optionIds });
   } finally {
+    await db.query(`DELETE FROM order_items WHERE menu_item_id = $1`, [itemId]);
     await db.query(`DELETE FROM menu_items WHERE id = $1`, [itemId]);
   }
 };
@@ -371,6 +373,8 @@ test('the kitchen ticket names the flavor', { skip }, async (t) => {
       },
     });
     assert.equal(sold.status, 201);
+
+    const paid = await call('POST', '/api/payments', { tok, body: { order_id: sold.body.id, method: 'cash', cash_given: 1000 } });
 
     const kitchen = await call('GET', '/api/kitchen/orders', { tok });
     const ticket = kitchen.body.data.find((o) => o.id === sold.body.id);

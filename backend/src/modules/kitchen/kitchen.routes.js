@@ -29,6 +29,9 @@ router.patch('/orders/:id/status', ...kitchenRoles, ctrl.updateKitchenOrderStatu
 // GET  /api/kitchen/alerts                      — unacknowledged ESP32 alerts
 router.get('/alerts', ...staffAuth, ctrl.getKitchenAlerts);
 
+// GET  /api/kitchen/devices                     — registry of ESP32 buzzers + online state
+router.get('/devices', ...staffAuth, ctrl.getKitchenDevices);
+
 // POST /api/kitchen/alerts/:id/acknowledge      — acknowledge alert + stop buzzer
 router.post('/alerts/:id/acknowledge', ...kitchenRoles, ctrl.acknowledgeAlert);
 

@@ -38,20 +38,20 @@
 
 const { verifyAccessToken } = require('../modules/auth/auth.jwt');
 
-/** Roles entitled to the owner-level `manager` room. */
-const MANAGER_ROLES = new Set(['owner', 'admin', 'manager']);
-
-/** The one room guarded by handshake auth. */
-const MANAGER_ROOM = 'manager';
+/** Role → rooms the role is entitled to. The client is server-authoritative:
+ * membership is derived from the handshake token, never from `join` alone. */
+const ROOMS_BY_ROLE = {
+  cashier:       ['cashier'],
+  kitchen_staff: ['kitchen'],
+  staff:         ['staff'],
+  owner:         ['manager'],
+  manager:       ['manager'],
+  admin:         ['manager', 'kitchen'],
+};
 
 let _io = null;
 
-/**
- * Resolve the handshake token to a staff user, if one was sent.
- * Returns null for absent, malformed, expired or non-staff tokens — the
- * connection is still allowed (ESP32 devices and any not-yet-updated client
- * connect without a token), it just can't reach the manager room.
- */
+/** Resolve the handshake token to a staff user, or null. */
 function resolveUser(handshakeAuth) {
   const token = handshakeAuth && handshakeAuth.token;
   if (!token) return null;
@@ -60,72 +60,54 @@ function resolveUser(handshakeAuth) {
   return decoded;
 }
 
-function isManagerEntitled(user) {
-  return Boolean(user) && MANAGER_ROLES.has(user.role);
+function allowedRooms(user) {
+  return ROOMS_BY_ROLE[user?.role] || [];
 }
 
 function setIO(io) {
   _io = io;
 
-  // Handshake auth. A token that is present but invalid is a hard reject so a
-  // stale/expired client fails loudly instead of silently dropping to an
-  // unauthenticated socket with no live data. An absent token is allowed.
+  // No anonymous sockets. The ESP32 polls HTTP (/api/esp32/alert); every UI
+  // tab is a signed-in staff session, so a missing or invalid token is a hard
+  // reject, not a quiet downgrade.
   io.use((socket, next) => {
     const user = resolveUser(socket.handshake.auth);
-    if (socket.handshake.auth && socket.handshake.auth.token && !user) {
-      return next(new Error('unauthorized'));
-    }
+    if (!user) return next(new Error('unauthorized'));
     socket.data.user = user;
     next();
   });
 
   io.on('connection', (socket) => {
-    console.log(`[socket] Client connected: ${socket.id} (total: ${io.engine.clientsCount})`);
+    const user = socket.data.user;
+    console.log(`[socket] Client connected: ${socket.id} role=${user.role} (total: ${io.engine.clientsCount})`);
 
-    // Auto-claim the manager room so membership survives every reconnect.
-    if (isManagerEntitled(socket.data.user)) {
-      socket.join(MANAGER_ROOM);
-      console.log(`[socket] ${socket.id} auto-joined room: ${MANAGER_ROOM} (role: ${socket.data.user.role})`);
+    // Rooms follow from the token role — the same list the `join` handler
+    // enforces, so a forged join cannot gain anything.
+    for (const room of allowedRooms(user)) socket.join(room);
+
+    // The access token lapses mid-session; without a server-side cutoff the
+    // socket would stream live data to an unauthenticated tab forever.
+    const cutoffMs = user.exp ? Math.max(0, user.exp * 1000 - Date.now()) : null;
+    if (cutoffMs != null) {
+      const timer = setTimeout(() => socket.disconnect(true), cutoffMs);
+      socket.on('disconnect', () => clearTimeout(timer));
     }
 
-    // Client joins a role-based room after connecting. The `= {}` default
-    // guards a malformed emit (no payload) from throwing inside the handler.
+    // The `join` handler may only take a room the caller is already allowed to
+    // be in (validating against the auto-joined set). Anything else is a no-op.
     socket.on('join', ({ room } = {}) => {
       if (!room) return;
-
-      // `manager` is the only guarded room: a socket may only claim it when
-      // its handshake token carries an owner-level role. Other rooms keep the
-      // legacy behaviour.
-      if (room === MANAGER_ROOM) {
-        if (!isManagerEntitled(socket.data.user)) {
-          console.warn(`[socket] ${socket.id} refused room: ${room} (not entitled)`);
-          return;
-        }
-        socket.join(room);
-        console.log(`[socket] ${socket.id} joined room: ${room}`);
+      if (!allowedRooms(user).includes(room)) {
+        console.warn(`[socket] ${socket.id} refused room: ${room} (role: ${user.role})`);
         return;
       }
-
       socket.join(room);
-      console.log(`[socket] ${socket.id} joined room: ${room}`);
     });
 
-    // Leave a room explicitly. Needed because the client discards its token on
-    // sign-out but the server has no way to notice on its own — without this, a
-    // signed-out tab stayed in the `manager` room and kept receiving events.
-    // Leaving is never an escalation, so this is unguarded.
     socket.on('leave', ({ room } = {}) => {
       if (!room) return;
       socket.leave(room);
       console.log(`[socket] ${socket.id} left room: ${room}`);
-    });
-
-    // ESP32 device registers itself — joins its private room
-    socket.on('esp32:register', ({ device_id }) => {
-      if (device_id) {
-        socket.join(`esp32:${device_id}`);
-        console.log(`[socket] ESP32 device ${device_id} registered on ${socket.id}`);
-      }
     });
 
     socket.on('disconnect', () => {

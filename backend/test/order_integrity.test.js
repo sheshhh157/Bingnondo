@@ -113,6 +113,7 @@ const withOrder = async ({ cashierId, payment = 'pending', items = 1 }, fn) => {
   try {
     return await fn(id);
   } finally {
+    await db.query('DELETE FROM inventory_transactions WHERE reference_order_id = $1', [id]);
     await db.query(`DELETE FROM orders WHERE id = $1`, [id]);
   }
 };

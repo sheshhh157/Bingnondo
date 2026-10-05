@@ -63,6 +63,7 @@ const buildApp = () => {
   app.use('/api/menu', require('../src/modules/menu/menu.routes'));
   app.use('/api/orders', require('../src/modules/orders/orders.routes'));
   app.use('/api/kitchen', require('../src/modules/kitchen/kitchen.routes'));
+  app.use('/api/payments', require('../src/modules/payments/payments.routes'));
   return app;
 };
 
@@ -135,6 +136,7 @@ const withVariedItem = async ({ price = 50, options = [], order = null }, fn) =>
     return await fn({ itemId, optionIds, orderId });
   } finally {
     if (orderId) await db.query(`DELETE FROM orders WHERE id = $1`, [orderId]);
+    await db.query(`DELETE FROM order_items WHERE menu_item_id = $1`, [itemId]);
     await db.query(`DELETE FROM menu_items WHERE id = $1`, [itemId]);
   }
 };
@@ -424,6 +426,8 @@ test('the kitchen ticket shows the variant', { skip }, async (t) => {
       body: { items: [{ menu_item_id: itemId, menu_item_option_id: optionIds.Iced, quantity: 1 }] },
     });
     assert.equal(sold.status, 201);
+
+    await call('POST', '/api/payments', { tok, body: { order_id: sold.body.id, method: 'cash', cash_given: 1000 } });
 
     const kitchen = await call('GET', '/api/kitchen/orders', { tok });
     const ticket = kitchen.body.data.find((o) => o.id === sold.body.id);

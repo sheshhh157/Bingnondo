@@ -125,6 +125,8 @@ const withIngredient = async ({ name, links = 0, txns = 0 }, fn) => {
   try {
     return await fn({ id, menuItemIds });
   } finally {
+    // Delete history first to satisfy the new RESTRICT FK.
+    await db.query(`DELETE FROM inventory_transactions WHERE inventory_item_id = $1`, [id]);
     await db.query(`DELETE FROM inventory_items WHERE id = $1`, [id]);
   }
 };
@@ -132,13 +134,13 @@ const withIngredient = async ({ name, links = 0, txns = 0 }, fn) => {
 let nameSeq = 0;
 const uniqueName = () => `tmp-del-test-${process.pid}-${nameSeq++}`;
 
-test('deleting an ingredient cascades its recipe links and history', { skip }, async (t) => {
+test('deleting an ingredient cascades its recipe links', { skip }, async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
   const staff = await staffAccount();
   if (!staff) return t.skip('no active staff account');
   const tok = signFor(staff.id, 'staff');
 
-  await withIngredient({ name: uniqueName(), links: 2, txns: 3 }, async ({ id, menuItemIds }) => {
+  await withIngredient({ name: uniqueName(), links: 2, txns: 0 }, async ({ id, menuItemIds }) => {
     const { status, body } = await call('DELETE', `/api/inventory/${id}`, { tok });
     assert.equal(status, 200);
     assert.equal(body.id, id);
@@ -168,20 +170,39 @@ test('the response names every menu item that lost a recipe link', { skip }, asy
   if (!staff) return t.skip('no active staff account');
   const tok = signFor(staff.id, 'staff');
 
-  await withIngredient({ name: uniqueName(), links: 3, txns: 1 }, async ({ id, menuItemIds }) => {
+  await withIngredient({ name: uniqueName(), links: 3, txns: 0 }, async ({ id, menuItemIds }) => {
     const { status, body } = await call('DELETE', `/api/inventory/${id}`, { tok });
     assert.equal(status, 200);
 
     const unlinked = body.unlinked_menu_items || [];
     assert.equal(unlinked.length, menuItemIds.length,
       'every linked menu item should be reported back');
-    assert.equal(body.transactions_erased, 1,
-      'the erased history count should be reported so the UI can warn');
+    assert.equal(body.transactions_erased, 0,
+      'no history was deleted, so this count should be zero');
 
     for (const m of unlinked) {
       assert.ok(menuItemIds.includes(m.id), `unexpected menu item ${m.id} in unlinked list`);
       assert.ok(typeof m.name === 'string' && m.name.length > 0, 'menu item name should be present');
     }
+  });
+});
+
+test('deleting an ingredient with transaction history is blocked', { skip }, async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+  const staff = await staffAccount();
+  if (!staff) return t.skip('no active staff account');
+  const tok = signFor(staff.id, 'staff');
+
+  await withIngredient({ name: uniqueName(), links: 1, txns: 1 }, async ({ id }) => {
+    const { status, body } = await call('DELETE', `/api/inventory/${id}`, { tok });
+    assert.equal(status, 409, 'delete must be rejected when history exists');
+    assert.match(body.message, /delete.*history/i);
+
+    const still = await db.query(`SELECT count(*)::int n FROM inventory_items WHERE id = $1`, [id]);
+    assert.equal(still.rows[0].n, 1, 'ingredient must remain after a blocked delete');
+
+    const history = await db.query(`SELECT count(*)::int n FROM inventory_transactions WHERE inventory_item_id = $1`, [id]);
+    assert.equal(history.rows[0].n, 1, 'history rows must not be erased');
   });
 });
 

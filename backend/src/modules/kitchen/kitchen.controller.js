@@ -58,7 +58,15 @@ json_agg(
         JOIN menu_items  mi ON mi.id = oi.menu_item_id
         LEFT JOIN menu_item_options mio ON mio.id = oi.menu_item_option_id
         LEFT JOIN menu_item_options mfio ON mfio.id = oi.menu_item_flavor_id
+        LEFT JOIN LATERAL (
+          SELECT status
+          FROM payments
+          WHERE order_id = o.id
+          ORDER BY paid_at DESC NULLS LAST, id DESC
+          LIMIT 1
+        ) p ON TRUE
          WHERE o.status IN (${inClause})
+           AND (o.order_type <> 'counter' OR p.status = 'paid')
        GROUP BY o.id
        ORDER BY o.created_at ASC`
     );
@@ -255,6 +263,30 @@ async function getKitchenAlerts(req, res, next) {
   }
 }
 
+// ─── GET /api/kitchen/devices ─────────────────────────────────────────────────
+// Registry of ESP32 buzzers. `online` is derived from last_ping_at (polled by
+// the device itself), not the legacy status column which nothing writes as
+// 'offline' — the same check the frontend banner applies at 15s.
+async function getKitchenDevices(req, res, next) {
+  try {
+    const { rows } = await db.query(
+      `SELECT id, device_code, location_label, last_ping_at,
+              (NOW() - last_ping_at) <= interval '15 seconds' AS online
+         FROM esp32_devices
+        ORDER BY id`
+    );
+    res.json(rows.map((r) => ({
+      id: r.id,
+      device_code: r.device_code,
+      location_label: r.location_label,
+      last_ping_at: r.last_ping_at,
+      online: Boolean(r.online),
+    })));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ─── POST /api/kitchen/alerts/:id/acknowledge ────────────────────────────────
 // Kitchen staff acknowledges an alert → stops the ESP32 buzzer.
 async function acknowledgeAlert(req, res, next) {
@@ -320,5 +352,6 @@ module.exports = {
   acknowledgeOrder,
   updateKitchenOrderStatus,
   getKitchenAlerts,
+  getKitchenDevices,
   acknowledgeAlert,
 };

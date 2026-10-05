@@ -33,7 +33,7 @@ const assert = require('node:assert/strict');
 
 require('dotenv').config();
 
-const { TRANSITIONS, ALL_STATUSES, isKnownStatus, canTransition } =
+const { TRANSITIONS, ALL_STATUSES, isKnownStatus, canTransition, canTransitionAs } =
   require('../src/modules/orders/status-transitions');
 
 // ─── The transition map ───────────────────────────────────────────────────────
@@ -238,6 +238,7 @@ const withTestOrder = async ({ status, payment = 'pending', items = 1, cashierId
   try {
     return await fn(id);
   } finally {
+    await db.query('DELETE FROM inventory_transactions WHERE reference_order_id = $1', [id]);
     await db.query(`DELETE FROM orders WHERE id = $1`, [id]);
   }
 };
@@ -327,6 +328,94 @@ test('PATCH /status refuses to move out of a terminal state', async (t) => {
       assert.equal(await historyCount(id), 0);
     });
   }
+});
+
+// ─── canTransitionAs (role-aware transitions) ────────────────────────────────
+
+test('canTransitionAs: cashier may only do ready -> completed', () => {
+  assert.ok(canTransitionAs('cashier', 'ready', 'completed'));
+  assert.equal(canTransitionAs('cashier', 'ready', 'preparing'), false);
+  assert.equal(canTransitionAs('cashier', 'confirmed', 'preparing'), false);
+  assert.equal(canTransitionAs('cashier', 'pending', 'confirmed'), false);
+  assert.equal(canTransitionAs('cashier', 'ready', 'cancelled'), false);
+});
+
+test('canTransitionAs: kitchen_staff covers exactly the cooking handoff', () => {
+  const allowed = canTransitionAs('kitchen_staff', 'confirmed', 'preparing')
+               && canTransitionAs('kitchen_staff', 'preparing', 'ready');
+  assert.ok(allowed);
+  assert.equal(canTransitionAs('kitchen_staff', 'pending', 'confirmed'), false);
+  assert.equal(canTransitionAs('kitchen_staff', 'ready', 'completed'), false);
+  assert.equal(canTransitionAs('kitchen_staff', 'ready', 'cancelled'), false);
+});
+
+test('canTransitionAs: supervisors may use the whole map except cancelled', () => {
+  for (const role of ['staff', 'owner', 'admin', 'manager']) {
+    assert.ok(canTransitionAs(role, 'pending', 'confirmed'), `${role} should allow pending -> confirmed`);
+    assert.ok(canTransitionAs(role, 'ready', 'completed'), `${role} should allow ready -> completed`);
+    assert.equal(canTransitionAs(role, 'pending', 'cancelled'), false, `${role} must not cancel via PATCH`);
+  }
+});
+
+// ─── HTTP: role gates and the cancelled escape hatch ─────────────────────────
+
+test('PATCH /status never accepts "cancelled", even for supervisors', async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+
+  await withTestOrder({ status: 'pending' }, async (id) => {
+    const res = await setStatus(id, 'cancelled');
+    assert.equal(res.status, 400);
+    assert.match(res.body.message, /POST \/api\/orders\/:id\/cancel/);
+    assert.equal(await statusOf(id), 'pending', 'status must be untouched');
+  });
+});
+
+test('PATCH /status: cashier can only complete a ready order (403 otherwise)', async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+
+  await withTestOrder({ status: 'confirmed' }, async (id) => {
+    const denied = await call('PATCH', `/api/orders/${id}/status`, { body: { status: 'preparing' }, role: 'cashier' });
+    assert.equal(denied.status, 403, 'cashier must not drive the kitchen chain');
+    assert.equal(await statusOf(id), 'confirmed');
+  });
+
+  await withTestOrder({ status: 'ready' }, async (id) => {
+    const res = await call('PATCH', `/api/orders/${id}/status`, { body: { status: 'completed' }, role: 'cashier' });
+    assert.equal(res.status, 200, 'ready -> completed is the cashier handoff closeout');
+    assert.equal(await statusOf(id), 'completed');
+  });
+});
+
+test('POST /:id/cancel is refused for kitchen_staff', async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+
+  await withTestOrder({ status: 'pending' }, async (id) => {
+    const res = await call('POST', `/api/orders/${id}/cancel`, { role: 'kitchen_staff' });
+    assert.equal(res.status, 403);
+    assert.equal(await statusOf(id), 'pending');
+  });
+});
+
+test('kitchen_staff cannot read revenue routes', async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+
+  const totals = await call('GET', '/api/orders/totals', { role: 'kitchen_staff' });
+  assert.equal(totals.status, 403, 'kitchen_staff must not see revenue totals');
+
+  const report = await call('GET', '/api/orders/report', { role: 'kitchen_staff' });
+  assert.equal(report.status, 403, 'kitchen_staff must not see the sales report');
+});
+
+test('kitchen_staff cannot list or read orders', async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+
+  await withTestOrder({ status: 'pending' }, async (id) => {
+    const list = await call('GET', '/api/orders', { role: 'kitchen_staff' });
+    assert.equal(list.status, 403, 'kitchen reads go through /api/kitchen/orders');
+
+    const detail = await call('GET', `/api/orders/${id}`, { role: 'kitchen_staff' });
+    assert.equal(detail.status, 403);
+  });
 });
 
 // ─── Kitchen regression guard ─────────────────────────────────────────────────

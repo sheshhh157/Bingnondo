@@ -13,11 +13,22 @@ const { Client } = require('pg');
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 
+// Target database: test runs go to DB_NAME_TEST so the suite can never touch
+// the dev schema. An explicit DB_NAME_TEST equal to DB_NAME is a hard stop.
+const isTestRun = process.env.NODE_ENV === 'test';
+const targetDb = isTestRun
+  ? (process.env.DB_NAME_TEST || 'bingnondo_test')
+  : (process.env.DB_NAME || 'bingnondo_db');
+if (isTestRun && targetDb === (process.env.DB_NAME || 'bingnondo_db')) {
+  console.error(`[migrate] NODE_ENV=test but DB_NAME_TEST resolves to the dev database "${targetDb}". Refusing to run.`);
+  process.exit(1);
+}
+
 async function main() {
   const client = new Client({
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
-    database: process.env.DB_NAME,
+    database: targetDb,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
   });

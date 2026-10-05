@@ -1,7 +1,8 @@
 import { useAuth } from '../../../context/AuthContext';
+import ConnectionStatus from './ConnectionStatus';
 import logo1 from '../../../assets/logo2.png';
 
-export default function KitchenHeader({ counterCount, onlineCount }) {
+export default function KitchenHeader({ counterCount, onlineCount, connected, reconnecting }) {
   const { user, logout } = useAuth();
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -48,6 +49,7 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
 
       {/* Clock + user */}
       <div className="kp-header__right">
+        <ConnectionStatus connected={connected} reconnecting={reconnecting} />
         <div className="kp-header__clock" aria-label={`Time: ${timeStr}`}>
           <span className="kp-header__time">{timeStr}</span>
           <span className="kp-header__date">{dateStr}</span>

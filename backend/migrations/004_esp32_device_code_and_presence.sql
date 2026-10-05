@@ -22,7 +22,19 @@ BEGIN;
 
 -- Step 1: rename existing column. The existing row has device_name =
 -- 'ESP32-KitchenA', location_label = 'Kitchen Counter A'.
-ALTER TABLE esp32_devices RENAME COLUMN device_name TO device_code;
+--
+-- Guarded: a database restored from bingnondo_database.sql already has
+-- device_code directly, so the RENAME only runs when device_name is still
+-- present (i.e. on databases that predate the rename).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'esp32_devices' AND column_name = 'device_name'
+  ) THEN
+    ALTER TABLE esp32_devices RENAME COLUMN device_name TO device_code;
+  END IF;
+END $$;
 
 -- Step 2: backfill device_code from the old device_name value. If for some
 -- reason that row is gone, provide a deterministic fallback so the column

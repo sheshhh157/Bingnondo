@@ -19,10 +19,47 @@ const kitchenRoutes   = require('./src/modules/kitchen/kitchen.routes');
 const menuCtrl   = require('./src/modules/menu/menu.controller');
 const socketHub  = require('./src/sockets');
 
+// ─── CORS origin list (shared by Express and Socket.IO) ─────────────────────
+// FRONTEND_URL may hold several origins, comma-separated. Production refuses
+// to start without it — silently allowing '*' would let any site open
+// authenticated sockets. In development, fall back to the Vite dev server.
+function parseAllowedOrigins() {
+  const raw = process.env.FRONTEND_URL;
+  if (raw && raw.trim()) {
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('FRONTEND_URL is required in production (comma-separated origins).');
+  }
+  return ['http://localhost:5173'];
+}
+const allowedOrigins = parseAllowedOrigins();
+
+if (process.env.NODE_ENV !== 'test') {
+  require('./src/scheduler').startAutoCancelJob();
+}
+// A placeholder or weak device key turns /api/esp32/* into an open endpoint, so
+// boot is only allowed when the key is strong. deviceAuth stays the second
+// line of defence for requests; this stops a misconfigured .env from ever
+// serving them.
+(() => {
+  const key = process.env.ESP32_DEVICE_KEY;
+  const problems = [];
+  if (!key) problems.push('it is missing (ESP32_DEVICE_KEY)');
+  if (key && key.length < 24) problems.push('it is shorter than 24 characters');
+  if (key === 'pick_any_long_random_string') problems.push('it is still the placeholder value');
+  if (problems.length > 0) {
+    throw new Error(
+      `[config] ESP32_DEVICE_KEY is not acceptable: ${problems.join('; ')}. ` +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
+  }
+})();
+
 const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, {
-  cors: { origin: process.env.FRONTEND_URL || '*', methods: ['GET', 'POST'] },
+  cors: { origin: allowedOrigins, methods: ['GET', 'POST'] },
   transports: ['websocket', 'polling'],
 });
 
@@ -32,7 +69,7 @@ socketHub.setIO(io);   // NEW: socket hub for orders, kitchen alerts, etc.
 
 // ─── Global Middleware ─────────────────────────────────────────────────────────
 app.use(cors({
-  origin: process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? undefined : 'http://localhost:5173'),
+  origin: allowedOrigins,
   credentials: true,
 }));
 

@@ -3,6 +3,17 @@ const crypto  = require('crypto');
 const db      = require('../../config/db');
 const router  = express.Router();
 
+// Key-mismatch warnings are rate-limited to once per minute per IP so a stale
+// board cannot spam the server log. Stores last accepted-timestamp per IP.
+const invalidKeyLogAt = new Map();
+function warnInvalidKey(ip) {
+  const now = Date.now();
+  const last = invalidKeyLogAt.get(ip) || 0;
+  if (now - last < 60_000) return;
+  invalidKeyLogAt.set(ip, now);
+  console.warn(`[esp32] rejected request: invalid device key from ${ip}`);
+}
+
 // The ESP32 has no user login, so it proves itself with a shared key sent in
 // the x-device-key header (set ESP32_DEVICE_KEY in backend/.env).
 function deviceAuth(req, res, next) {
@@ -13,6 +24,7 @@ function deviceAuth(req, res, next) {
   const given = Buffer.from(req.get('x-device-key') || '');
   const want  = Buffer.from(expected);
   if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) {
+    warnInvalidKey(req.ip);
     return res.status(401).json({ message: 'Invalid device key.' });
   }
   next();
@@ -38,7 +50,10 @@ router.get('/alert', deviceAuth, async (req, res, next) => {
         RETURNING id`,
       [code]
     );
-    if (!dev.rows[0]) return res.status(404).json({ message: 'Unknown device_code.' });
+    if (!dev.rows[0]) {
+      console.warn(`[esp32] unknown device_code ignored: '${code}' from ${req.ip}`);
+      return res.status(404).json({ message: 'Unknown device_code.' });
+    }
 
     const { rows } = await db.query(
       `SELECT ka.id AS alert_id,

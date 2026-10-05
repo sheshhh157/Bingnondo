@@ -215,7 +215,7 @@ export default function CashierPage() {
         orderId     = data.id;
         orderNumber = data.order_number || data.id;
         setConfirmedOrder({ id: orderId, orderNumber, snapshotDraft: [...draft] });
-        showToast(`Order #${orderNumber} sent to kitchen!`);
+        showToast(`Order #${orderNumber} created. Take payment to send it to the kitchen.`);
       }
 
       // Open the payment modal — draft stays intact so cashier can come back
