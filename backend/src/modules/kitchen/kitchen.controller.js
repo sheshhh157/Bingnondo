@@ -171,7 +171,7 @@ async function updateKitchenOrderStatus(req, res, next) {
     await client.query('BEGIN');
 
     const { rows: current } = await client.query(
-      `SELECT id, status FROM orders WHERE id = $1`,
+      `SELECT id, status, order_type FROM orders WHERE id = $1 FOR UPDATE`,
       [req.params.id]
     );
     if (!current[0]) {
@@ -180,11 +180,69 @@ async function updateKitchenOrderStatus(req, res, next) {
     }
 
     const from = current[0].status;
+    const orderType = current[0].order_type;
     if (!canTransition(from, status)) {
       await client.query('ROLLBACK');
       return res.status(409).json({
         message: `Cannot move to "${status}" from "${from}". Kitchen can only set status to: ${ALLOWED.join(', ')}.`,
       });
+    }
+
+    // Counter orders finish in one step: marking ready also closes them out as
+    // completed. Online orders keep ready -> out_for_delivery -> completed, so
+    // they behave exactly as before and stop at 'ready'.
+    if (status === 'ready' && orderType === 'counter') {
+      if (!canTransition('ready', 'completed')) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Counter orders cannot move from "ready" to "completed".' });
+      }
+
+      await client.query(
+        `UPDATE orders SET status = 'ready', updated_at = NOW()
+         WHERE id = $1`,
+        [req.params.id]
+      );
+      await client.query(
+        `INSERT INTO order_status_history (order_id, status, changed_by)
+         VALUES ($1, 'ready', $2)`,
+        [req.params.id, req.user.sub]
+      );
+
+      const { rows: doneRows } = await client.query(
+        `UPDATE orders SET status = 'completed', updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, status, order_channel,
+                   'ORD-' || LPAD(id::text, 4, '0') AS order_number`,
+        [req.params.id]
+      );
+      await client.query(
+        `INSERT INTO order_status_history (order_id, status, changed_by)
+         VALUES ($1, 'completed', $2)`,
+        [req.params.id, req.user.sub]
+      );
+
+      await client.query('COMMIT');
+
+      const order = doneRows[0];
+
+      // Let clients that patch by status end on the final value: ready, then completed.
+      socketHub.emitOrderStatus({
+        orderId: order.id,
+        orderNumber: order.order_number,
+        status: 'ready',
+      });
+      socketHub.emitOrderStatus({
+        orderId: order.id,
+        orderNumber: order.order_number,
+        status: 'completed',
+      });
+      // The manager live feed still keys off 'order:ready'.
+      socketHub.emitOrderReady({
+        orderId: order.id,
+        orderNumber: order.order_number,
+      });
+
+      return res.json(order);
     }
 
     const { rows } = await client.query(
