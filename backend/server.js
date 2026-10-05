@@ -18,7 +18,7 @@ const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
 const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 const adminConfigRoutes   = require('./src/modules/admin/admin.switch-config.routes');
 const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
-
+const supportChatRoutes = require('./src/modules/support-chat/support-chat.routes');
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
 const socketHub  = require('./src/sockets');
@@ -66,7 +66,7 @@ app.use('/api/admin/staff-accounts', adminStaffRoutes);
 app.use('/api/admin/switch-config',  adminConfigRoutes);
 // System settings: ESP32 devices, business hours, menu categories
 app.use('/api/admin/system-settings', adminSettingsRoutes);
-
+app.use('/api/support-chat', supportChatRoutes);
 // PayMongo webhook — no auth middleware (signed by PayMongo header)
 const paymentsCtrl = require('./src/modules/payments/payments.controller');
 app.post('/api/webhooks/paymongo', paymentsCtrl.paymongoWebhook);
