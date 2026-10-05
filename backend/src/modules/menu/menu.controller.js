@@ -99,7 +99,7 @@ async function _getEnrichedItem(id) {
          mi.updated_at
        FROM menu_items mi
        JOIN menu_categories mc ON mc.id = mi.category_id
-       WHERE mi.id = $1`,
+       WHERE mi.id = $1 AND mi.is_deleted = FALSE`,
       [id]
     ),
     db.query(
@@ -542,7 +542,9 @@ async function setAvailability(req, res, next) {
 }
 
 // ─── DELETE /api/menu/:id ─────────────────────────────────────────────────────
-// Staff: remove an item (cascade deletes ingredient links via FK)
+// Staff: soft-delete — sets is_deleted = TRUE instead of hard DELETE.
+// Cannot hard-delete because order_items.menu_item_id references this table,
+// and order history must be preserved.
 async function deleteMenuItem(req, res, next) {
   try {
     // Archive, don't delete.

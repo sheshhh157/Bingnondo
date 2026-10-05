@@ -121,48 +121,6 @@ function AddDeviceModal({ open, onClose, onAdded, toast }) {
   );
 }
 
-// ── API Key field (masked) ───────────────────────────────────────────
-function ApiKeyField({ label, id, value, onSave }) {
-  const [editing, setEditing]   = useState(false);
-  const [draft, setDraft]       = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [visible, setVisible]   = useState(false);
-  const masked = value ? '•'.repeat(22) + value.slice(-4) : 'Not configured';
-  async function save() {
-    if (!draft.trim()) return;
-    setLoading(true);
-    try { await onSave(draft); setEditing(false); setDraft(''); }
-    finally { setLoading(false); }
-  }
-  const EyeIcon = ({show}) => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {show?<><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>:<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>}
-    </svg>
-  );
-  return (
-    <div className="ap-input-wrap">
-      <label className="ap-label" htmlFor={id}>{label}</label>
-      {editing ? (
-        <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          <div className="ap-input-row" style={{flex:1}}>
-            <input id={id} type={visible?'text':'password'} className="ap-input ap-input--suffix"
-              value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Paste new key…"/>
-            <button className="ap-input-suffix ap-input-suffix--btn" onClick={()=>setVisible(v=>!v)} aria-label={visible?'Hide':'Show'}>
-              <EyeIcon show={visible}/>
-            </button>
-          </div>
-          <Btn variant="primary" size="sm" onClick={save} loading={loading}>Save</Btn>
-          <Btn variant="ghost" size="sm" onClick={()=>{setEditing(false);setDraft('');}}>Cancel</Btn>
-        </div>
-      ) : (
-        <div className="ap-apikey">
-          <div className="ap-apikey__masked">{masked}</div>
-          <Btn variant="ghost" size="sm" onClick={()=>setEditing(true)}>{value?'Replace':'Configure'}</Btn>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Business Hours ────────────────────────────────────────────────────
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -195,11 +153,15 @@ function BusinessHours({ hours, onChange }) {
 }
 
 // ── Category manager ──────────────────────────────────────────────────
+// categories: [{ id, name }]
+// onAdd(name: string), onRemove({ id, name })
 function CategoryManager({ categories, onAdd, onRemove }) {
   const [val, setVal] = useState('');
   function add() {
     const t = val.trim();
-    if (!t || categories.includes(t)) return;
+    if (!t) return;
+    const duplicate = categories.some(c => c.name.toLowerCase() === t.toLowerCase());
+    if (duplicate) return;
     onAdd(t); setVal('');
   }
   return (
@@ -208,9 +170,9 @@ function CategoryManager({ categories, onAdd, onRemove }) {
         {categories.length === 0
           ? <span style={{fontSize:'0.75rem',color:'rgba(232,224,212,0.3)'}}>No categories yet.</span>
           : categories.map(c=>(
-              <div key={c} className="ap-tag">
-                {c}
-                <button className="ap-tag__remove" onClick={()=>onRemove(c)} aria-label={`Remove ${c}`}>✕</button>
+              <div key={c.id} className="ap-tag">
+                {c.name}
+                <button className="ap-tag__remove" onClick={()=>onRemove(c)} aria-label={`Remove ${c.name}`}>✕</button>
               </div>
             ))
         }
@@ -231,11 +193,10 @@ function CategoryManager({ categories, onAdd, onRemove }) {
 // ── Main page ─────────────────────────────────────────────────────────
 export default function SystemSettings() {
   const { toasts, dismiss, toast } = useToast();
-  const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
-  const [devices, setDevices]   = useState([]);
-  const [settings, setSettings] = useState(null);
-  const [hours, setHours]       = useState({});
+  const [loading, setLoading]       = useState(true);
+  const [saving, setSaving]         = useState(false);
+  const [devices, setDevices]       = useState([]);
+  const [hours, setHours]           = useState({});
   const [categories, setCategories] = useState([]);
   const [addDevOpen, setAddDevOpen] = useState(false);
   const [delDevice, setDelDevice]   = useState(null);
@@ -244,27 +205,67 @@ export default function SystemSettings() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: s }, { data: d }] = await Promise.all([adminAPI.getSettings(), adminAPI.listDevices()]);
-      setSettings(s); setHours(s.business_hours||{}); setCategories(s.menu_categories||[]); setDevices(d);
+      // apiRequest wraps the full JSON body as { data },
+      // and backend returns { data: rows } — so the real array is at response.data.data
+      const [hoursRes, catsRes, devsRes] = await Promise.all([
+        adminAPI.getBusinessHours(),
+        adminAPI.listCategories(),
+        adminAPI.listDevices(),
+      ]);
+      const hoursData = hoursRes.data?.data ?? hoursRes.data ?? [];
+      const catsData  = catsRes.data?.data  ?? catsRes.data  ?? [];
+      const devsData  = devsRes.data?.data  ?? devsRes.data  ?? [];
+      // Convert array from backend [ {day_of_week, day_label, open_time, close_time, is_closed} ]
+      // to the shape BusinessHours component expects: { Monday: { open, close, closed } }
+      const hoursMap = {};
+      hoursData.forEach(row => {
+        hoursMap[row.day_label] = {
+          open:   row.open_time  ? row.open_time.slice(0,5)  : '08:00',
+          close:  row.close_time ? row.close_time.slice(0,5) : '22:00',
+          closed: row.is_closed,
+        };
+      });
+      setHours(hoursMap);
+      setCategories(catsData.map(c => ({ id: c.id, name: c.name })));
+      setDevices(devsData);
     } catch { toast.error('Failed to load settings.'); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(()=>{ loadAll(); },[loadAll]);
 
-  async function saveApiKey(field, value) {
-    try { await adminAPI.updateSettings({[field]:value}); setSettings(s=>({...s,[field]:value})); toast.success('API key updated.'); }
-    catch(err) { toast.error(err.message||'Save failed.'); }
-  }
   async function saveHours() {
     setSaving(true);
-    try { await adminAPI.updateSettings({business_hours:hours}); toast.success('Business hours saved.'); }
-    catch(err) { toast.error(err.message||'Save failed.'); }
+    try {
+      // Convert local { Monday: { open, close, closed } } back to backend format
+      const DAY_TO_DOW = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
+      const payload = Object.entries(hours).map(([day, slot]) => ({
+        day_of_week: DAY_TO_DOW[day],
+        open_time:   slot.closed ? null : slot.open,
+        close_time:  slot.closed ? null : slot.close,
+        is_closed:   slot.closed,
+      }));
+      await adminAPI.saveBusinessHours(payload);
+      toast.success('Business hours saved.');
+    } catch(err) { toast.error(err?.response?.data?.message || err.message || 'Save failed.'); }
     finally { setSaving(false); }
   }
-  async function saveCategories(updated) {
-    try { await adminAPI.updateSettings({menu_categories:updated}); setCategories(updated); }
-    catch(err) { toast.error(err.message||'Failed to update categories.'); }
+
+  async function handleAddCategory(name) {
+    try {
+      const res = await adminAPI.createCategory(name);
+      const cat = res.data?.data ?? res.data;
+      setCategories(prev => [...prev, { id: cat.id, name: cat.name }]);
+      toast.success(`Category "${cat.name}" added.`);
+    } catch(err) { toast.error(err?.response?.data?.message || err.message || 'Failed to add category.'); }
+  }
+
+  async function handleRemoveCategory(cat) {
+    try {
+      await adminAPI.deleteCategory(cat.id);
+      setCategories(prev => prev.filter(c => c.id !== cat.id));
+      toast.success(`Category "${cat.name}" removed.`);
+    } catch(err) { toast.error(err?.response?.data?.message || err.message || 'Failed to remove category.'); }
   }
   async function handleDelDevice() {
     setDelLoading(true);
@@ -291,16 +292,6 @@ export default function SystemSettings() {
           }
         </Section>
 
-        {/* API Keys */}
-        <Section title="API Keys" subtitle="Keys are encrypted at rest and masked in this view">
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <ApiKeyField label="PayMongo secret key" id="pm-key" value={settings?.paymongo_key} onSave={v=>saveApiKey('paymongo_key',v)}/>
-            <div className="ap-divider"/>
-            <ApiKeyField label="OpenAI API key" id="oai-key" value={settings?.openai_key} onSave={v=>saveApiKey('openai_key',v)}/>
-            <ApiKeyField label="Gemini API key (fallback)" id="gem-key" value={settings?.gemini_key} onSave={v=>saveApiKey('gemini_key',v)}/>
-          </div>
-        </Section>
-
         {/* Business Hours */}
         <Section title="Business hours" subtitle="Controls when online ordering is available"
           action={<Btn variant="gold" size="sm" onClick={saveHours} loading={saving}>Save hours</Btn>}>
@@ -311,8 +302,8 @@ export default function SystemSettings() {
         <Section title="Menu categories" subtitle="Master list used across the ordering system">
           <CategoryManager
             categories={categories}
-            onAdd={c=>saveCategories([...categories,c])}
-            onRemove={c=>saveCategories(categories.filter(x=>x!==c))}
+            onAdd={handleAddCategory}
+            onRemove={handleRemoveCategory}
           />
         </Section>
       </div>

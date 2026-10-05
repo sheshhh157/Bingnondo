@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocketContext, useSocketEvent } from '../../context/SocketContext';
 import { useToast } from '../../context/ToastContext';
+import DashboardSwitcher from '../../components/DashboardSwitcher';
 import useLiveData from '../../hooks/useLiveData';
 import { timeStamp } from '../../utils/format';
 import { OPERATIONAL_INITIAL, fetchOperationalSnapshot, OPERATIONAL_EVENTS, stockCounts, queueTone, useNow } from './managerData';
@@ -12,26 +13,26 @@ import logo from '../../assets/logo.png';
 
 const STATUS_TOAST = {
   confirmed: { desc: 'Order confirmed', variant: 'default' },
-  preparing: { desc: 'Being prepared', variant: 'default' },
-  completed: { desc: 'Order completed', variant: 'success' },
-  cancelled: { desc: 'Order cancelled', variant: 'danger' },
+  preparing:  { desc: 'Being prepared',  variant: 'default' },
+  completed:  { desc: 'Order completed', variant: 'success' },
+  cancelled:  { desc: 'Order cancelled', variant: 'danger'  },
 };
 
 const SECTIONS = [
   {
     label: 'Overview',
     links: [
-      { to: '/manager/dashboard', label: 'Dashboard', sub: 'Analytics at a glance', icon: <DashboardIcon /> },
-      { to: '/manager/sales', label: 'Sales Reports', sub: 'Revenue & transactions', icon: <SalesIcon /> },
+      { to: '/manager/dashboard', label: 'Dashboard',     sub: 'Analytics at a glance',    icon: <DashboardIcon /> },
+      { to: '/manager/sales',     label: 'Sales Reports', sub: 'Revenue & transactions',    icon: <SalesIcon /> },
     ],
   },
   {
     label: 'Operational Oversight',
     links: [
-      { to: '/manager/oversight/kitchen', label: 'Kitchen', sub: 'Counter & online queues', icon: <KitchenIcon /> },
-      { to: '/manager/oversight/stocks', label: 'Stocks', sub: 'Reorder alerts', icon: <StocksIcon /> },
-      { to: '/manager/oversight/menu', label: 'Menu', sub: 'Item availability', icon: <MenuIcon /> },
-      { to: '/manager/oversight/delivery', label: 'Delivery', sub: 'Track progress', icon: <DeliveryIcon /> },
+      { to: '/manager/oversight/kitchen',  label: 'Kitchen',  sub: 'Counter & online queues', icon: <KitchenIcon /> },
+      { to: '/manager/oversight/stocks',   label: 'Stocks',   sub: 'Reorder alerts',           icon: <StocksIcon /> },
+      { to: '/manager/oversight/menu',     label: 'Menu',     sub: 'Item availability',        icon: <MenuIcon /> },
+      { to: '/manager/oversight/delivery', label: 'Delivery', sub: 'Track progress',           icon: <DeliveryIcon /> },
     ],
   },
 ];
@@ -40,36 +41,30 @@ export default function ManagerLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const { payload: orderNew } = useSocketEvent('order:new');
-  const { payload: orderReady } = useSocketEvent('order:ready');
+  const { payload: orderNew }    = useSocketEvent('order:new');
+  const { payload: orderReady }  = useSocketEvent('order:ready');
   const { payload: orderStatus } = useSocketEvent('order:status');
   const { connected } = useSocketContext();
   const { toast } = useToast();
 
-  // Live counts for nav badges (kitchen queue, stock alerts, delivery).
   const { data: live, lastUpdated: syncStamp } = useLiveData({
     fetchFn: fetchOperationalSnapshot,
-    initial: OPERATIONAL_INITIAL,
-    events: OPERATIONAL_EVENTS,
-    pollMs: 15000,
+    initial:  OPERATIONAL_INITIAL,
+    events:   OPERATIONAL_EVENTS,
+    pollMs:   15000,
   });
 
-  // Idle ticker so the queue-age badge flips on time.
   const now = useNow();
 
   const { kitchen = [], stock = [], deliveries = [] } = live;
-  const kitchenTone = queueTone(kitchen, now);
-  const stockAlerts = stockCounts(stock).alerts;
+  const kitchenTone    = queueTone(kitchen, now);
+  const stockAlerts    = stockCounts(stock).alerts;
   const outForDelivery = deliveries.filter((d) => d.status === 'out_for_delivery').length;
 
   const badges = {
-    '/manager/oversight/kitchen': {
-      value: kitchen.length,
-      tone: kitchenTone,
-      showWhenZero: true,
-    },
-    '/manager/oversight/stocks': { value: stockAlerts, tone: 'critical', showWhenZero: false },
-    '/manager/oversight/delivery': { value: outForDelivery, tone: 'default', showWhenZero: false },
+    '/manager/oversight/kitchen':  { value: kitchen.length,  tone: kitchenTone, showWhenZero: true  },
+    '/manager/oversight/stocks':   { value: stockAlerts,     tone: 'critical',  showWhenZero: false },
+    '/manager/oversight/delivery': { value: outForDelivery,  tone: 'default',   showWhenZero: false },
   };
 
   const handleLogout = () => {
@@ -89,36 +84,23 @@ export default function ManagerLayout() {
     };
   }, [drawerOpen]);
 
-  // Live toast on new order
+  // Live toasts
   useEffect(() => {
     if (!orderNew) return;
     const itemCount = (orderNew.order_items || []).reduce((s, it) => s + (it.quantity || 0), 0);
-    toast({
-      title: `New order #${orderNew.order_number}`,
-      desc: `${itemCount} item${itemCount === 1 ? '' : 's'} · ${orderNew.order_channel === 'mobile_app' ? 'Online' : 'Counter'}`,
-    });
+    toast({ title: `New order #${orderNew.order_number}`, desc: `${itemCount} item${itemCount === 1 ? '' : 's'} · ${orderNew.order_channel === 'mobile_app' ? 'Online' : 'Counter'}` });
   }, [orderNew, toast]);
 
-  // Live toast when an order is ready for pickup / delivery
   useEffect(() => {
     if (!orderReady) return;
-    toast({
-      title: `Order #${orderReady.orderNumber}`,
-      desc: 'Ready for pickup',
-      variant: 'warning',
-    });
+    toast({ title: `Order #${orderReady.orderNumber}`, desc: 'Ready for pickup', variant: 'warning' });
   }, [orderReady, toast]);
 
-  // Live toast on every status change
   useEffect(() => {
     if (!orderStatus) return;
     const meta = STATUS_TOAST[orderStatus.status];
     if (!meta) return;
-    toast({
-      title: `Order #${orderStatus.orderNumber}`,
-      desc: meta.desc,
-      variant: meta.variant,
-    });
+    toast({ title: `Order #${orderStatus.orderNumber}`, desc: meta.desc, variant: meta.variant });
   }, [orderStatus, toast]);
 
   return (
@@ -137,9 +119,7 @@ export default function ManagerLayout() {
               key={to}
               to={to}
               title={label}
-              className={({ isActive }) =>
-                `ml-compact__link${isActive ? ' ml-compact__link--active' : ''}`
-              }
+              className={({ isActive }) => `ml-compact__link${isActive ? ' ml-compact__link--active' : ''}`}
               aria-label={label}
             >
               {icon}
@@ -170,6 +150,8 @@ export default function ManagerLayout() {
           <span className="ml-topbar__name">Bingnondo</span>
         </div>
         <ConnPill connected={connected} />
+        {/* Dashboard switcher in mobile topbar */}
+        <DashboardSwitcher variant="light" context="header" />
         <button
           className="ml-topbar__menu"
           onClick={() => setDrawerOpen(true)}
@@ -216,11 +198,6 @@ export default function ManagerLayout() {
   );
 }
 
-/**
- * Rendered twice — the permanent sidebar and the mobile drawer — so it lives
- * at module scope and takes what it needs as props rather than closing over
- * the layout's state (and being rebuilt on every render).
- */
 function ConnPill({ connected }) {
   return (
     <span className={`ml-conn${connected ? '' : ' ml-conn--off'}`} role="status">
@@ -241,6 +218,11 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
         </div>
       </div>
 
+      {/* Dashboard switcher — below brand, above nav */}
+      <div style={{ padding: '4px 0 8px' }}>
+        <DashboardSwitcher variant="light" context="sidebar" />
+      </div>
+
       <nav className="ml-nav" aria-label="Manager navigation">
         {SECTIONS.map((section) => (
           <div key={section.label} className="ml-section">
@@ -253,9 +235,7 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
                     key={to}
                     to={to}
                     onClick={onNav}
-                    className={({ isActive }) =>
-                      `ml-nav__link${isActive ? ' ml-nav__link--active' : ''}`
-                    }
+                    className={({ isActive }) => `ml-nav__link${isActive ? ' ml-nav__link--active' : ''}`}
                   >
                     {({ isActive }) => (
                       <>
@@ -283,6 +263,7 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
         ))}
       </nav>
 
+      {/* User + dashboard switcher + logout */}
       <div className="ml-user">
         <div className="ml-user__card">
           <div className="ml-user__avatar" aria-hidden="true">
@@ -290,9 +271,14 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
           </div>
           <div className="ml-user__info">
             <span className="ml-user__name">{user?.full_name || 'Manager'}</span>
-            <span className="ml-user__role">{user?.role || 'manager'}</span>
+            <span className="ml-user__role">
+              {user?.home_role && user.home_role !== user.role
+                ? `Manager (switched)`
+                : user?.role || 'manager'}
+            </span>
           </div>
         </div>
+
         <button className="ml-user__logout" onClick={onLogout} aria-label="Sign out">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>

@@ -1,17 +1,18 @@
 import { VIEWS } from '../CashierPage';
 import '../../../styles/CashierHeader.css';
 import logo from '../../../assets/logo1.png';
+import DashboardSwitcher from '../../../components/DashboardSwitcher';
 
 export default function CashierHeader({ user, view, onViewChange, onLogout, draftCount }) {
   return (
     <header className="c-header">
       {/* Left: wordmark */}
       <div className="c-header__brand">
-        <img 
-          className="c-header__logo" 
-          src={logo} 
-          alt="Bingnondo Cafe Logo" 
-          width="35" 
+        <img
+          className="c-header__logo"
+          src={logo}
+          alt="Bingnondo Cafe Logo"
+          width="35"
           height="35"
         />
         <div className="c-header__titles">
@@ -53,14 +54,21 @@ export default function CashierHeader({ user, view, onViewChange, onLogout, draf
         </button>
       </nav>
 
-      {/* Right: user info + logout */}
+      {/* Right: dashboard switcher + user info + logout */}
       <div className="c-header__user">
+        {/* Dashboard switcher — only visible if admin granted access to other dashboards */}
+        <DashboardSwitcher variant="colored" context="header" />
+
         <div className="c-header__avatar" aria-hidden="true">
           {user?.full_name?.[0]?.toUpperCase() || 'C'}
         </div>
         <div className="c-header__user-info">
           <span className="c-header__user-name">{user?.full_name || 'Cashier'}</span>
-          <span className="c-header__user-role">Cashier</span>
+          <span className="c-header__user-role">
+            {user?.home_role && user.home_role !== user.role
+              ? `Cashier (from ${user.home_role})`
+              : 'Cashier'}
+          </span>
         </div>
         <button
           className="c-header__logout"
