@@ -89,11 +89,12 @@ export const ordersAPI = {
    *   matching orders ignoring `limit`/`offset`, so a caller can build a pager
    *   without downloading every page.
    */
-  getRange: async ({ from, to, limit, offset = 0, status, search } = {}) => {
+  getRange: async ({ from, to, limit, offset = 0, status, payment, search } = {}) => {
     const q = new URLSearchParams();
     if (from) q.set('from', from);
     if (to) q.set('to', to);
     if (status) q.set('status', status);
+    if (payment) q.set('payment', payment);
     if (search && search.trim()) q.set('search', search.trim());
     if (Number.isFinite(limit)) q.set('limit', String(limit));
     if (offset > 0) q.set('offset', String(offset));

@@ -261,8 +261,9 @@ function buildOrderFilters(req, { includeStatus = true } = {}) {
     params.push(status.split(',').map((s) => s.trim()));
   }
 
-  // Payment method of the order's latest payment.
-  if (payment) {
+  // Payment method of the order's latest payment. 'all' is the UI's filter
+  // for "any method", so it must not be treated as a literal method value.
+  if (payment && payment !== 'all') {
     conditions.push(`p.method = $${p++}`);
     params.push(payment);
   }

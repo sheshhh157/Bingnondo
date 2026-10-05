@@ -108,6 +108,21 @@ test('search matches order number or item name, and escapes the term', () => {
   assert.doesNotMatch(none.where, /ILIKE/, 'blank search must not filter');
 });
 
+test('payment method filters on the latest payment, and `all` means no filter', () => {
+  const cash = buildOrderFilters(manager({ payment: 'cash' }));
+  assert.match(cash.where, /p\.method = \$\d+/);
+  assert.deepEqual(cash.params.at(-1), 'cash');
+
+  // Regression: the sales page sends `payment=all` when its dropdown is on
+  // "All payments", which used to match `p.method = 'all'` and zero the
+  // report. 'all' must behave like an omitted filter.
+  const all = buildOrderFilters(manager({ payment: 'all' }));
+  assert.doesNotMatch(all.where, /p\.method/);
+
+  const none = buildOrderFilters(manager({}));
+  assert.doesNotMatch(none.where, /p\.method/);
+});
+
 test('nextIndex is the first free placeholder, so callers can append params', () => {
   const { nextIndex, params } = buildOrderFilters(manager({ from: '2026-01-01', search: 'tea', status: 'ready' }));
   assert.equal(nextIndex, params.length + 1);
@@ -314,6 +329,14 @@ test('report buckets sum back to the headline revenue', async (t) => {
   assert.equal(sum(body.method_split, 'amount'), body.revenue);
   assert.equal(sum(body.daily, 'revenue'), body.revenue);
   assert.equal(sum(body.peak_hours, 'revenue'), body.revenue);
+});
+
+test("the report with payment='all' matches the report with no payment filter", async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+  const plain = await callReport('range=all');
+  const all = await callReport('range=all&payment=all');
+  assert.equal(all.body.revenue, plain.body.revenue);
+  assert.equal(all.body.order_count, plain.body.order_count);
 });
 
 test('an unknown timezone falls back instead of erroring', async (t) => {
