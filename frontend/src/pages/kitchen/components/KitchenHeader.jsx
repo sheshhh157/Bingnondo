@@ -1,5 +1,6 @@
 import { useAuth } from '../../../context/AuthContext';
 import ConnectionStatus from './ConnectionStatus';
+import DashboardSwitcher from '../../../components/DashboardSwitcher';
 import logo1 from '../../../assets/logo2.png';
 
 export default function KitchenHeader({ counterCount, onlineCount, connected, reconnecting }) {
@@ -19,9 +20,7 @@ export default function KitchenHeader({ counterCount, onlineCount, connected, re
         />
         <div className="kp-header__brand-text">
           <span className="kp-header__name">Bingnondo</span>
-          <span className="kp-header__role">
-            Kitchen Display
-          </span>
+          <span className="kp-header__role">Kitchen Display</span>
         </div>
       </div>
 
@@ -47,13 +46,17 @@ export default function KitchenHeader({ counterCount, onlineCount, connected, re
         </div>
       </div>
 
-      {/* Clock + user */}
+      {/* Clock + switcher + user */}
       <div className="kp-header__right">
         <ConnectionStatus connected={connected} reconnecting={reconnecting} />
         <div className="kp-header__clock" aria-label={`Time: ${timeStr}`}>
           <span className="kp-header__time">{timeStr}</span>
           <span className="kp-header__date">{dateStr}</span>
         </div>
+
+        {/* Dashboard switcher — only visible if admin granted access to other dashboards */}
+        <DashboardSwitcher variant="light" context="header" />
+
         <div className="kp-header__user">
           <span className="kp-header__username">
             {user?.full_name || user?.name || 'Kitchen'}

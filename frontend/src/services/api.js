@@ -250,87 +250,160 @@ function paginate(arr, page=1, limit=10) {
   return { data: arr.slice(start, start+limit), totalPages: Math.max(1, Math.ceil(arr.length/limit)), total: arr.length };
 }
 
-export const adminAPI = {
-  // ── Staff Accounts ──────────────────────────────────────────────────
-  listStaffAccounts: async ({ page=1, limit=10, search, role, status } = {}) => {
-    await delay(350);
-    let result = [...MOCK_STAFF_ACCOUNTS];
-    if (search) result = result.filter(a => a.full_name.toLowerCase().includes(search.toLowerCase()) || a.email.toLowerCase().includes(search.toLowerCase()));
-    if (role)   result = result.filter(a => a.role   === role);
-    if (status) result = result.filter(a => a.status === status);
-    return { data: paginate(result, page, limit) };
-  },
 
-  createStaffAccount: async (data) => {
-    await delay(400);
-    const account = { id: ++staffAccountCounter, ...data, status:'active', created_at: new Date().toISOString() };
-    MOCK_STAFF_ACCOUNTS.push(account);
-    addAuditEntry('create', 'staff_account', account.id, { role: data.role });
-    return { data: account };
-  },
+// ─── SWITCH DASHBOARD API ─────────────────────────────────────────────────────
+// These hit the real backend — no mock needed.
+export const switchAPI = {
+  /** GET /api/auth/staff/switch-options — dashboards this staff can switch to */
+  getOptions: () => apiRequest('/auth/staff/switch-options'),
 
-  updateStaffStatus: async (id, status) => {
-    await delay(300);
-    const account = MOCK_STAFF_ACCOUNTS.find(a => a.id === Number(id));
-    if (account) account.status = status;
-    addAuditEntry(status==='active'?'reactivate':'deactivate', 'staff_account', Number(id), {});
-    return { data: { success: true } };
-  },
+  /** POST /api/auth/staff/switch-dashboard — perform the switch */
+  switch: (body) =>
+    apiRequest('/auth/staff/switch-dashboard', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
-  resetStaffPassword: async (id) => {
-    await delay(300);
-    addAuditEntry('reset_password', 'staff_account', Number(id), {});
-    return { data: { success: true } };
-  },
-
-  // ── Settings ────────────────────────────────────────────────────────
-  getSettings: async () => {
-    await delay(300);
-    return { data: { ...MOCK_SETTINGS } };
-  },
-
-  updateSettings: async (updates) => {
-    await delay(300);
-    Object.assign(MOCK_SETTINGS, updates);
-    const field = Object.keys(updates)[0];
-    addAuditEntry('update_settings', 'settings', null, { field });
-    return { data: { success: true } };
-  },
-
-  // ── ESP32 Devices ────────────────────────────────────────────────────
-  listDevices: async () => {
-    await delay(250);
-    return { data: [...MOCK_DEVICES] };
-  },
-
-  registerDevice: async (data) => {
-    await delay(350);
-    const device = { id: ++deviceCounter, ...data, is_online: false };
-    MOCK_DEVICES.push(device);
-    addAuditEntry('register_device', 'esp32_device', device.id, { label: data.location_label });
-    return { data: device };
-  },
-
-  removeDevice: async (id) => {
-    await delay(300);
-    const device = MOCK_DEVICES.find(d => d.id === Number(id));
-    MOCK_DEVICES = MOCK_DEVICES.filter(d => d.id !== Number(id));
-    addAuditEntry('remove_device', 'esp32_device', Number(id), { label: device?.location_label });
-    return { data: { success: true } };
-  },
-
-  // ── Audit Log ────────────────────────────────────────────────────────
-  getAuditLog: async ({ page=1, limit=20, actor_id, action, from, to } = {}) => {
-    await delay(350);
-    let result = [...MOCK_AUDIT_LOG];
-    if (actor_id) result = result.filter(e => String(e.actor_id) === String(actor_id));
-    if (action)   result = result.filter(e => e.action === action);
-    if (from)     result = result.filter(e => new Date(e.created_at) >= new Date(from));
-    if (to)       result = result.filter(e => new Date(e.created_at) <= new Date(to + 'T23:59:59'));
-    return { data: paginate(result, page, limit) };
-  },
+  /** POST /api/auth/staff/switch-pin/update — staff updates own PIN */
+  updatePin: (body) =>
+    apiRequest('/auth/staff/switch-pin/update', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
-// ─── CUSTOMER RESTRICTIONS (6.4) ───────────────────────────────────────────────
+
+// ─── ADMIN API (real backend — replaces mock) ─────────────────────────────────
+export const adminAPI = {
+  // ── Staff Accounts ──────────────────────────────────────────────────────────
+  listStaffAccounts: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.page)   q.set('page',   params.page);
+    if (params.limit)  q.set('limit',  params.limit);
+    if (params.search) q.set('search', params.search);
+    if (params.role)   q.set('role',   params.role);
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString();
+    return apiRequest(`/admin/staff-accounts${qs ? `?${qs}` : ''}`);
+  },
+
+  getStaffAccount: (id) =>
+    apiRequest(`/admin/staff-accounts/${id}`),
+
+  createStaffAccount: (data) =>
+    apiRequest('/admin/staff-accounts', {
+      method: 'POST',
+      body: JSON.stringify({
+        full_name: data.full_name,
+        email:     data.email,
+        password:  data.temp_password,   // backend expects 'password'
+        role:      data.role,
+      }),
+    }),
+
+  updateStaffStatus: (id, status) =>
+    apiRequest(`/admin/staff-accounts/${id}/status`, {
+      method: 'PATCH',
+      // Frontend passes 'inactive', backend expects 'deactivated'
+      body: JSON.stringify({ status: status === 'inactive' ? 'deactivated' : status }),
+    }),
+
+  resetStaffPassword: (id, new_password) =>
+    apiRequest(`/admin/staff-accounts/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password }),
+    }),
+
+  // ── Dashboard Access ────────────────────────────────────────────────────────
+  getDashboardAccess: (id) =>
+    apiRequest(`/admin/staff-accounts/${id}/dashboard-access`),
+
+  setDashboardAccess: (id, dashboards) =>
+    apiRequest(`/admin/staff-accounts/${id}/dashboard-access`, {
+      method: 'PUT',
+      body: JSON.stringify({ dashboards }),
+    }),
+
+  // ── Switch PIN (admin sets for staff) ───────────────────────────────────────
+  setStaffSwitchPin: (id, pin) =>
+    apiRequest(`/admin/staff-accounts/${id}/switch-pin`, {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
+    }),
+
+  removeStaffSwitchPin: (id) =>
+    apiRequest(`/admin/staff-accounts/${id}/switch-pin`, { method: 'DELETE' }),
+
+  // ── Switch Config ───────────────────────────────────────────────────────────
+  getSwitchConfig: () =>
+    apiRequest('/admin/switch-config'),
+
+  setPerStaffSwitchConfig: (staffId, requires_pin) =>
+    apiRequest(`/admin/switch-config/per-staff/${staffId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ requires_pin }),
+    }),
+
+  setPerDashboardSwitchConfig: (dashboard, requires_pin) =>
+    apiRequest(`/admin/switch-config/per-dashboard/${dashboard}`, {
+      method: 'PUT',
+      body: JSON.stringify({ requires_pin }),
+    }),
+
+  // ── Audit Log ───────────────────────────────────────────────────────────────
+  getAuditLog: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.page)       q.set('page',        params.page);
+    if (params.limit)      q.set('limit',        params.limit);
+    if (params.actor_id)   q.set('actor_id',     params.actor_id);
+    if (params.action)     q.set('action',        params.action);
+    if (params.from)       q.set('from',          params.from);
+    if (params.to)         q.set('to',            params.to);
+    const qs = q.toString();
+    return apiRequest(`/admin/audit-log${qs ? `?${qs}` : ''}`);
+  },
+
+  // ── Business Hours ──────────────────────────────────────────────────────────
+  getBusinessHours: () =>
+    apiRequest('/admin/system-settings/business-hours'),
+
+  saveBusinessHours: (hours) =>
+    apiRequest('/admin/system-settings/business-hours', {
+      method: 'PUT',
+      body: JSON.stringify({ hours }),
+    }),
+
+  // ── Menu Categories ─────────────────────────────────────────────────────────
+  listCategories: () =>
+    apiRequest('/admin/system-settings/menu-categories'),
+
+  createCategory: (name) =>
+    apiRequest('/admin/system-settings/menu-categories', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteCategory: (id) =>
+    apiRequest(`/admin/system-settings/menu-categories/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // ── ESP32 Devices ───────────────────────────────────────────────────────────
+  listDevices: () =>
+    apiRequest('/admin/system-settings/esp32-devices'),
+
+  registerDevice: (data) =>
+    apiRequest('/admin/system-settings/esp32-devices', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  removeDevice: (id) =>
+    apiRequest(`/admin/system-settings/esp32-devices/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
+// ─── CUSTOMER RESTRICTIONS (6.4) ───────────────────────────────────────
 
 let MOCK_CUSTOMER_RESTRICTIONS = [
   {
@@ -439,7 +512,8 @@ Object.assign(adminAPI, {
   getCustomerViolations:         customerRestrictionsAPI.getCustomerViolations,
   overrideCustomerRestriction:   customerRestrictionsAPI.overrideCustomerRestriction,
 });
-// ─── DELIVERY MOCK DATA (§4.3) ────────────────────────────────────────────────
+
+// ─── DELIVERY MOCK DATA (§4.3) ────────────────────────────────────────
 let MOCK_DELIVERIES = [
   {
     id: 1,
@@ -576,7 +650,8 @@ let MOCK_DELIVERIES = [
   },
 ];
 
-// ─── DELIVERY API (§4.3) ──────────────────────────────────────────────────────
+// ─── DELIVERY API (§4.3) ──────────────────────────────────────────────
+
 export const deliveryAPI = {
   /** GET /api/deliveries — all deliveries for staff view */
   getAll: async () => {
