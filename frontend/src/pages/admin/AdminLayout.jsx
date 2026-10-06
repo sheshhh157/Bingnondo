@@ -19,6 +19,19 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/riders',
+    label: 'Riders',
+    sub: 'Delivery fleet',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="5.5" cy="17.5" r="3.5"/>
+        <circle cx="18.5" cy="17.5" r="3.5"/>
+        <path d="M15 6h-3l-1 4H7l2-4h3"/>
+        <path d="M9 10l3 4 3-4"/>
+      </svg>
+    ),
+  },
+  {
     to: '/admin/settings',
     label: 'System Settings',
     sub: 'Devices & config',

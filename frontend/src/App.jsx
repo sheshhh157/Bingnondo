@@ -16,6 +16,7 @@ import StaffAccounts from './pages/admin/StaffAccounts';
 import SystemSettings from './pages/admin/SystemSettings';
 import AuditLog from './pages/admin/AuditLog';
 import CustomerRestrictions from './pages/admin/CustomerRestrictions';
+import RidersPage from './pages/admin/RidersPage';
 import ManagerLayout from './pages/manager/ManagerLayout';
 import DashboardPage from './pages/manager/DashboardPage';
 import SalesReportPage from './pages/manager/SalesReportPage';
@@ -121,6 +122,7 @@ export default function App() {
             <Route path="settings"     element={<SystemSettings />} />
             <Route path="audit"        element={<AuditLog />} />
             <Route path="restrictions" element={<CustomerRestrictions />} />
+            <Route path="riders"       element={<RidersPage />} />
           </Route>
 
           {/* Manager */}

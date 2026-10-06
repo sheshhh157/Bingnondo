@@ -574,6 +574,56 @@ export const adminAPI = {
     apiRequest(`/admin/system-settings/esp32-devices/${id}`, {
       method: 'DELETE',
     }),
+
+  // ── Riders (6.5 Rider Management) ──────────────────────────────────────────
+  listRiders: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.page)   q.set('page',   params.page);
+    if (params.limit)  q.set('limit',  params.limit);
+    if (params.search) q.set('search', params.search);
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString();
+    return apiRequest(`/admin/riders${qs ? `?${qs}` : ''}`);
+  },
+
+  createRider: (data) =>
+    apiRequest('/admin/riders', {
+      method: 'POST',
+      body: JSON.stringify({
+        full_name:     data.full_name,
+        mobile_number: data.mobile_number,
+        email:         data.email     || undefined,
+        plate_number:  data.plate_number || undefined,
+        vehicle_type:  data.vehicle_type,
+        notes:         data.notes     || undefined,
+        password:      data.temp_password,   // backend field name
+      }),
+    }),
+
+  updateRider: (id, data) =>
+    apiRequest(`/admin/riders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        full_name:     data.full_name,
+        mobile_number: data.mobile_number,
+        email:         data.email         || undefined,
+        plate_number:  data.plate_number  || undefined,
+        vehicle_type:  data.vehicle_type,
+        notes:         data.notes         || undefined,
+      }),
+    }),
+
+  updateRiderStatus: (id, status) =>
+    apiRequest(`/admin/riders/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  resetRiderPassword: (id, new_password) =>
+    apiRequest(`/admin/riders/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password }),
+    }),
 };
 
 export const deliveryAPI = {
