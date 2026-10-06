@@ -15,3 +15,16 @@ build
 *.dump
 *.zip
 *.err
+
+# Stale copy of the backend tree that predates backend/ and cannot run: it is
+# missing the modules its own server.js imports and has no package.json.
+# Kept on disk only in case it holds something worth recovering; ignoring it
+# stops a future `git add .` from committing files that shadow the real ones.
+# The tracked ESP32 files (.ino, SETUP.md, secrets.example.h, seed_esp32_device.sql)
+# sit outside this directory and stay tracked.
+/esp32-buzzer/esp32-buzzer/backend/
+
+# Schema-only dumps (75 CREATE statements, no rows). Not read by the app.
+# Regenerate with pg_dump --schema-only when needed.
+/all_tables.sql
+/bingnondo_schema_live.sql
