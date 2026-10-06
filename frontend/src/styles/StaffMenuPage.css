@@ -139,16 +139,56 @@
   font-size: 0.875rem;
   color: var(--color-foreground);
   padding: 9px 0;
+  /* Kills WebKit's inset search decoration, which otherwise draws a second
+     border inside the wrapper on iOS. The manager input sets this too. */
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .mn-search__input::placeholder { color: var(--color-muted-foreground); opacity: 0.6; }
 
-/* Narrow phones: filter controls stack instead of squeezing into one row. */
+/* The select row sits behind the Filter button on narrow phones, mirroring the
+   manager's OversightStocks toolbar. Stacking them full-width instead pushed
+   the actual data far down the screen. */
+.mn-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mn-filter-btn { display: none; }
+
+.mn-filter-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--color-primary);
+  display: inline-block;
+}
+
 @media (max-width: 640px) {
-  .mn-filters { flex-direction: column; align-items: stretch; }
-  .mn-filters .mn-search { min-width: 0; }
-  .mn-filters__selects { justify-content: space-between; width: 100%; }
-  .mn-filters__selects .mn-select { flex: 1; min-width: 0; }
+  /* Drop the 180px floor so the field can take the row's full width. */
+  .mn-filters .mn-search { flex: 1 1 auto; min-width: 0; }
+  .mn-filters .mn-filter-group { display: none; }
+  .mn-filters .mn-filter-btn {
+    display: inline-flex;
+    flex-shrink: 0;
+    /* Height parity with .mn-search, matching the manager toolbar. */
+    min-height: 43px;
+  }
+}
+
+/* Inside the filter dialog the toggle is full width and keeps its labels —
+   the toolbar hides them below 560px, which would leave two unlabelled
+   icon buttons here. */
+.mn-view-toggle--modal { width: 100%; }
+.mn-view-toggle--modal .mn-view-toggle__btn { flex: 1; justify-content: center; }
+
+.mn-pag-limit {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
 }
 
 .mn-select {

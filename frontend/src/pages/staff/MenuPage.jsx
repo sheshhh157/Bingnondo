@@ -637,7 +637,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                         value={sharedFlavorPrice}
                         onChange={(e) => applySharedFlavorPrice(e.target.value)}
                         className="mn-field__input mn-flavors__shared"
-                        placeholder="Shared price (�,�)"
+                        placeholder="Shared price (₱,₱)"
                         aria-label="Shared flavor price"
                         max="1000"
 
@@ -983,6 +983,8 @@ export default function MenuPage() {
   const [toggling, setToggling] = useState(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(12);
+  // Mobile only: the select row collapses behind this button below 640px.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchAll = useCallback(async () => {
@@ -996,6 +998,10 @@ export default function MenuPage() {
     finally { setLoading(false); }
   }, []);
 
+  // Fetching on mount is the legitimate use of an effect: this synchronizes the
+  // page with the API. The rule fires because `setError('')` runs before the
+  // first `await`; every setState after it is asynchronous.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
@@ -1024,8 +1030,27 @@ export default function MenuPage() {
     return r;
   }, [items, search, filterCat, filterAvail]);
 
-  // Reset to page 1 when filters/search/viewMode/perPage change
-  useEffect(() => { setPage(1); }, [search, filterCat, filterAvail, viewMode, perPage]);
+  // Reset to page 1 when the filter set changes. Done during render rather than
+  // in an effect: the effect version renders the stale page once before
+  // correcting itself, which is the extra render the lint rule flags.
+  const filterKey = `${search}|${filterCat}|${filterAvail}|${viewMode}|${perPage}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
+    setPage(1);
+  }
+
+  // Drives the dot on the mobile Filter button, matching the manager's stock
+  // page: only a departure from the defaults counts as "filtering".
+  const filtersActive = filterCat !== 'all' || filterAvail !== 'all';
+
+  const resetFilters = () => {
+    setFilterCat('all');
+    setFilterAvail('all');
+    setViewMode('grid');
+    setPage(1);
+    setFiltersOpen(false);
+  };
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage   = Math.min(page, totalPages);
@@ -1135,43 +1160,100 @@ export default function MenuPage() {
           </svg>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu items…" className="mn-search__input" aria-label="Search menu items" maxLength={50} />
         </div>
-        <div className="mn-filters__selects">
-          <select className="mn-select" value={filterCat} onChange={(e) => setFilterCat(e.target.value)} aria-label="Filter by category">
-            <option value="all">All categories</option>
-            {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
-          </select>
-          <select className="mn-select" value={filterAvail} onChange={(e) => setFilterAvail(e.target.value)} aria-label="Filter by availability">
-            <option value="all">All status</option>
-            <option value="available">Available</option>
-            <option value="unavailable">Unavailable</option>
-          </select>
-          <div className="mn-view-toggle" role="group" aria-label="View mode">
-            {['grid', 'table'].map((mode) => (
-              <button key={mode} onClick={() => setViewMode(mode)} className={`mn-view-toggle__btn${viewMode === mode ? ' mn-view-toggle__btn--active' : ''}`} aria-pressed={viewMode === mode} aria-label={`${mode} view`}>
-                {mode === 'grid'
-                  ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                }
-                <span className="mn-view-toggle__label">{mode}</span>
-              </button>
-            ))}
-          </div>
 
-          <label className="pag__limit-label" htmlFor="mn-per-page">
-            Show
-            <select
-              id="mn-per-page"
-              className="pag__limit-select"
-              value={perPage}
-              onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
-              aria-label="Items per page"
-            >
-              {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+        {/* Hidden below 640px, where the Filter button takes over. */}
+        <button
+          type="button"
+          className="ui-btn mn-filter-btn"
+          aria-haspopup="dialog"
+          onClick={() => setFiltersOpen(true)}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+          Filter
+          {filtersActive && <span className="mn-filter-dot" aria-label="Filters active" />}
+        </button>
+
+        {/* Hidden below 640px, where these move into the dialog. */}
+        <div className="mn-filter-group">
+          <div className="mn-filters__selects">
+            <select className="mn-select" value={filterCat} onChange={(e) => setFilterCat(e.target.value)} aria-label="Filter by category">
+              <option value="all">All categories</option>
+              {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
             </select>
-            per page
-          </label>
+            <select className="mn-select" value={filterAvail} onChange={(e) => setFilterAvail(e.target.value)} aria-label="Filter by availability">
+              <option value="all">All status</option>
+              <option value="available">Available</option>
+              <option value="unavailable">Unavailable</option>
+            </select>
+            <div className="mn-view-toggle" role="group" aria-label="View mode">
+              {['grid', 'table'].map((mode) => (
+                <button key={mode} onClick={() => setViewMode(mode)} className={`mn-view-toggle__btn${viewMode === mode ? ' mn-view-toggle__btn--active' : ''}`} aria-pressed={viewMode === mode} aria-label={`${mode} view`}>
+                  {mode === 'grid'
+                    ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                    : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  }
+                  <span className="mn-view-toggle__label">{mode}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Same controls as the toolbar, rendered full-width. Copied from the
+          manager's OversightStocks filter dialog. */}
+      {filtersOpen && (
+        <div className="sales-modal-overlay" onClick={() => setFiltersOpen(false)}>
+          <div
+            className="sales-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mn-filter-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="sales-modal__head" id="mn-filter-title">Filter menu items</h2>
+            <div className="sales-modal__body">
+              <label className="sales-modal__label" htmlFor="mn-filter-cat">
+                Category
+                <select id="mn-filter-cat" className="mn-select" value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+                  <option value="all">All categories</option>
+                  {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                </select>
+              </label>
+              <label className="sales-modal__label" htmlFor="mn-filter-avail">
+                Status
+                <select id="mn-filter-avail" className="mn-select" value={filterAvail} onChange={(e) => setFilterAvail(e.target.value)}>
+                  <option value="all">All status</option>
+                  <option value="available">Available</option>
+                  <option value="unavailable">Unavailable</option>
+                </select>
+              </label>
+              <div className="sales-modal__label">
+                View
+                {/* Labels stay visible in here: the toolbar hides them below
+                    560px, which would leave two unlabelled icon buttons. */}
+                <div className="mn-view-toggle mn-view-toggle--modal" role="group" aria-label="View mode">
+                  {['grid', 'table'].map((mode) => (
+                    <button key={mode} onClick={() => setViewMode(mode)} className={`mn-view-toggle__btn${viewMode === mode ? ' mn-view-toggle__btn--active' : ''}`} aria-pressed={viewMode === mode}>
+                      {mode === 'grid'
+                        ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                        : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                      }
+                      <span className="mn-view-toggle__label">{mode}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="sales-modal__foot">
+              <button className="ui-btn" onClick={resetFilters}>Reset</button>
+              <button className="ui-btn ui-btn--primary" onClick={() => setFiltersOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       {loading ? (
@@ -1222,6 +1304,26 @@ export default function MenuPage() {
           <div className="mn-table__footer">
             <Pagination page={safePage} totalPages={totalPages} total={filtered.length} from={from} to={to} onPage={setPage} />
           </div>
+        </div>
+      )}
+
+      {/* Per-page control. It used to sit in the filter toolbar, where it was a
+          fifth row on mobile; it reads better next to the paginator. */}
+      {!loading && filtered.length > 0 && (
+        <div className="mn-pag-limit">
+          <label className="pag__limit-label" htmlFor="mn-per-page">
+            Show
+            <select
+              id="mn-per-page"
+              className="pag__limit-select"
+              value={perPage}
+              onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
+              aria-label="Items per page"
+            >
+              {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            per page
+          </label>
         </div>
       )}
 

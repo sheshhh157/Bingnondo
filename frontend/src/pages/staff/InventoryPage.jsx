@@ -400,7 +400,7 @@ function TransactionModal({ item, type, categories, onClose, onSubmit, onSaveDet
 }
 
 // ─── Mobile card ──────────────────────────────────────────────────────────────
-function InventoryCard({ item, onRestock, onAdjust, onOutOfStock, onDelete }) {
+function InventoryCard({ item, onRestock, onAdjust, onOutOfStock }) {
   const s = stockStatus(item.current_stock, item.reorder_level);
   return (
     <article className={`inv-card${s !== 'ok' ? ` inv-card--${s}` : ''}`}>
@@ -434,74 +434,8 @@ function InventoryCard({ item, onRestock, onAdjust, onOutOfStock, onDelete }) {
         {item.current_stock > 0 && (
           <button className="inv-btn inv-btn--danger inv-btn--sm" onClick={() => onOutOfStock(item)}>Out of stock</button>
         )}
-        <button
-          className="inv-btn inv-btn--ghost inv-btn--sm inv-btn--icon"
-          onClick={() => onDelete(item)}
-          aria-label={`Delete ${item.name}`}
-          title="Delete ingredient"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-          </svg>
-        </button>
       </div>
     </article>
-  );
-}
-
-// ─── Delete Ingredient Confirm ────────────────────────────────────────────────
-// Mirrors MenuPage's ConfirmDialog, but reuses the inventory modal styles since
-// this page has no separate confirm stylesheet.
-function DeleteIngredientDialog({ item, onClose, onConfirm, loading }) {
-  useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape' && !loading) onClose(); };
-    document.addEventListener('keydown', handleKey);
-    document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', handleKey); document.body.style.overflow = ''; };
-  }, [onClose, loading]);
-
-  return (
-    <div className="inv-modal-overlay" onClick={() => !loading && onClose()} aria-hidden="true">
-      <div
-        className="inv-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="inv-delete-title"
-      >
-        <div className="inv-modal__header">
-          <h3 id="inv-delete-title" className="inv-modal__title">Delete Ingredient</h3>
-          <button
-            className="inv-modal__close"
-            onClick={onClose}
-            disabled={loading}
-            aria-label="Close"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="inv-modal__body">
-          <p>
-            Delete <strong>{item.name}</strong>? This permanently removes the ingredient
-            and <strong>erases its stock movement history</strong>.
-          </p>
-          <p className="inv-modal__item-meta">
-            Currently {item.current_stock} {item.unit} on hand. To keep the history but stop
-            selling it, use <strong>Out of stock</strong> instead.
-          </p>
-        </div>
-
-        <div className="inv-modal__footer">
-          <button className="inv-btn inv-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
-          <button className="inv-btn inv-btn--danger" onClick={onConfirm} disabled={loading} aria-busy={loading}>
-            {loading ? 'Deleting…' : 'Delete permanently'}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -692,8 +626,8 @@ export default function InventoryPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  // Mobile only: the select row collapses behind this button below 640px.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchItems = useCallback(async () => {
@@ -706,6 +640,12 @@ export default function InventoryPage() {
     } finally { setLoading(false); }
   }, []);
 
+  // Fetching on mount is the legitimate use of an effect: this synchronizes the
+  // page with the API. The rule fires because `setError('')` runs before the
+  // first `await`; every setState after it is asynchronous. Clearing the error
+  // here (rather than after the response) is what makes the stale error banner
+  // disappear as soon as Refresh or Retry is pressed.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   // Ingredient categories are the menu's categories, fetched rather than
@@ -770,29 +710,6 @@ export default function InventoryPage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteTarget || deleting) return;
-    setDeleting(true);
-    try {
-      const { data } = await inventoryAPI.remove(deleteTarget.id);
-      const unlinked = data.unlinked_menu_items?.length || 0;
-      const erased = data.transactions_erased || 0;
-      showToast(
-        `"${data.name}" deleted.` +
-        (unlinked > 0
-          ? ` ${unlinked} menu item${unlinked > 1 ? 's' : ''} lost this ingredient.` : '') +
-        (erased > 0 ? ` ${erased} history entr${erased > 1 ? 'ies' : 'y'} erased.` : ''),
-        'warning'
-      );
-      setDeleteTarget(null);
-      await fetchItems();
-    } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to delete ingredient.', 'error');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const stats = useMemo(() => {
     const out = items.filter((i) => i.current_stock <= 0).length;
     const low = items.filter((i) => i.current_stock > 0 && i.current_stock <= i.reorder_level).length;
@@ -831,8 +748,27 @@ export default function InventoryPage() {
     });
   }, [items, search, filterStatus, filterCategory, sortBy]);
 
-  // Reset to page 1 when filters/search/perPage change
-  useEffect(() => { setPage(1); }, [search, filterStatus, filterCategory, sortBy, perPage]);
+  // Reset to page 1 when the filter set changes. Done during render rather than
+  // in an effect: the effect version renders the stale page once before
+  // correcting itself, which is the extra render the lint rule flags.
+  const filterKey = `${search}|${filterStatus}|${filterCategory}|${sortBy}|${perPage}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
+    setPage(1);
+  }
+
+  // Drives the dot on the mobile Filter button, matching the manager's stock
+  // page: only a departure from the defaults counts as "filtering".
+  const filtersActive = filterStatus !== 'all' || filterCategory !== 'all' || sortBy !== 'name';
+
+  const resetFilters = () => {
+    setFilterStatus('all');
+    setFilterCategory('all');
+    setSortBy('name');
+    setPage(1);
+    setFiltersOpen(false);
+  };
 
   // Paginated slices — single perPage for both table and cards
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
@@ -938,39 +874,93 @@ export default function InventoryPage() {
             maxLength={50}
           />
         </div>
-        <select className="inv-select" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label="Filter by category">
-          <option value="all">All categories</option>
-          <option value="uncategorized">Uncategorized</option>
-          {categories.map((c) => (
-            <option key={c.id} value={String(c.id)}>{c.name}</option>
-          ))}
-        </select>
-        <select className="inv-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Filter by status">
-          <option value="all">All items</option>
-          <option value="ok">In stock</option>
-          <option value="low">Low stock</option>
-          <option value="out">Out of stock</option>
-        </select>
-        <select className="inv-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
-          <option value="name">Sort: Name</option>
-          <option value="category">Sort: Category</option>
-          <option value="stock_asc">Stock: Low first</option>
-          <option value="stock_desc">Stock: High first</option>
-        </select>
-        <label className="pag__limit-label" htmlFor="inv-per-page">
-          Show
-          <select
-            id="inv-per-page"
-            className="pag__limit-select"
-            value={perPage}
-            onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
-            aria-label="Items per page"
-          >
-            {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+
+        {/* Hidden below 640px, where the Filter button takes over. */}
+        <button
+          type="button"
+          className="ui-btn inv-filter-btn"
+          aria-haspopup="dialog"
+          onClick={() => setFiltersOpen(true)}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+          Filter
+          {filtersActive && <span className="inv-filter-dot" aria-label="Filters active" />}
+        </button>
+
+        <div className="inv-filter-group">
+          <select className="inv-select" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label="Filter by category">
+            <option value="all">All categories</option>
+            <option value="uncategorized">Uncategorized</option>
+            {categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>{c.name}</option>
+            ))}
           </select>
-          per page
-        </label>
+          <select className="inv-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Filter by status">
+            <option value="all">All items</option>
+            <option value="ok">In stock</option>
+            <option value="low">Low stock</option>
+            <option value="out">Out of stock</option>
+          </select>
+          <select className="inv-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
+            <option value="name">Sort: Name</option>
+            <option value="category">Sort: Category</option>
+            <option value="stock_asc">Stock: Low first</option>
+            <option value="stock_desc">Stock: High first</option>
+          </select>
+        </div>
       </div>
+
+      {/* Same controls as the toolbar, rendered full-width. Copied from the
+          manager's OversightStocks filter dialog. */}
+      {filtersOpen && (
+        <div className="sales-modal-overlay" onClick={() => setFiltersOpen(false)}>
+          <div
+            className="sales-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inv-filter-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="sales-modal__head" id="inv-filter-title">Filter inventory</h2>
+            <div className="sales-modal__body">
+              <label className="sales-modal__label" htmlFor="inv-filter-category">
+                Category
+                <select id="inv-filter-category" className="inv-select" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+                  <option value="all">All categories</option>
+                  <option value="uncategorized">Uncategorized</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="sales-modal__label" htmlFor="inv-filter-status">
+                Status
+                <select id="inv-filter-status" className="inv-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                  <option value="all">All items</option>
+                  <option value="ok">In stock</option>
+                  <option value="low">Low stock</option>
+                  <option value="out">Out of stock</option>
+                </select>
+              </label>
+              <label className="sales-modal__label" htmlFor="inv-filter-sort">
+                Sort by
+                <select id="inv-filter-sort" className="inv-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                  <option value="name">Sort: Name</option>
+                  <option value="category">Sort: Category</option>
+                  <option value="stock_asc">Stock: Low first</option>
+                  <option value="stock_desc">Stock: High first</option>
+                </select>
+              </label>
+            </div>
+            <div className="sales-modal__foot">
+              <button className="ui-btn" onClick={resetFilters}>Reset</button>
+              <button className="ui-btn ui-btn--primary" onClick={() => setFiltersOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile cards */}
       <div className="inv-cards" aria-label="Inventory items">
@@ -990,9 +980,8 @@ export default function InventoryPage() {
                   item={item}
                   onRestock={(i) => setModal({ item: i, type: 'restock' })}
                   onAdjust={(i) => setModal({ item: i, type: 'adjustment' })}
-                  onOutOfStock={handleOutOfStock}
-                  onDelete={setDeleteTarget}
-                />
+onOutOfStock={handleOutOfStock}
+          />
               ))
         }
       </div>
@@ -1002,6 +991,19 @@ export default function InventoryPage() {
       {/* Mobile pagination — visible on mobile/tablet only, below cards */}
       {!loading && filtered.length > 0 && (
         <div className="inv-pag-mobile">
+          <label className="pag__limit-label" htmlFor="inv-per-page">
+            Show
+            <select
+              id="inv-per-page"
+              className="pag__limit-select"
+              value={perPage}
+              onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
+              aria-label="Items per page"
+            >
+              {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            per page
+          </label>
           <Pagination
             page={safePage}
             totalPages={totalPages}
@@ -1067,16 +1069,6 @@ export default function InventoryPage() {
                           {item.current_stock > 0 && (
                             <button className="inv-btn inv-btn--danger inv-btn--xs" onClick={() => handleOutOfStock(item)}>Out of stock</button>
                           )}
-                          <button
-                            className="inv-btn inv-btn--ghost inv-btn--xs inv-btn--icon"
-                            onClick={() => setDeleteTarget(item)}
-                            aria-label={`Delete ${item.name}`}
-                            title="Delete ingredient"
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                            </svg>
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1117,16 +1109,6 @@ export default function InventoryPage() {
           categories={categories}
           onClose={() => setShowAddModal(false)}
           onSubmit={handleAddIngredient}
-        />
-      )}
-
-      {/* Delete ingredient confirm */}
-      {deleteTarget && (
-        <DeleteIngredientDialog
-          item={deleteTarget}
-          onClose={() => !deleting && setDeleteTarget(null)}
-          onConfirm={handleDelete}
-          loading={deleting}
         />
       )}
     </div>

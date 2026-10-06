@@ -282,6 +282,10 @@ export default function SupportChatPage() {
     }
   }, []);
 
+  // Fetching on mount is the legitimate use of an effect: this synchronizes the
+  // thread list with the API. The rule fires because `setError('')` runs before
+  // the first `await`; every setState after it is asynchronous.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
   // ── Fetch messages for active thread ────────────────────────────────────────
@@ -300,8 +304,13 @@ export default function SupportChatPage() {
     }
   }, [showToast]);
 
+  // Switching threads must load that thread's messages and move focus into the
+  // reply box. The focus() call is a real DOM side effect that has nowhere else
+  // to live. The rule fires only because `fetchMessages` sets state, so the
+  // suppression sits on that call rather than on the effect itself.
   useEffect(() => {
     if (activeThread) {
+      // oxlint-disable-next-line react/set-state-in-effect
       fetchMessages(activeThread.id);
       textareaRef.current?.focus();
     }

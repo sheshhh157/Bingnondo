@@ -390,6 +390,10 @@ export default function DeliveryPage() {
     } finally { setLoading(false); }
   }, []);
 
+  // Fetching on mount is the legitimate use of an effect: this synchronizes the
+  // page with the API. The rule fires because `setError('')` runs before the
+  // first `await`; every setState after it is asynchronous.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // Real-time socket — order cancelled by customer removes from queue

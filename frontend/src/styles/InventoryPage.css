@@ -133,15 +133,20 @@
 .inv-search svg { flex-shrink: 0; }
 
 .inv-search__input {
-  flex: 1;
-  border: none;
-  background: none;
-  outline: none;
-  font-family: var(--font-body);
-  font-size: 0.875rem;
-  color: var(--color-foreground);
-  padding: 9px 0;
-}
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: none;
+    outline: none;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    color: var(--color-foreground);
+    padding: 9px 0;
+    /* Kills WebKit's inset search decoration, which otherwise draws a second
+       border inside the wrapper on iOS. The manager input sets this too. */
+    appearance: none;
+    -webkit-appearance: none;
+  }
 
 .inv-search__input::placeholder { color: var(--color-muted-foreground); opacity: 0.6; }
 
@@ -160,13 +165,37 @@
 
 .inv-select:focus { border-color: var(--color-primary); }
 
-/* Narrow phones: filter controls stack vertically. */
-@media (max-width: 640px) {
-  .inv-filters { flex-direction: column; align-items: stretch; }
-  .inv-filters .inv-search,
-  .inv-filters .inv-select,
-  .inv-filters .pag__limit-label { width: 100%; }
-}
+  /* The select row sits behind the Filter button on narrow phones, mirroring
+     the manager's OversightStocks toolbar. Stacking them full-width instead
+     pushed the actual data far down the screen. */
+  .inv-filter-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .inv-filter-btn { display: none; }
+
+  .inv-filter-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 99px;
+    background: var(--color-primary);
+    display: inline-block;
+  }
+
+  @media (max-width: 640px) {
+    /* Drop the 180px floor so the field can take the row's full width. */
+    .inv-filters .inv-search { flex: 1 1 auto; min-width: 0; }
+    .inv-filters .inv-filter-group { display: none; }
+    .inv-filters .inv-filter-btn {
+      display: inline-flex;
+      flex-shrink: 0;
+      /* Height parity with .inv-search, matching the manager toolbar. */
+      min-height: 43px;
+    }
+    /* Per-page lives with the paginator now, not in the toolbar. */
+  }
 
 /* ─── Mobile cards ──────────────────────────────────────────────────── */
 .inv-cards {
@@ -1015,7 +1044,10 @@
 
 /* ─── Pagination visibility per breakpoint ──────────────────────────── */
 .inv-pag-mobile {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 
 @media (min-width: 1024px) {
