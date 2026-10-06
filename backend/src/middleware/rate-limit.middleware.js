@@ -52,4 +52,19 @@ const generalApiLimiter = rateLimit({
   },
 });
 
-module.exports = { loginLimiter, otpLimiter, generalApiLimiter };
+// Menu and inventory mutations are infrequent staff actions; cap them tighter
+// than the general 200/min to slow down a burst of edits or scripted abuse.
+// Skipped under NODE_ENV=test: the test suite spins up one app per request in
+// the same process and would otherwise share one counter and flake with 429s.
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: {
+    message: 'Too many changes. Please wait a moment before editing again.',
+  },
+});
+
+module.exports = { loginLimiter, otpLimiter, generalApiLimiter, writeLimiter };

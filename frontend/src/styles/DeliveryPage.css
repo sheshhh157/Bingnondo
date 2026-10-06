@@ -223,10 +223,10 @@
 .dl-btn--sm { padding: 6px 12px; font-size: 0.8125rem; }
 
 /* ─── Modal ──────────────────────────────────────────────────────────── */
-.dl-overlay { position: fixed; inset: 0; background: rgba(26,14,0,0.35); backdrop-filter: blur(4px); z-index: 70; display: flex; align-items: flex-end; justify-content: center; animation: dl-fade-in 0.2s ease; }
+.dl-overlay { position: fixed; inset: 0; background: rgba(26,14,0,0.35); backdrop-filter: blur(4px); z-index: 70; display: flex; align-items: center; justify-content: center; padding: 16px; animation: dl-fade-in 0.2s ease; }
 @media (min-width: 560px) { .dl-overlay { align-items: center; padding: 16px; } }
 
-.dl-modal { background: var(--color-card); border-radius: var(--radius-xl) var(--radius-xl) 0 0; width: 100%; max-width: 480px; display: flex; flex-direction: column; max-height: 90dvh; animation: dl-slide-up 0.25s ease; box-shadow: var(--shadow-lg); }
+.dl-modal { background: var(--color-card); border-radius: var(--radius-xl); width: 100%; max-width: 480px; display: flex; flex-direction: column; max-height: 90dvh; animation: dl-pop-in 0.22s ease; box-shadow: var(--shadow-lg); }
 @media (min-width: 560px) { .dl-modal { border-radius: var(--radius-xl); animation: dl-pop-in 0.22s ease; } }
 
 .dl-modal__header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 12px; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }

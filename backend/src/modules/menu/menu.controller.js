@@ -1,4 +1,5 @@
 const db = require('../../config/db');
+const { lengthCap, numInRange, MAX_PRICE } = require('../../lib/validators');
 
 // ─── Socket.io injection ──────────────────────────────────────────────────────
 let _io = null;
@@ -265,9 +266,50 @@ async function createMenuItem(req, res, next) {
       options = [],
     } = req.body;
 
-    if (!name?.trim())            return res.status(400).json({ message: 'Item name is required.' });
-    if (!price || Number(price) <= 0) return res.status(400).json({ message: 'A valid price is required.' });
-    if (!category_id)             return res.status(400).json({ message: 'Category is required.' });
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ message: 'Item name is required.' });
+    if (!category_id || !Number.isInteger(Number(category_id)) || Number(category_id) <= 0) return res.status(400).json({ message: 'Category is required.' });
+    const nameErr = lengthCap(name, 'Item name', 50);
+    if (nameErr) return res.status(400).json({ message: nameErr });
+    const priceErr = numInRange(price, 'Price', { min: 0, exclusive: true, max: MAX_PRICE });
+    if (priceErr) return res.status(400).json({ message: priceErr });
+    if (description != null) {
+      if (typeof description !== 'string') return res.status(400).json({ message: 'Description must be text.' });
+      const descErr = lengthCap(description, 'Description', 100);
+      if (descErr) return res.status(400).json({ message: descErr });
+    }
+    if (image_url != null) {
+      if (typeof image_url !== 'string') return res.status(400).json({ message: 'Image URL must be text.' });
+      const imgErr = lengthCap(image_url, 'Image URL', 500);
+      if (imgErr) return res.status(400).json({ message: imgErr });
+    }
+    if (!Array.isArray(ingredients) || ingredients.length > 30) {
+      return res.status(400).json({ message: 'ingredients must be an array of at most 30 entries.' });
+    }
+    for (const ing of ingredients) {
+      if (!Number.isInteger(Number(ing?.inventory_item_id)) || Number(ing.inventory_item_id) <= 0) {
+        return res.status(400).json({ message: 'Each ingredient needs a valid inventory item id.' });
+      }
+      if (ing.quantity_required != null && ing.quantity_required !== '') {
+        const qtyErr = numInRange(ing.quantity_required, 'Ingredient quantity', { min: 0, exclusive: true });
+        if (qtyErr) return res.status(400).json({ message: qtyErr });
+      }
+    }
+    if (!Array.isArray(options) || options.length > 50) {
+      return res.status(400).json({ message: 'options must be an array of at most 50 entries.' });
+    }
+    for (const opt of options) {
+      if (typeof opt?.name === 'string') {
+        const optNameErr = lengthCap(opt.name, 'Option name', 50);
+        if (optNameErr) return res.status(400).json({ message: optNameErr });
+      }
+      if (opt?.price !== undefined && opt?.price !== null && opt?.price !== '') {
+        const optPriceErr = numInRange(opt.price, 'Option price', { min: 0, max: MAX_PRICE });
+        if (optPriceErr) return res.status(400).json({ message: optPriceErr });
+      }
+    }
+
+    const flavorCount = options.filter((o) => o?.option_kind === 'flavor').length;
+    if (flavorCount > 10) return res.status(400).json({ message: 'Flavors are limited to 10 per item.' });
 
     await client.query('BEGIN');
 
@@ -339,8 +381,63 @@ async function updateMenuItem(req, res, next) {
     const existing = await db.query('SELECT id, price FROM menu_items WHERE id = $1', [id]);
     if (existing.rows.length === 0) return res.status(404).json({ message: 'Menu item not found.' });
 
-    if (name !== undefined && !name.trim()) return res.status(400).json({ message: 'Item name cannot be empty.' });
-    if (price !== undefined && Number(price) <= 0) return res.status(400).json({ message: 'Price must be greater than zero.' });
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ message: 'Item name cannot be empty.' });
+      const nameErr = lengthCap(name, 'Item name', 50);
+      if (nameErr) return res.status(400).json({ message: nameErr });
+    }
+    if (price !== undefined) {
+      const priceErr = numInRange(price, 'Price', { min: 0, exclusive: true, max: MAX_PRICE });
+      if (priceErr) return res.status(400).json({ message: priceErr });
+    }
+    if (description !== undefined && description !== null) {
+      if (typeof description !== 'string') return res.status(400).json({ message: 'Description must be text.' });
+      const descErr = lengthCap(description, 'Description', 100);
+      if (descErr) return res.status(400).json({ message: descErr });
+    }
+    if (image_url !== undefined && image_url !== null) {
+      if (typeof image_url !== 'string') return res.status(400).json({ message: 'Image URL must be text.' });
+      const imgErr = lengthCap(image_url, 'Image URL', 500);
+      if (imgErr) return res.status(400).json({ message: imgErr });
+    }
+    if (category_id !== undefined && !Number.isInteger(Number(category_id))) {
+      return res.status(400).json({ message: 'Category must be a valid menu category.' });
+    }
+    if (ingredients !== undefined && (!Array.isArray(ingredients) || ingredients.length > 30)) {
+      return res.status(400).json({ message: 'ingredients must be an array of at most 30 entries.' });
+    }
+    if (ingredients !== undefined) {
+      for (const ing of ingredients) {
+        if (!Number.isInteger(Number(ing?.inventory_item_id)) || Number(ing.inventory_item_id) <= 0) {
+          return res.status(400).json({ message: 'Each ingredient needs a valid inventory item id.' });
+        }
+        if (ing.quantity_required != null && ing.quantity_required !== '') {
+          const qtyErr = numInRange(ing.quantity_required, 'Ingredient quantity', { min: 0, exclusive: true });
+          if (qtyErr) return res.status(400).json({ message: qtyErr });
+        }
+      }
+    }
+    if (options !== undefined) {
+      if (!Array.isArray(options) || options.length > 50) {
+        return res.status(400).json({ message: 'options must be an array of at most 50 entries.' });
+      }
+      for (const opt of options) {
+        if (typeof opt?.name === 'string') {
+          const optNameErr = lengthCap(opt.name, 'Option name', 50);
+          if (optNameErr) return res.status(400).json({ message: optNameErr });
+        }
+        if (opt?.price !== undefined && opt?.price !== null && opt?.price !== '') {
+          const optPriceErr = numInRange(opt.price, 'Option price', { min: 0, max: MAX_PRICE });
+          if (optPriceErr) return res.status(400).json({ message: optPriceErr });
+        }
+      }
+    }
+
+    const flavorCount = (options === undefined ? [] : options).filter(
+      (o) => o?.option_kind === 'flavor').length;
+    if (flavorCount > 10) {
+      return res.status(400).json({ message: 'Flavors are limited to 10 per item.' });
+    }
 
     await client.query('BEGIN');
 
@@ -657,9 +754,12 @@ async function createOption(req, res, next) {
     const { id } = req.params;
     const { name, price, is_available = true, sort_order = 0, option_kind } = req.body;
 
-    if (!name?.trim()) return res.status(400).json({ message: 'Option name is required.' });
-    if (price === undefined || price === null || Number(price) < 0) {
-      return res.status(400).json({ message: 'A valid price is required.' });
+    if (!name || typeof name !== 'string' || !name.trim()) return res.status(400).json({ message: 'Option name is required.' });
+    const nameErr = lengthCap(name, 'Option name', 50);
+    if (nameErr) return res.status(400).json({ message: nameErr });
+    const priceErr = numInRange(price, 'Option price', { min: 0, max: MAX_PRICE });
+    if (priceErr) {
+      return res.status(400).json({ message: priceErr });
     }
 
     const item = await db.query('SELECT id FROM menu_items WHERE id = $1', [id]);
@@ -699,14 +799,19 @@ async function updateOption(req, res, next) {
     const { id, optionId } = req.params;
     const { name, price, is_available, sort_order, option_kind } = req.body;
 
-    if (name !== undefined && !name.trim()) {
-      return res.status(400).json({ message: 'Option name cannot be empty.' });
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ message: 'Option name cannot be empty.' });
+      }
+      const nameErr = lengthCap(name, 'Option name', 50);
+      if (nameErr) return res.status(400).json({ message: nameErr });
     }
     if (option_kind !== undefined && option_kind !== 'variant' && option_kind !== 'flavor') {
       return res.status(400).json({ message: 'option_kind must be "variant" or "flavor".' });
     }
-    if (price !== undefined && (Number(price) < 0 || Number.isNaN(Number(price)))) {
-      return res.status(400).json({ message: 'Price must be zero or more.' });
+    if (price !== undefined) {
+      const priceErr = numInRange(price, 'Option price', { min: 0, max: MAX_PRICE });
+      if (priceErr) return res.status(400).json({ message: priceErr });
     }
 
     const sets = [];
@@ -794,7 +899,9 @@ async function getCategories(req, res, next) {
 async function createCategory(req, res, next) {
   try {
     const { name } = req.body;
-    if (!name?.trim()) return res.status(400).json({ message: 'Category name is required.' });
+    if (!name || typeof name !== 'string' || !name.trim()) return res.status(400).json({ message: 'Category name is required.' });
+    const nameErr = lengthCap(name, 'Category name', 100);
+    if (nameErr) return res.status(400).json({ message: nameErr });
 
     const result = await db.query(
       'INSERT INTO menu_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING *',

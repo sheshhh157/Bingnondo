@@ -251,6 +251,31 @@ function paginate(arr, page=1, limit=10) {
 }
 
 
+// ─── PASSWORD RECOVERY API ───────────────────────────────────────────────────
+// The backend has supported self-service recovery all along (POST /auth/
+// forgot-password then POST /auth/reset-password), but nothing in the frontend
+// ever called it — the login page had no way to reach it, so a forgotten
+// password meant an admin had to intervene. Login.jsx now uses these two.
+//
+// `forgotPassword` deliberately always resolves: the endpoint answers 200 with
+// the same message whether or not the email exists, so the UI must not branch
+// on the response either.
+export const passwordRecoveryAPI = {
+  /** POST /api/auth/forgot-password — emails a 10-minute reset code (OTP). */
+  requestCode: (email) =>
+    apiRequest('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  /** POST /api/auth/reset-password — { email, otp, newPassword, confirmPassword } */
+  reset: (body) =>
+    apiRequest('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+};
+
 // ─── SWITCH DASHBOARD API ─────────────────────────────────────────────────────
 // These hit the real backend — no mock needed.
 export const switchAPI = {

@@ -4,7 +4,6 @@ import useLiveData from '../../hooks/useLiveData';
 import { stockStatus, stockBadgeVariant, stockStatusText } from '../../utils/format';
 import { toCsv, downloadCsv } from '../../utils/csv';
 import { listEvent, stockPatch, stockCounts } from './managerData';
-import LiveControls from './LiveControls';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
 import StatCard from '../../components/StatCard';
@@ -96,9 +95,11 @@ export default function OversightStocks() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('name');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [openId, setOpenId] = useState(null);
 
-  const { data: items, loading, error, lastUpdated, refresh, refreshing } = useLiveData({
+  const { data: items, loading, error, refresh } = useLiveData({
     fetchFn: async () => {
       const { data } = await inventoryAPI.getAll();
       return data.items || data;
@@ -147,14 +148,23 @@ export default function OversightStocks() {
         </ErrorBanner>
       )}
 
-      <div className="osk-stats">
-        <StatCard label="Total Items" value={stats.total} />
-        <StatCard label="In Stock" value={stats.ok} />
-        <StatCard label="Low Stock" value={stats.low} />
-        <StatCard label="Out of Stock" value={stats.out} />
-      </div>
-
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh stock levels" />
+      {loading ? (
+        <div className="osk-stats" aria-hidden="true">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="ui-skel ui-skel--card">
+              <span className="ui-skel ui-skel--label" />
+              <span className="ui-skel ui-skel--value" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="osk-stats">
+          <StatCard label="Total Items" value={stats.total} />
+          <StatCard label="In Stock" value={stats.ok} />
+          <StatCard label="Low Stock" value={stats.low} />
+          <StatCard label="Out of Stock" value={stats.out} />
+        </div>
+      )}
 
       {!loading && (stats.low + stats.out) > 0 && (
         <ErrorBanner>
@@ -169,6 +179,13 @@ export default function OversightStocks() {
           </svg>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ingredients…" className="osk-search__input" aria-label="Search ingredients" />
         </div>
+        <button type="button" className="ui-btn osk-filter-btn" onClick={() => setFiltersOpen(true)} aria-haspopup="dialog">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+          </svg>
+          Filter
+          {(filterStatus !== 'all' || sortBy !== 'name') && <span className="osk-filter-dot" aria-label="Filters active" />}
+        </button>
         <select className="osk-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Filter by status">
           <option value="all">All items</option>
           <option value="ok">In stock</option>
@@ -183,7 +200,7 @@ export default function OversightStocks() {
         <button
           type="button"
           className="osk-export"
-          onClick={handleExport}
+          onClick={() => setExportOpen(true)}
           disabled={filtered.length === 0}
           title="Export the current filtered list to CSV"
         >
@@ -195,6 +212,55 @@ export default function OversightStocks() {
           Export CSV
         </button>
       </div>
+
+      {filtersOpen && (
+        <div className="sales-modal-overlay" onClick={() => setFiltersOpen(false)}>
+          <div className="sales-modal" role="dialog" aria-modal="true" aria-labelledby="osk-filter-title" onClick={(e) => e.stopPropagation()}>
+            <h2 className="sales-modal__head" id="osk-filter-title">Filter stocks</h2>
+            <div className="sales-modal__body">
+              <label className="sales-modal__label" htmlFor="osk-filter-status">Status
+                <select id="osk-filter-status" className="osk-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Filter by status">
+                  <option value="all">All items</option>
+                  <option value="ok">In stock</option>
+                  <option value="low">Low stock</option>
+                  <option value="out">Out of stock</option>
+                </select>
+              </label>
+              <label className="sales-modal__label" htmlFor="osk-filter-sort">Sort by
+                <select id="osk-filter-sort" className="osk-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
+                  <option value="name">Sort: Name</option>
+                  <option value="stock_asc">Stock: Low first</option>
+                  <option value="stock_desc">Stock: High first</option>
+                </select>
+              </label>
+            </div>
+            <div className="sales-modal__foot">
+              <button className="ui-btn" onClick={() => { setFilterStatus('all'); setSortBy('name'); }}>Reset</button>
+              <button className="ui-btn ui-btn--primary" onClick={() => setFiltersOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {exportOpen && (
+        <div className="sales-modal-overlay" onClick={() => setExportOpen(false)}>
+          <div className="sales-modal" role="dialog" aria-modal="true" aria-labelledby="osk-export-title" onClick={(e) => e.stopPropagation()}>
+            <h2 className="sales-modal__head" id="osk-export-title">Export stock levels</h2>
+            <div className="sales-modal__body">
+              <p>This downloads a CSV of the stock list exactly as it is filtered and sorted right now — one row per ingredient.</p>
+              <ul>
+                <li>Columns: Ingredient, Unit, Current stock, Reorder level, Status.</li>
+                <li>It includes this page's {filtered.length} visible rows only, respecting your search, status filter, and sort.</li>
+                <li>The file downloads as <code>inventory-status-YYYY-MM-DD.csv</code>.</li>
+              </ul>
+            </div>
+            <div className="sales-modal__foot">
+              <button className="ui-btn" onClick={() => setExportOpen(false)}>Cancel</button>
+              <button className="ui-btn ui-btn--primary" onClick={() => { setExportOpen(false); handleExport(); }}>Export CSV</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="osk-table-wrap">
         <table className="osk-table" aria-label="Inventory levels">
@@ -226,7 +292,7 @@ export default function OversightStocks() {
                       <td><span className="osk-name">{item.name}</span></td>
                       <td className="osk-muted">{item.unit}</td>
                       <td><Bar current={item.current_stock} reorder={item.reorder_level} /></td>
-                      <td className="osk-muted">{item.reorder_level} {item.unit}</td>
+                      <td className="osk-muted osk-nowrap">{item.reorder_level} {item.unit}</td>
                       <td>
                         <Badge variant={stockBadgeVariant(status)}>
                           {stockStatusText(status)}

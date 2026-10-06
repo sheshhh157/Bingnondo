@@ -1,8 +1,7 @@
 import { kitchenAPI } from '../../services/managerApi';
 import useLiveData from '../../hooks/useLiveData';
 import { kitchenBadgeVariant, kitchenStatusText } from '../../utils/format';
-import { listEvent, queueUpsert, queueStatusInView, queueReady, splitByChannel, urgencyFor, elapsedSince, useNow } from './managerData';
-import LiveControls from './LiveControls';
+import { listEvent, queueUpsert, queueStatusInView, queueReady, splitByChannel, urgencyFor, elapsedSince, useNow, isAwaitingHandoff, isStaleHandoff } from './managerData';
 import PageSkeleton from '../../components/PageSkeleton';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
@@ -22,7 +21,7 @@ export default function OversightKitchen() {
   // (unlike the nav badge's, which counts only work in the kitchen), so a live
   // `order:ready` moves a card across into the handoff section instead of
   // making it vanish.
-  const { data: orders, loading, error, refresh, lastUpdated, refreshing } = useLiveData({
+  const { data: orders, loading, error, refresh } = useLiveData({
     fetchFn: async () => (await kitchenAPI.getOrders({ includeReady: true })).data,
     events: [
       listEvent('order:new', queueUpsert),
@@ -43,21 +42,29 @@ export default function OversightKitchen() {
   // over rather than being made, so they get their own section below instead of
   // competing for space in the two-column layout.
   const prep = orders.filter((o) => o.status !== 'ready');
-  const handoff = orders.filter((o) => o.status === 'ready');
+  // Ready tickets are shown in two tiers: ones still plausibly awaiting pickup,
+  // then the ones that have sat past the staleness window (missed handoffs).
+  // Both stay visible — the stale ones are the reason the number looks large.
+  const handoff = orders
+    .filter((o) => o.status === 'ready')
+    .sort((a, b) => {
+      const fresh = (o) => (isAwaitingHandoff(o, now) ? 0 : 1);
+      return fresh(a) - fresh(b)
+        || new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at);
+    });
+  const staleCount = handoff.filter((o) => isStaleHandoff(o, now)).length;
   const { counter, online, unknown } = splitByChannel(prep);
 
   return (
     <div className="ok-root">
       <PageHeader
-        title="Kitchen — Live"
+        title="Kitchen"
         sub="Live mirror of the Kitchen Dashboard (viewing only)"
-        actions={[
-          {
-            label: connected ? 'Live' : 'Offline',
-            disabled: true,
-            className: `ok-conn${connected ? '' : ' ok-conn--off'}`,
-          },
-        ]}
+        badge={(
+          <span className={`ok-conn${connected ? '' : ' ok-conn--off'}`}>
+            {connected ? 'Live' : 'Offline'}
+          </span>
+        )}
       />
 
       {error && (
@@ -66,8 +73,6 @@ export default function OversightKitchen() {
           <button type="button" className="ui-error__retry" onClick={() => refresh()}>Retry</button>
         </ErrorBanner>
       )}
-
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh kitchen queue" />
 
       {alerts.length > 0 && (
         <section className="kit-alerts" aria-label={`${alerts.length} active kitchen alert${alerts.length === 1 ? '' : 's'}`} role="status">
@@ -123,7 +128,11 @@ export default function OversightKitchen() {
             <div className="ok-handoff__header">
               <span className="ok-handoff__count">{handoff.length}</span>
               <h2 className="ok-handoff__title">Ready for handoff</h2>
-              <span className="ok-handoff__hint">finished in the kitchen, waiting to be handed over</span>
+              <span className="ok-handoff__hint">
+                {staleCount > 0
+                  ? `finished in the kitchen · ${staleCount} waiting over a day (missed handoff)`
+                  : 'finished in the kitchen, waiting to be handed over'}
+              </span>
             </div>
             {handoff.length === 0 ? (
               <EmptyState message="Nothing waiting to be handed over." />

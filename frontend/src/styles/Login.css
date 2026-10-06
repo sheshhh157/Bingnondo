@@ -432,6 +432,42 @@
 
 .login-form__footer strong { color: #2D0000; }
 
+/* ── Password recovery ───────────────────────────────────────────── */
+
+/* Quiet text button under the primary CTA ("Forgot your password?"). */
+.login-form__link {
+  background: none;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  margin: -0.25rem auto 0;
+  font-family: 'Noto Sans TC', system-ui, sans-serif;
+  font-size: 0.8125rem;
+  color: #78553A;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.login-form__link:hover { color: #3D0000; }
+.login-form__link:focus-visible { outline: 3px solid #E07B00; outline-offset: 3px; }
+
+/* Success/confirmation strip — mirrors __error but in the positive tone. */
+.login-form__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.6rem 0.875rem;
+  background: rgba(29,78,216,0.06);
+  border: 1px solid rgba(29,78,216,0.22);
+  border-radius: 8px;
+  color: #1D4ED8;
+  font-family: 'Noto Sans TC', system-ui, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.login-form__notice svg { flex-shrink: 0; margin-top: 2px; }
+
 /* ══════════════════════════════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════════════════════════════ */

@@ -6,7 +6,8 @@
   display: inline-flex;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  /* The tab strip scrolls horizontally instead of clipping on small screens. */
+  overflow: auto hidden;
   background: var(--color-card);
 }
 .sales-period__btn {
@@ -21,6 +22,32 @@
 .sales-period__btn + .sales-period__btn { border-left: 1px solid var(--color-border); }
 .sales-period__btn:not(.sales-period__btn--active):hover { background: var(--color-surface); }
 .sales-period__btn--active { background: var(--color-primary); color: var(--color-on-primary); }
+
+/* Desktop: period tabs sit beside the title, Export directly to their right.
+ * ≤1024px the row claims a full-width line and the tab strip scrolls, so the
+ * Export button stays on screen at every size. */
+.sales-period-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sales-period-row .sales-period { flex: 0 0 auto; min-width: 0; }
+.sales-period-row > .ui-btn { flex-shrink: 0; white-space: nowrap; }
+/* The custom date inputs sit between the tab group and Export on desktop, so
+ * they must keep their intrinsic width rather than being squeezed. */
+.sales-period-row .sales-date-wrap { flex-shrink: 0; }
+
+/* Below 1024px the row claims its own full-width line. The tab strip flexes and
+ * scrolls so Export stays pinned beside it, and the date pair drops to its own
+ * row underneath (order 3) — on a phone there is no width for all three, and a
+ * scrollable tab strip would otherwise hide the pickers entirely. */
+@media (max-width: 1024px) {
+  .sales-period-row { width: 100%; flex-wrap: wrap; }
+  .sales-period-row .sales-period { flex: 1 1 0; }
+  .sales-period-row > .ui-btn { order: 2; }
+  .sales-period-row .sales-date-wrap { order: 3; flex: 1 1 100%; }
+}
 
 .sales-summary {
   display: grid;
@@ -55,6 +82,12 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+/* Height parity across the filter row. `.sales-search` and `.sales-select` both
+ * come out at 43px (21px line + 10px padding + 1px border), but `.ui-btn` is
+ * 8px padding at 0.8rem ≈ 37px, so the Filter button sat visibly shorter beside
+ * the search on phones. min-height rather than height, so the icon and label stay
+ * centred instead of being clipped. */
+.sales-filters .ui-btn { min-height: 43px; }
 .sales-search {
   display: flex;
   align-items: center;
@@ -66,24 +99,75 @@
   color: var(--color-muted-foreground);
   flex: 1;
   min-width: 200px;
+  transition: border-color 150ms ease;
 }
+/* One border, one highlight — both belong to the wrapper.
+ *
+ * `.sales-search__input` already sets `outline: none`, but the manager-wide rule
+ * (`.ml-root :is(a, button, input, …):focus-visible`) out-ranks it, (0,2,1) vs
+ * (0,1,0), which is why the ring used to be drawn around the inner text field.
+ * The `.ml-root` prefix lifts this override to (0,3,1) so that ring is gone.
+ *
+ * Focus is signalled by the wrapper's own border only — no extra glow. A border
+ * tint plus a box-shadow is two visible edges, which reads as a double border.
+ * This mirrors .inv-search / .mn-search / .sc-search, which change border-colour
+ * and nothing else. The colour is mixed to 70% so it stays a quiet tint rather
+ * than the hard azure the user first reported. */
+.ml-root .sales-search__input:focus-visible { outline: none; }
+.sales-search:focus-within {
+  border-color: color-mix(in srgb, var(--color-primary) 70%, var(--color-border-strong));
+}
+/* The magnifier is a flex child, so without this it can be compressed on the
+ * x-axis in a narrow row. Matches the staff pages' equivalent rule. */
+.sales-search svg { flex-shrink: 0; }
 .sales-search__input {
   flex: 1;
+  min-width: 0;
   border: none;
+  outline: none;
+  /* `type="search"` carries a UA field look of its own — WebKit draws it as a
+   * rounded inset box, which is the second border appearing inside the wrapper.
+   * Only `appearance: none` removes it; `border: none` alone does not. */
+  appearance: none;
+  -webkit-appearance: none;
   background: transparent;
   padding: 10px 0;
   font-size: 0.875rem;
-  outline: none;
   color: var(--color-foreground);
 }
+/* Native selects get the app's control treatment, not the browser's.
+ * `appearance: none` removes the OS arrow (which sits on its own baseline and
+ * fights the text), and a small inline SVG chevron is drawn on the right instead.
+ * The chevron colour is the manager muted-foreground, kept in step with the
+ * stroke used elsewhere in this file.
+ *
+ * Height math: font 0.875rem (21px line) + 10px padding top/bottom + 1px borders
+ * = 43px, matching `.sales-search` in the same row so the controls line up.
+ * `padding-right` reserves the 12px chevron plus its 12px inset. */
 .sales-select {
-  padding: 10px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 10px 36px 10px 12px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  background: var(--color-card);
-  font-size: 0.85rem;
+  background-color: var(--color-card);
+  /* The chevron itself is the shared `--manager-select-chevron` token (see
+ * .ml-root in ManagerLayout.css) so it can't drift from the stocks page. */
+  background-image: var(--manager-select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  line-height: 21px;
   color: var(--color-foreground);
+  cursor: pointer;
 }
+.sales-select:hover { border-color: var(--color-primary); }
+/* Keep the native popup arrow away on engines that ignore `appearance`. */
+.sales-select::-ms-expand { display: none; }
+.sales-select option { background: var(--color-card); color: var(--color-foreground); }
 
 /* Breakdown chips under the summary cards */
 .sales-substats {
@@ -140,8 +224,10 @@
 .sales-detail__title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted-foreground); margin-bottom: 2px; }
 .sales-detail__item { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
 .sales-detail__qty { font-weight: 700; color: var(--color-primary); min-width: 26px; }
-.sales-detail__name { flex: 1; }
-.sales-detail__price { color: var(--color-muted-foreground); }
+/* min-width:0 — `flex: 1` sets a 0 basis but leaves min-width:auto, which still
+ * floors the name at its min-content width and widens the row on long names. */
+.sales-detail__name { flex: 1; min-width: 0; overflow-wrap: break-word; }
+.sales-detail__price { color: var(--color-muted-foreground); flex-shrink: 0; }
 .sales-detail__total { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-border); padding-top: 8px; margin-top: 4px; font-size: 0.875rem; }
 
 /* Date range picker */
@@ -163,6 +249,19 @@
 }
 .sales-chart { width: 100%; }
 
+/* Peak hours: one chart, drawn wider than the panel so the bars stay chunky;
+ * it scrolls sideways only when the panel is narrower than the chart. */
+.sales-chart-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+.sales-chart--wide { min-width: 540px; }
+
+@media (max-width: 640px) {
+  .sales-chart--wide { min-width: 500px; }
+}
+
 .sales-table-wrap { overflow-x: auto; }
 .sales-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .sales-table th {
@@ -182,19 +281,55 @@
 .sales-table tbody tr:not(.sales-detail-row):hover td { background: var(--color-surface); }
 .sales-table tr:last-child td { border-bottom: none; }
 
-.sales-cell--order { font-weight: 600; color: var(--color-primary); }
+/* Order numbers and times must never split across lines in a narrow table
+ * cell, so both columns keep their text on one line at every width. */
+.sales-cell--order { font-weight: 600; color: var(--color-primary); white-space: nowrap; }
 .sales-cell--items { color: var(--color-foreground); }
 .sales-more { color: var(--color-muted-foreground); font-size: 0.8rem; }
 .sales-cell--total { font-weight: 600; }
-.sales-cell--time { color: var(--color-muted-foreground); }
+/* Times must never split across lines (e.g. "08:00" / "PM") in a narrow
+ * table cell, so the column keeps its text on one line at every width. */
+.sales-cell--time { color: var(--color-muted-foreground); white-space: nowrap; }
+
+/* Phones only: keep long item names on one line so a row stays a single
+ * height. The full list is still visible via the row's title tooltip and the
+ * expandable detail row underneath. */
+@media (max-width: 640px) {
+  .sales-cell--items { max-width: 150px; }
+  .sales-items-text {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 
 @media (max-width: 900px) {
   .sales-grid { grid-template-columns: 1fr; }
-  .sales-summary { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 480px) {
-  .sales-period { flex-wrap: wrap; overflow: visible; }
-  .sales-date-wrap { width: 100%; }
-  .sales-date { flex: 1; min-width: 0; }
+@media (max-width: 640px) {
+  .sales-period__btn { flex-shrink: 0; white-space: nowrap; }
+  .sales-date { width: 8.5rem; }
+  .sales-filters .sales-filter-btn { display: inline-flex; }
+  .sales-filters .sales-select { display: none; }
+  /* Keep the summary row as one line even on phones: compact stat cards. */
+  .sales-summary { gap: 8px; }
+  .sales-summary .ui-stat { padding: 10px 12px; gap: 2px; }
+  .sales-summary .ui-stat__label { font-size: 0.62rem; letter-spacing: 0.03em; }
+  .sales-summary .ui-stat__value { font-size: 1.05rem; }
+}
+
+.sales-filter-btn { display: none; }
+
+.sales-filter-dot {
+  width: 7px; height: 7px;
+  border-radius: 99px;
+  background: var(--color-primary);
+  display: inline-block;
+}
+
+@media (max-width: 640px) {
+  .sales-filters .sales-search { flex: 1 1 auto; min-width: 0; }
+  .sales-filters .sales-filter-btn { flex-shrink: 0; }
 }

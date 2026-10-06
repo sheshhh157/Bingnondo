@@ -8,19 +8,6 @@
   gap: 14px;
 }
 
-.osk-alert {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: var(--color-destructive);
-  background: #FDF6F5;
-  border: 1px solid #F3CFCF;
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-}
-.osk-alert svg { flex-shrink: 0; color: var(--color-destructive); }
-
 .osk-filters {
   display: flex;
   align-items: center;
@@ -39,24 +26,70 @@
   color: var(--color-muted-foreground);
   flex: 1;
   min-width: 200px;
+  transition: border-color 150ms ease;
 }
+/* One border, one highlight — both on the wrapper, mirroring .sales-search.
+ * The manager-wide rule `.ml-root :is(a, button, input, …):focus-visible` scores
+ * (0,2,1) and would otherwise paint a ring around the inner text field; the
+ * `.ml-root` prefix here lifts this override to (0,3,1) so that ring is gone.
+ * Focus is the wrapper's border only — a border tint *and* a box-shadow would be
+ * two edges, which reads as a double border. Mixed to 70% for a quiet tint. */
+.ml-root .osk-search__input:focus-visible { outline: none; }
+.osk-search:focus-within {
+  border-color: color-mix(in srgb, var(--color-primary) 70%, var(--color-border-strong));
+}
+/* Magnifier is a flex child; without this it compresses on the x-axis. */
+.osk-search svg { flex-shrink: 0; }
 .osk-search__input {
   flex: 1;
+  min-width: 0;
   border: none;
+  outline: none;
+  /* `type="search"` carries a UA field look of its own — WebKit draws it as a
+   * rounded inset box, which is the second border inside the wrapper. Only
+   * `appearance: none` removes it; `border: none` alone does not. */
+  appearance: none;
+  -webkit-appearance: none;
   background: transparent;
   padding: 10px 0;
   font-size: 0.875rem;
-  outline: none;
   color: var(--color-foreground);
 }
+/* Native selects get the app's control treatment, not the browser's.
+ * `appearance: none` removes the OS arrow (which sits on its own baseline and
+ * fights the text), and a small inline SVG chevron is drawn on the right instead.
+ * The chevron colour is the manager muted-foreground, matching the identical rule
+ * on the sales page.
+ *
+ * Height math: font 0.875rem (21px line) + 10px padding top/bottom + 1px borders
+ * = 43px, matching `.osk-search` in the same row so the controls line up.
+ * `padding-right` reserves the 12px chevron plus its 12px inset.
+ * The identical data URI was validated to decode to well-formed SVG — a malformed
+ * one fails silently (no icon, no error). */
 .osk-select {
-  padding: 10px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  padding: 10px 36px 10px 12px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  background: var(--color-card);
-  font-size: 0.85rem;
+  background-color: var(--color-card);
+  /* The chevron itself is the shared `--manager-select-chevron` token (see
+   * .ml-root in ManagerLayout.css) so it can't drift from the sales page. */
+  background-image: var(--manager-select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  line-height: 21px;
   color: var(--color-foreground);
+  cursor: pointer;
 }
+.osk-select:hover { border-color: var(--color-primary); }
+/* Keep the native popup arrow away on engines that ignore `appearance`. */
+.osk-select::-ms-expand { display: none; }
+.osk-select option { background: var(--color-card); color: var(--color-foreground); }
 
 .osk-table-wrap {
   background: var(--color-card);
@@ -71,7 +104,9 @@
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.85rem;
-  min-width: 560px;
+  /* Wide enough that the six columns are never squeezed into stacked lines;
+     on phones the wrapper scrolls sideways with the ingredient column pinned. */
+  min-width: 720px;
 }
 .osk-table th {
   text-align: left;
@@ -100,10 +135,13 @@
 .osk-table tr:last-child td { border-bottom: none; }
 .osk-name { font-weight: 600; }
 .osk-muted { color: var(--color-muted-foreground); }
+/* Counts like "0 pcs" must not split across lines in a narrow cell. */
+.osk-nowrap { white-space: nowrap; }
 
-.osk-bar { display: flex; align-items: center; gap: 8px; }
+.osk-bar { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
 .osk-bar__track {
   flex: 1;
+  min-width: 44px;
   max-width: 160px;
   height: 8px;
   border-radius: 99px;
@@ -114,7 +152,8 @@
 .osk-bar__fill--ok { background: #1D4ED8; }
 .osk-bar__fill--low { background: #B45309; }
 .osk-bar__fill--out { background: var(--color-destructive); }
-.osk-bar__value { font-weight: 600; font-size: 0.85rem; }
+/* The count sits beside the bar, never wrapped under it. */
+.osk-bar__value { font-weight: 600; font-size: 0.85rem; white-space: nowrap; }
 
 .osk-export {
   display: inline-flex;
@@ -129,9 +168,17 @@
   padding: 10px 14px;
   cursor: pointer;
   margin-left: auto;
+  /* Height parity across the filter row: .osk-search and .osk-select both come
+   * out at 43px, but this button is 0.8rem so it lands at 41px and sat visibly
+   * short beside them. min-height rather than height, so the icon and label stay
+   * centred instead of being clipped. */
+  min-height: 43px;
 }
 .osk-export:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
 .osk-export:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Same guard as .ui-btn > svg: as a flex child the icon is shrinkable by
+ * default and gets squashed on the x-axis in a tight filter row. */
+.osk-export > svg { flex-shrink: 0; }
 
 .osk-skel { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--color-border), var(--color-muted), var(--color-border)); background-size: 200% 100%; animation: osk-shimmer 1.2s infinite linear; }
 
@@ -192,5 +239,21 @@
 
 @media (max-width: 760px) {
   .osk-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Mobile: search + Filter button share a row; selects move into a modal. */
+.osk-filter-btn { display: none; }
+.osk-filter-dot {
+  width: 7px; height: 7px;
+  border-radius: 99px;
+  background: var(--color-primary);
+  display: inline-block;
+}
+
+@media (max-width: 640px) {
+  .osk-search { flex: 1 1 auto; min-width: 0; }
+  .osk-filters .osk-select { display: none; }
+  .osk-filters .osk-filter-btn { display: inline-flex; flex-shrink: 0; }
+  .osk-export { flex: 1 1 100%; margin-left: 0; justify-content: center; }
 }
 

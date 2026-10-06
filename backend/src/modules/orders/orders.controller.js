@@ -316,6 +316,7 @@ async function getOrders(req, res, next) {
          o.total_amount::float,
          o.special_request,
          o.created_at,
+         o.updated_at,
          o.cashier_id,
          sa.full_name AS cashier_name,
          p.method     AS payment_method,

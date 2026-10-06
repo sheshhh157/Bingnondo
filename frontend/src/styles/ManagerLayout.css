@@ -11,19 +11,40 @@
   --color-border-strong: #94A3B8;
   --color-destructive: #B91C1C;
   --color-surface: #E8EFFB;
+  /* Chevron drawn on the right of the manager's filter selects. Declared once
+   * as a token because the sales and stocks pages each carried their own copy
+   * of this data URI, free to drift apart on a colour change. The stroke is
+   * #475569, the manager muted-foreground. */
+  --manager-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   min-height: 100dvh;
   display: flex;
   background: var(--color-background);
   color: var(--color-foreground);
 }
 
-/* Every interactive control gets a visible keyboard focus ring. Page-level
- * CSS sets `outline: none` on input/search elements, so this rule is written
- * with enough specificity to win and keep focus discoverable while clicking
- * still stays free of a ring (focus-visible). */
+/* Every interactive control gets a visible focus ring, deliberately softened:
+ * the manager's primary is an opaque azure, and at full strength a click painted
+ * a hard blue box around the control. At 70% alpha it still clears the 3:1
+ * contrast WCAG asks of a focus indicator while reading as a quiet tint, and the
+ * 1px offset keeps the ring against the control instead of floating between it
+ * and its neighbour.
+ *
+ * Note: `:focus-visible` still matches text inputs on *mouse* focus by design,
+ * so this is what a click shows. Page-level CSS sets `outline: none` on inputs,
+ * hence the specificity needed to win.
+ *
+ * 70% rather than 65% because the ring has to clear 3:1 against *both* surfaces
+ * it can sit on: #FFFFFF cards (3.57:1) and the #F1F5F9 page background
+ * (3.26:1). At 65% the page-background case slips to 2.93:1, just under. */
 .ml-root :is(a, button, input, select, textarea):focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 70%, transparent);
+  outline-offset: 1px;
+}
+
+/* Drag-selecting text fell back to the browser's saturated default blue. A light
+ * wash of the same accent reads as a selection without the flash. */
+.ml-root ::selection {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
 /* ── Sidebar ──────────────────────────────────────────────────────────── */
@@ -100,7 +121,7 @@
   transition: transform 0.12s ease;
 }
 .ml-nav__link--active::before { transform: scaleY(1); }
-.ml-nav__link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.ml-nav__link:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 70%, transparent); outline-offset: -2px; }
 
 .ml-nav__link:hover { background: var(--color-surface); }
 
@@ -181,8 +202,8 @@
   font-weight: 700;
 }
 
-.ml-user__info { display: flex; flex-direction: column; line-height: 1.2; }
-.ml-user__name { font-size: 0.875rem; font-weight: 600; }
+.ml-user__info { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.ml-user__name { font-size: 0.875rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ml-user__role { font-size: 0.72rem; color: var(--color-muted-foreground); }
 
 .ml-user__logout {
@@ -294,6 +315,24 @@
   cursor: pointer;
 }
 
+/* Dashboard-switcher chevron sits on the LEFT in the manager court (caret |
+ * label | icon). Scoped to .ml-root so the cashier, kitchen and staff copies of
+ * the shared switcher keep their original caret-on-the-right. The caret is
+ * aria-hidden decoration, so only the visual order changes. */
+.ml-root .ds-trigger .ds-caret { order: 1; }
+.ml-root .ds-trigger .ds-trigger__label { order: 2; }
+.ml-root .ds-trigger > svg:not(.ds-caret) { order: 3; }
+
+/* The switcher's panel opens to the right of its trigger in every role. Nudge it
+ * left in the manager court only, so it tucks back under the button.
+ *  - header/topbar panel: absolute, right-aligned to the trigger, so `right`
+ *    moves it left.
+ *  - sidebar panel: `left` is computed inline from getBoundingClientRect(), so it
+ *    is shifted with margin — `transform` would fight the ds-drop-right
+ *    keyframes, which animate translateX. */
+.ml-root .ds-dropdown { right: 14px; }
+.ml-root .ds-dropdown--fixed { margin-left: -14px; }
+
 /* Live / Offline connection pill (top of main content; mobile top bar)
  * and the slim status strip above every page's header. */
 .ml-status {
@@ -401,7 +440,8 @@
   .ml-topbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 10px;
     padding: 12px 16px;
     background: var(--color-card);
     border-bottom: 1px solid var(--color-border);
@@ -409,6 +449,17 @@
     top: 0;
     z-index: 20;
   }
+  .ml-topbar__brand { margin-right: auto; min-width: 0; }
+  .ml-topbar__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ml-topbar .ml-conn,
+  .ml-topbar .ml-topbar__menu { flex-shrink: 0; }
+  /* The switcher is allowed to shrink (the brand and pill are not) so a long
+   * dashboard name narrows it instead of pushing the row into overflow at
+   * phone widths. The order the user asked for is unchanged — this only
+   * decides who gives way when space runs out. */
+  .ml-topbar .ds-wrap { min-width: 0; flex-shrink: 1; }
+  .ml-topbar .ds-trigger { min-width: 0; }
+  .ml-topbar .ds-trigger__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .ml-root { flex-direction: column; }
   .ml-main { padding: 16px; }
 }

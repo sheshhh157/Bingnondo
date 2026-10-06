@@ -11,17 +11,32 @@
   gap: 20px;
 }
 
+/* The kitchen board is the manager's headline view, so its title runs a little
+ * larger than the shared page header default. Scoped to this page only. */
+.ok-root .ui-pageheader__title {
+  font-size: 1.75rem;
+}
+
+@media (max-width: 480px) {
+  .ok-root .ui-pageheader__title { font-size: 1.4rem; }
+}
+
+/* Sits inline beside the page title, so it reads as a quiet status stamp
+ * rather than a control — smaller type and tighter padding than the old
+ * button-sized pill. */
 .ok-conn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
+  gap: 5px;
+  font-size: 0.6875rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--color-primary);
   border: 1px solid color-mix(in srgb, var(--color-primary) 25%, white);
   background: color-mix(in srgb, var(--color-primary) 10%, white);
   border-radius: 99px;
-  padding: 6px 12px;
+  padding: 3px 9px;
   cursor: default;
   opacity: 1 !important;
 }
@@ -124,8 +139,10 @@
 }
 .ok-card__item { display: flex; align-items: flex-start; gap: 8px; }
 .ok-card__qty { font-weight: 700; color: var(--color-primary); font-size: 0.85rem; min-width: 26px; }
-.ok-card__item-body { display: flex; flex-direction: column; }
-.ok-card__item-name { font-size: 0.875rem; }
+/* min-width:0 — a flex item defaults to min-content, so a long unbroken item
+ * name would push the card wider than the screen instead of wrapping. */
+.ok-card__item-body { display: flex; flex-direction: column; min-width: 0; }
+.ok-card__item-name { font-size: 0.875rem; overflow-wrap: break-word; }
 .ok-card__note { font-size: 0.75rem; color: var(--color-muted-foreground); font-style: italic; }
 
 .ok-card__overdue {

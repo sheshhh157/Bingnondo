@@ -1,11 +1,12 @@
 const express = require('express');
 const router  = express.Router();
 const { authenticateToken, requireRoles, requireStaff } = require('../../middleware/auth.middleware');
+const { writeLimiter } = require('../../middleware/rate-limit.middleware');
 const ctrl = require('./inventory.controller');
 
 // All inventory routes are staff-only
 const staffAccess = [authenticateToken, requireStaff];
-const staffWrite  = [authenticateToken, requireStaff, requireRoles('staff', 'owner', 'admin')];
+const staffWrite  = [authenticateToken, requireStaff, requireRoles('staff', 'owner', 'admin'), writeLimiter];
 
 // DELETE /api/inventory/:id                — remove an ingredient outright.
 // Cascades menu_item_ingredients (recipe links) and inventory_transactions

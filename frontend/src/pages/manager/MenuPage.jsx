@@ -3,7 +3,6 @@ import { menuAPI } from '../../services/managerApi';
 import useLiveData from '../../hooks/useLiveData';
 import { currency, menuAvailVariant } from '../../utils/format';
 import { MENU_EVENTS, outOfStockIngredients } from './managerData';
-import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
@@ -13,7 +12,7 @@ import ErrorBanner from '../../components/ErrorBanner';
 import '../../styles/MenuPage.css';
 
 export default function MenuPage() {
-  const { data: items, loading, error, lastUpdated, refresh, refreshing } = useLiveData({
+  const { data: items, loading, error, refresh } = useLiveData({
     fetchFn: async () => (await menuAPI.getStaffMenu()).data,
     events: MENU_EVENTS,
     pollMs: 15000,
@@ -55,8 +54,6 @@ export default function MenuPage() {
         <StatCard label="Available" value={items.length - unavailableCount} />
         <StatCard label="Unavailable" value={unavailableCount} />
       </div>
-
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh menu availability" />
 
       <div className="menu-toolbar">
         <div className="menu-search">
@@ -114,12 +111,12 @@ export default function MenuPage() {
                     <article key={item.id} className={`menu-card${item.is_available ? '' : ' menu-card--off'}`}>
                       <MenuCardPhoto item={item} />
                       <div className="menu-card__body">
-                        <div className="menu-card__top">
-                          <span className="menu-card__name">{item.name}</span>
+                        <div className="menu-card__avail">
                           <Badge variant={menuAvailVariant(item.is_available)}>
                             {item.is_available ? 'Available' : 'Unavailable'}
                           </Badge>
                         </div>
+                        <span className="menu-card__name">{item.name}</span>
                         <div className="menu-card__meta">
                           <span className="menu-card__price">{currency(item.price)}</span>
                           {blockers.length > 0 && (

@@ -37,6 +37,7 @@ async function getKitchenOrders(req, res, next) {
          o.status,
          o.special_request,
          o.created_at,
+         o.updated_at,
 json_agg(
             json_build_object(
               'id',        oi.id,

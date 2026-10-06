@@ -58,7 +58,7 @@ function ImageUpload({ value, onChange }) {
 
   const process = (file) => {
     if (!file || !file.type.startsWith('image/')) return;
-    if (file.size > 5 * 1024 * 1024) return;
+    if (file.size > 20 * 1024 * 1024) return;
     setPreview(URL.createObjectURL(file));
     onChange(file);
   };
@@ -92,7 +92,7 @@ function ImageUpload({ value, onChange }) {
               <circle cx="9" cy="9" r="2"/><polyline points="21 15 16 10 5 21"/>
             </svg>
             <p>Drop photo here or <span>browse</span></p>
-            <p className="mn-upload__hint">JPG, PNG · max 5MB</p>
+            <p className="mn-upload__hint">JPG, PNG · max 20MB</p>
           </div>
       }
       <input ref={inputRef} type="file" accept="image/*" className="mn-upload__input" onChange={(e) => process(e.target.files[0])} />
@@ -195,6 +195,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
                       type="number"
                       min="0.01"
                       step="0.01"
+                      max="99999999.99"
                       value={editQty}
                       onChange={(e) => setEditQty(e.target.value)}
                       onKeyDown={(e) => {
@@ -272,6 +273,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
                 type="number"
                 min="0.01"
                 step="0.01"
+                max="99999999.99"
                 value={qty}
                 onChange={(e) => { setQty(e.target.value); setAddError(''); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
@@ -422,8 +424,10 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
   const setFlavor = (idx, field, value) =>
     setFlavorRows((rows) => rows.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
 
-  const addFlavorRow = () =>
+  const addFlavorRow = () => {
+    if (flavorRows.length >= 10) { setError('Flavors are limited to 10 per item.'); return; }
     setFlavorRows((rows) => [...rows, { name: '', price: flavorSamePrice ? sharedFlavorPrice : '', is_available: true, _new: true }]);
+  };
 
   const removeFlavorRow = (idx) =>
     setFlavorRows((rows) => rows.filter((_, i) => i !== idx));
@@ -446,20 +450,23 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) { setError('Item name is required.'); return; }
+    if (form.name.trim().length > 50) { setError('Item name must be 50 characters or fewer.'); return; }
     if (!form.category_id) { setError('Select a category.'); return; }
+    if (form.description && form.description.length > 100) { setError('Description must be 100 characters or fewer.'); return; }
 
     const [nameA, nameB] = preset ? preset.names : [null, null];
 
     if (variantsOn) {
-      if (!(Number(rowA.price) > 0)) { setError(`Enter a valid ${nameA} price.`); return; }
-      if (!(Number(rowB.price) > 0)) { setError(`Enter a valid ${nameB} price.`); return; }
-    } else if (!form.price || Number(form.price) <= 0) {
+      if (!(Number(rowA.price) > 0) || !Number.isFinite(Number(rowA.price)) || Number(rowA.price) > 1000) { setError(`Enter a valid ${nameA} price.`); return; }
+      if (!(Number(rowB.price) > 0) || !Number.isFinite(Number(rowB.price)) || Number(rowB.price) > 1000) { setError(`Enter a valid ${nameB} price.`); return; }
+    } else if (!form.price || !Number.isFinite(Number(form.price)) || Number(form.price) <= 0 || Number(form.price) > 1000) {
       setError('Enter a valid price.'); return;
     }
 
     const validFlavors = flavorsOn ? flavorRows.filter((f) => f.name.trim()) : [];
     for (const f of validFlavors) {
-      if (!(Number(f.price) > 0)) { setError(`Enter a valid price for flavor "${f.name}".`); return; }
+      if (f.name.trim().length > 50) { setError('Flavor names must be 50 characters or fewer.'); return; }
+      if (!(Number(f.price) > 0) || !Number.isFinite(Number(f.price)) || Number(f.price) > 1000) { setError(`Enter a valid price for flavor "${f.name}".`); return; }
     }
 
     const baseRow = preset && preset.base.toLowerCase() === nameA.toLowerCase() ? rowA : rowB;
@@ -527,12 +534,12 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                 <div className="mn-grid-2">
                   <div className="mn-field mn-grid-2__full">
                     <label htmlFor="mn-name" className="mn-field__label">Name *</label>
-                    <input id="mn-name" type="text" value={form.name} onChange={(e) => set('name')(e.target.value)} className="mn-field__input" placeholder="e.g. Tapsilog" required autoFocus={!isEdit} />
+                    <input id="mn-name" type="text" value={form.name} onChange={(e) => set('name')(e.target.value)} className="mn-field__input" placeholder="e.g. Tapsilog" required autoFocus={!isEdit} maxLength={50} />
                   </div>
                   {!variantsOn && (
                     <div className="mn-field">
                       <label htmlFor="mn-price" className="mn-field__label">Price (₱) *</label>
-                      <input id="mn-price" type="number" min="0" step="0.5" value={form.price} onChange={(e) => set('price')(e.target.value)} className="mn-field__input" placeholder="e.g. 120" required />
+                      <input id="mn-price" type="number" min="0" step="0.5" max="1000" value={form.price} onChange={(e) => set('price')(e.target.value)} className="mn-field__input" placeholder="e.g. 120" required />
                     </div>
                   )}
 
@@ -569,6 +576,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                         type="number"
                         min="0"
                         step="0.5"
+                        max="1000"
                         value={rowA?.price ?? ''}
                         onChange={(e) => setVariant(rowA, e.target.value)}
                         className="mn-field__input"
@@ -582,6 +590,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                         type="number"
                         min="0"
                         step="0.5"
+                        max="1000"
                         value={rowB?.price ?? ''}
                         onChange={(e) => setVariant(rowB, e.target.value)}
                         className="mn-field__input"
@@ -628,8 +637,10 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                         value={sharedFlavorPrice}
                         onChange={(e) => applySharedFlavorPrice(e.target.value)}
                         className="mn-field__input mn-flavors__shared"
-                        placeholder="Shared price (₱)"
+                        placeholder="Shared price (�,�)"
                         aria-label="Shared flavor price"
+                        max="1000"
+
                       />
                     )}
                     {flavorsOn && flavorRows.length > 0 && (
@@ -643,6 +654,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                               className="mn-field__input mn-flavors__name"
                               placeholder="Flavor name"
                               aria-label={`Flavor ${idx + 1} name`}
+                              maxLength={50}
                             />
                             {!flavorSamePrice && (
                               <input
@@ -654,6 +666,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                                 className="mn-field__input mn-flavors__price"
                                 placeholder="₱"
                                 aria-label={`Flavor ${idx + 1} price`}
+                                max="1000"
                               />
                             )}
                             <button
@@ -675,7 +688,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
 
                 <div className="mn-field">
                   <label htmlFor="mn-desc" className="mn-field__label">Description</label>
-                  <textarea id="mn-desc" value={form.description} onChange={(e) => set('description')(e.target.value)} className="mn-field__input mn-field__textarea" placeholder="Short description shown to customers…" rows={2} />
+                  <textarea id="mn-desc" value={form.description} onChange={(e) => set('description')(e.target.value)} className="mn-field__input mn-field__textarea" placeholder="Short description shown to customers…" rows={2} maxLength={100} />
                 </div>
                 <div className="mn-avail-row">
                   <div>
@@ -1104,7 +1117,7 @@ export default function MenuPage() {
         {[
           { label: 'Total Items', value: stats.total, mod: '' },
           { label: 'Available', value: stats.available, mod: '--ok' },
-          { label: 'Unavailable', value: stats.unavailable, mod: '--muted' },
+          { label: 'Unavailable', value: stats.unavailable, mod: '--bad' },
           { label: 'Categories', value: stats.categories, mod: '' },
         ].map(({ label, value, mod }) => (
           <div key={label} className="mn-stat-card">
@@ -1120,7 +1133,7 @@ export default function MenuPage() {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu items…" className="mn-search__input" aria-label="Search menu items" />
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu items…" className="mn-search__input" aria-label="Search menu items" maxLength={50} />
         </div>
         <div className="mn-filters__selects">
           <select className="mn-select" value={filterCat} onChange={(e) => setFilterCat(e.target.value)} aria-label="Filter by category">

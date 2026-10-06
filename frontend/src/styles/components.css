@@ -12,9 +12,15 @@
   color: var(--color-foreground);
   font-size: 0.8rem;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.12s ease, border-color 0.12s ease;
 }
 .ui-btn:hover { background: var(--color-surface); border-color: var(--color-primary); }
+/* An icon here is a flex child, so it is shrinkable by default: in a tight row
+ * (the period/export toolbar on narrow screens) it gets compressed on the x-axis
+ * and the glyph distorts — a squeezed download arrow. Pin its width so the
+ * stroke geometry stays true at any size. */
+.ui-btn > svg { flex-shrink: 0; }
 .ui-btn--primary { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); }
 .ui-btn--primary:hover { filter: brightness(1.05); background: var(--color-primary); }
 .ui-btn--danger:hover { background: #FBEAEA; color: var(--color-destructive); border-color: #F3CFCF; }
@@ -124,6 +130,12 @@
   font-family: var(--font-heading);
   font-size: 1.5rem;
   font-weight: 700;
+}
+.ui-pageheader__titlerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .ui-pageheader__sub { margin: 4px 0 0; color: var(--color-muted-foreground); font-size: 0.875rem; }
 .ui-pageheader__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -336,3 +348,68 @@
   .ui-pageheader__title { font-size: 1.2rem; }
   .ui-toast-container { right: 12px; left: 12px; bottom: 12px; max-width: none; }
 }
+
+/* Shared confirm/explain dialog (used by sales reports & stocks pages) */
+.sales-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 10, 0, 0.35);
+  backdrop-filter: blur(4px);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.sales-modal {
+  background: var(--color-card);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 440px;
+  /* The overlay centres the dialog, so without a ceiling a tall body (the
+   * stocks filter modal, or a phone in landscape) would grow past the viewport
+   * and get clipped at both ends. Capped to the overlay's 16px gutter, with
+   * dvh so a mobile browser's collapsing URL bar can't squeeze the dialog. */
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+.sales-modal__head {
+  padding: 18px 20px 0;
+  font-family: var(--font-heading);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  margin: 0;
+}
+.sales-modal__body {
+  padding: 12px 20px 18px;
+  font-size: 0.875rem;
+  color: var(--color-muted-foreground);
+  line-height: 1.5;
+  /* Head and footer stay pinned while an over-long body scrolls — without this
+   * the dialog's own max-height would just clip the content. */
+  overflow-y: auto;
+  min-height: 0;
+}
+.sales-modal__body ul { margin: 8px 0 0; padding-left: 18px; }
+.sales-modal__body li { margin-bottom: 4px; }
+.sales-modal__foot {
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sales-modal__label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+  margin-bottom: 12px;
+}
+.sales-modal__label .sales-select,
+.sales-modal__label select { width: 100%; }

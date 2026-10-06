@@ -296,6 +296,34 @@ export function splitByChannel(orders = []) {
   return { counter, online, unknown };
 }
 
+// ── Handoff age ───────────────────────────────────────────────────────────────
+
+/**
+ * Hours a ready ticket may wait before it stops counting as "awaiting pickup".
+ *
+ * A counter ticket that was never handed over keeps the `ready` status forever:
+ * the kitchen's counter branch completes it automatically, so only an abandoned
+ * handoff can leave it sitting here. Past this age the ticket is reported as a
+ * missed handoff rather than as a customer waiting at the counter.
+ */
+export const HANDOFF_STALE_HOURS = 24;
+
+/** True while a ready ticket is still plausibly waiting to be picked up. */
+export function isAwaitingHandoff(order, now = Date.now(), staleHours = HANDOFF_STALE_HOURS) {
+  if (!order || order.status !== 'ready') return false;
+  // `updated_at` is when the ticket was last moved (the flip to ready sets it);
+  // `created_at` is the fallback for payloads fetched before that column existed.
+  const since = new Date(order.updated_at || order.created_at).getTime();
+  // An unparseable age must not silently hide a ticket.
+  if (!Number.isFinite(since)) return true;
+  return now - since <= staleHours * 3600 * 1000;
+}
+
+/** True for a ready ticket that has waited past the staleness window. */
+export function isStaleHandoff(order, now = Date.now(), staleHours = HANDOFF_STALE_HOURS) {
+  return Boolean(order) && order.status === 'ready' && !isAwaitingHandoff(order, now, staleHours);
+}
+
 // ── Queue age ─────────────────────────────────────────────────────────────────
 
 const ageMs = (dateStr, now) => now - new Date(dateStr).getTime();

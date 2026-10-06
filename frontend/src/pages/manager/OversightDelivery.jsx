@@ -3,7 +3,6 @@ import useLiveData from '../../hooks/useLiveData';
 import { STATUS_LABEL, deliveryBadgeVariant } from '../../utils/format';
 import { listEvent, deliveryUpsert, deliveryStatus } from './managerData';
 import { RiderIcon, ClockIcon } from './managerIcons';
-import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
@@ -15,7 +14,7 @@ import '../../styles/OversightDelivery.css';
 const STEPS = ['preparing', 'ready', 'out_for_delivery', 'delivered'];
 
 export default function OversightDelivery() {
-  const { data: deliveries, loading, error, refresh, lastUpdated, refreshing } = useLiveData({
+  const { data: deliveries, loading, error, refresh } = useLiveData({
     fetchFn: async () => (await deliveryAPI.getAll()).data,
     events: [
       listEvent('delivery:new', deliveryUpsert),
@@ -44,8 +43,6 @@ export default function OversightDelivery() {
           <button type="button" className="ui-error__retry" onClick={() => refresh()}>Retry</button>
         </ErrorBanner>
       )}
-
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh deliveries" />
 
       {loading ? (
         <PageSkeleton stats={3} wide rows={3} />

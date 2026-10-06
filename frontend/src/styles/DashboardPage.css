@@ -9,7 +9,7 @@
 /* ── KPI cards ────────────────────────────────────────────────────────── */
 .dash-kpis {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 14px;
 }
 
@@ -60,6 +60,38 @@
   background: #B45309;
 }
 .dash-ready__text { flex: 1; }
+
+/* Missed-handoff note — quieter than the pickup CTA on purpose: these are
+ * already-missed handoffs, not something to act on in the next minute. */
+.dash-stale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-muted);
+  border-radius: var(--radius-md);
+  color: var(--color-muted-foreground);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.8125rem;
+}
+.dash-stale:hover { border-color: var(--color-border-strong); }
+.dash-stale__count {
+  min-width: 22px; height: 22px;
+  padding: 0 6px;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-muted-foreground);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+}
+.dash-stale__text { flex: 1; min-width: 0; }
 
 /* ── Status chart scope toggle ─────────────────────────────────────────── */
 .dash-scope {
@@ -216,11 +248,17 @@
 .dash-top__name { flex: 1; font-weight: 500; font-size: 0.875rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-top__qty { color: var(--color-muted-foreground); font-size: 0.82rem; }
 
-@media (max-width: 960px) {
-  .dash-kpis { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 900px) {
+  /* Two chart columns is fine on a desktop, but in the tablet/split-screen band
+   * each chart is squeezed to roughly 320px and the axis labels collide. One
+   * column from here down; phones additionally un-span the wide card below. */
+  .dash-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .dash-grid { grid-template-columns: 1fr; }
   .ui-card--wide { grid-column: span 1; }
-  .dash-kpis { grid-template-columns: 1fr; }
+  /* KPI pair keeps two columns here (set in base), but the value can be a long
+   * currency string — let it shrink rather than force the row wider. */
+  .dash-kpi { min-width: 0; }
+  .dash-kpi .ui-stat__value { min-width: 0; overflow-wrap: break-word; }
 }

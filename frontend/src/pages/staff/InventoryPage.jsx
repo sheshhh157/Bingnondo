@@ -191,7 +191,9 @@ function TransactionModal({ item, type, categories, onClose, onSubmit, onSaveDet
 
   const handleSaveDetails = async () => {
     if (!name.trim()) { setError('Ingredient name is required.'); return; }
+    if (name.trim().length > 50) { setError('Ingredient name must be 50 characters or fewer.'); return; }
     if (!unit.trim()) { setError('Unit is required.'); return; }
+    if (unit.trim().length > 20) { setError('Unit must be 20 characters or fewer.'); return; }
     setSavingDetails(true); setError('');
     try {
       await onSaveDetails(item.id, {
@@ -208,7 +210,8 @@ function TransactionModal({ item, type, categories, onClose, onSubmit, onSaveDet
   const handleSubmit = async (e) => {
     e.preventDefault();
     const qty = Number(quantity);
-    if (!qty || qty <= 0) { setError('Enter a valid quantity.'); return; }
+    if (!Number.isFinite(qty) || qty <= 0) { setError('Enter a valid quantity.'); return; }
+    if (isRestock && qty > 200) { setError('Restock quantity must not exceed 200.'); return; }
     setLoading(true); setError('');
     try {
       await onSubmit(item.id, { change_type: type, quantity: qty, note });
@@ -247,6 +250,7 @@ function TransactionModal({ item, type, categories, onClose, onSubmit, onSaveDet
                 value={name}
                 onChange={(e) => { setName(e.target.value); setError(''); }}
                 aria-label="Ingredient name"
+                maxLength={50}
               />
             ) : (
               <div className="inv-modal__name-row">
@@ -333,6 +337,7 @@ function TransactionModal({ item, type, categories, onClose, onSubmit, onSaveDet
                 type="number"
                 min={isRestock ? 1 : 0}
                 step="0.01"
+                max={isRestock ? 200 : '99999999.99'}
                 value={quantity}
                 onChange={(e) => { setQuantity(e.target.value); setError(''); }}
                 className="inv-field__input"
@@ -357,6 +362,7 @@ function TransactionModal({ item, type, categories, onClose, onSubmit, onSaveDet
                 onChange={(e) => setNote(e.target.value)}
                 className="inv-field__input"
                 placeholder={isRestock ? 'e.g. Delivery from supplier' : 'e.g. Manual recount'}
+                maxLength={50}
               />
             </div>
 
@@ -524,16 +530,21 @@ function AddIngredientModal({ categories, onClose, onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) { setError('Ingredient name is required.'); return; }
+    if (name.trim().length > 50) { setError('Ingredient name must be 50 characters or fewer.'); return; }
     if (!unit)        { setError('Please select a unit.'); return; }
     if (categoryIds.length === 0) { setError('Select at least one category.'); return; }
+    const stockVal = currentStock === '' ? 0 : Number(currentStock);
+    const reorderVal = reorderLevel === '' ? 0 : Number(reorderLevel);
+    if (!Number.isFinite(stockVal) || stockVal < 0 || stockVal > 99999999.99) { setError('Starting stock must be a number from 0 to 99,999,999.99.'); return; }
+    if (!Number.isFinite(reorderVal) || reorderVal < 0 || reorderVal > 99999999.99) { setError('Reorder level must be a number from 0 to 99,999,999.99.'); return; }
     setLoading(true); setError('');
     try {
       await onSubmit({
         name:          name.trim(),
         unit:          unit.trim(),
         category_ids:  categoryIds,
-        current_stock: Number(currentStock) || 0,
-        reorder_level: Number(reorderLevel) || 0,
+        current_stock: stockVal,
+        reorder_level: reorderVal,
       });
       onClose();
     } catch (err) {
@@ -572,6 +583,7 @@ function AddIngredientModal({ categories, onClose, onSubmit }) {
                 className="inv-field__input"
                 placeholder="e.g. Pork belly"
                 required
+                maxLength={50}
               />
             </div>
 
@@ -618,6 +630,7 @@ function AddIngredientModal({ categories, onClose, onSubmit }) {
                   type="number"
                   min="0"
                   step="0.01"
+                  max="99999999.99"
                   value={currentStock}
                   onChange={(e) => setCurrentStock(e.target.value)}
                   className="inv-field__input"
@@ -634,6 +647,7 @@ function AddIngredientModal({ categories, onClose, onSubmit }) {
                   type="number"
                   min="0"
                   step="0.01"
+                  max="99999999.99"
                   value={reorderLevel}
                   onChange={(e) => setReorderLevel(e.target.value)}
                   className="inv-field__input"
@@ -921,6 +935,7 @@ export default function InventoryPage() {
             placeholder="Search ingredients…"
             className="inv-search__input"
             aria-label="Search ingredients"
+            maxLength={50}
           />
         </div>
         <select className="inv-select" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label="Filter by category">

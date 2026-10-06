@@ -1,10 +1,9 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ordersAPI } from '../../services/managerApi';
 import useLiveData from '../../hooks/useLiveData';
 import { currency, STATUS_LABEL, periodBounds } from '../../utils/format';
 import { toCsv, downloadCsv } from '../../utils/csv';
 import { listEvent, orderUpsert } from './managerData';
-import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
@@ -29,6 +28,10 @@ const SALES_CSV_HEADERS = ['Order #', 'Items', 'Payment', 'Total', 'Status', 'Ti
 
 /** Rows per page in the transactions table. */
 const TABLE_PAGE_SIZE = 50;
+
+/** Trading hours shown on the peak-hours chart: 10a through 9p. */
+const PEAK_START_HOUR = 10;
+const PEAK_END_HOUR = 21;
 
 /**
  * Stable empty values. `data?.x || []` allocates a fresh array on every render,
@@ -77,6 +80,8 @@ export default function SalesReportPage() {
   const [period, setPeriod] = useState('week');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [exportOpen, setExportOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -94,7 +99,16 @@ export default function SalesReportPage() {
     [period, customStart, customEnd, now],
   );
 
-  const query = search.trim();
+  // Search is debounced. The box feeds two independent fetches (the report
+  // aggregate and the paged table) plus both `reloadKey`s, so without a delay
+  // every keystroke fired two requests and blanked the page to a skeleton.
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (trimmed === query) return undefined;
+    const t = setTimeout(() => setQuery(trimmed), 300);
+    return () => clearTimeout(t);
+  }, [search, query]);
 
   // Every filter and period switch starts at page 1. Done in the handlers
   // rather than an effect, so a stale page number never survives a change.
@@ -119,8 +133,10 @@ export default function SalesReportPage() {
     loading: reportLoading,
     error: reportError,
     refresh: refreshReport,
-    lastUpdated,
-    refreshing,
+    // Stamped on the first successful load, so it doubles as "we have real data
+    // for this filter" — which is what the skeleton below needs to know.
+    lastUpdated: reportStamp,
+
   } = useLiveData({
     fetchFn: fetchReport,
     // These figures are server-derived, so a new order can't be merged into
@@ -168,6 +184,7 @@ export default function SalesReportPage() {
     loading: tableLoading,
     error: tableError,
     refresh: refreshTable,
+    lastUpdated: tableStamp,
   } = useLiveData({
     fetchFn: fetchPage,
     // A row list is patchable, so a new order is merged in rather than
@@ -187,6 +204,14 @@ export default function SalesReportPage() {
 
   const loading = reportLoading || tableLoading;
   const error = reportError || tableError;
+
+  // Placeholders only until both halves have arrived once. After that a filter
+  // or search re-run refreshes in place, so the page keeps the results already
+  // on screen instead of collapsing back to a skeleton. Derived from the two
+  // load stamps rather than tracked in state: a state flag would have to be
+  // flipped from an effect on `loading`, which costs an extra render to record
+  // something already implied by the data being present.
+  const showSkeleton = loading && !(reportStamp && tableStamp);
 
   // Both halves are refetched together: the summary and the table describe the
   // same period, and letting one update a moment before the other would briefly
@@ -223,20 +248,24 @@ export default function SalesReportPage() {
     [daily],
   );
 
-  // Hourly activity (0–23) for the peak-hours chart. The server returns only
-  // hours with activity, so the full day is filled in here — recharts needs a
-  // dense axis to draw 24 evenly spaced bars.
+  // Hourly activity for the peak-hours chart, limited to opening hours
+  // (10am–9pm). The server returns only hours with activity, so every hour in
+  // the window is filled in here — recharts needs a dense axis to space the
+  // bars evenly, including the quiet ones.
   const peakHours = useMemo(() => {
-    const hours = Array.from({ length: 24 }, (_, h) => ({
-      name: h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
-      orders: 0,
-      revenue: 0,
-    }));
+    const hours = Array.from({ length: PEAK_END_HOUR - PEAK_START_HOUR + 1 }, (_, i) => {
+      const h = PEAK_START_HOUR + i;
+      return {
+        name: h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`,
+        orders: 0,
+        revenue: 0,
+      };
+    });
     for (const b of peakBuckets || []) {
       const h = Number(b.hour);
-      if (h >= 0 && h < 24) {
-        hours[h].orders = Number(b.orders || 0);
-        hours[h].revenue = Number(b.revenue || 0);
+      if (h >= PEAK_START_HOUR && h <= PEAK_END_HOUR) {
+        hours[h - PEAK_START_HOUR].orders = Number(b.orders || 0);
+        hours[h - PEAK_START_HOUR].revenue = Number(b.revenue || 0);
       }
     }
     return hours;
@@ -249,6 +278,17 @@ export default function SalesReportPage() {
     }
     return best;
   }, [peakHours]);
+
+  // Whole-number scale on the vertical axis (1, 2, 3 …), always topping out at
+  // least 6 so short series do not get a fractional 0.5-step axis.
+  const peakMax = useMemo(() => {
+    const busiest = peakHours.reduce((max, h) => Math.max(max, h.orders), 0);
+    return Math.max(6, busiest);
+  }, [peakHours]);
+  const peakTicks = useMemo(
+    () => Array.from({ length: peakMax + 1 }, (_, i) => i),
+    [peakMax],
+  );
 
   // Exports the rows on screen, and says so. The old export wrote every
   // matching row in the period; with a server-paged table that would mean
@@ -271,34 +311,38 @@ export default function SalesReportPage() {
             and not cancelled — the status filter below applies to the table only.
           </p>
         </div>
-        <div className="sales-period" role="group" aria-label="Filter by period">
-          {PERIODS.map((p) => (
-            <button key={p.k} className={`sales-period__btn${period === p.k ? ' sales-period__btn--active' : ''}`} onClick={() => resetToFirstPage(setPeriod)(p.k)} aria-pressed={period === p.k}>
-              {p.l}
-            </button>
-          ))}
+        <div className="sales-period-row">
+          <div className="sales-period" role="group" aria-label="Filter by period">
+            {PERIODS.map((p) => (
+              <button key={p.k} className={`sales-period__btn${period === p.k ? ' sales-period__btn--active' : ''}`} onClick={() => resetToFirstPage(setPeriod)(p.k)} aria-pressed={period === p.k}>
+                {p.l}
+              </button>
+            ))}
+          </div>
+
           {period === 'custom' && (
-            <span className="sales-date-wrap">
+            <div className="sales-date-wrap">
               <input type="date" value={customStart} onChange={(e) => resetToFirstPage(setCustomStart)(e.target.value)} className="sales-date" aria-label="Start date" />
               <span className="sales-date-sep">–</span>
               <input type="date" value={customEnd} onChange={(e) => resetToFirstPage(setCustomEnd)(e.target.value)} className="sales-date" aria-label="End date" />
-            </span>
+            </div>
           )}
+
           <button
-            className="ui-btn ui-btn--primary"
-            onClick={handleExport}
-            disabled={pageRows.length === 0}
-            title={matchCount > pageRows.length
-              ? `Exports the ${pageRows.length} orders on this page, not all ${matchCount} matches.`
-              : undefined}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export this page
-          </button>
+              className="ui-btn ui-btn--primary"
+              onClick={() => setExportOpen(true)}
+              disabled={pageRows.length === 0}
+              title={matchCount > pageRows.length
+                ? `Exports the ${pageRows.length} orders on this page, not all ${matchCount} matches.`
+                : undefined}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export
+            </button>
         </div>
       </div>
 
@@ -309,9 +353,54 @@ export default function SalesReportPage() {
         </ErrorBanner>
       )}
 
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh sales report" />
+      {exportOpen && (
+        <div className="sales-modal-overlay" onClick={() => setExportOpen(false)}>
+          <div className="sales-modal" role="dialog" aria-modal="true" aria-labelledby="sales-export-title" onClick={(e) => e.stopPropagation()}>
+            <h2 className="sales-modal__head" id="sales-export-title">Export sales report</h2>
+            <div className="sales-modal__body">
+              <p>This downloads a CSV file of the orders currently listed on this page, one row per order.</p>
+              <ul>
+                <li>Columns: Order #, Items, Payment, Total, Status, Time.</li>
+                <li>Only this page's {pageRows.length} of {matchCount} matching orders is exported.</li>
+                <li>Figures follow the paid, not-cancelled revenue rule shown above.</li>
+              </ul>
+            </div>
+            <div className="sales-modal__foot">
+              <button className="ui-btn" onClick={() => setExportOpen(false)}>Cancel</button>
+              <button className="ui-btn ui-btn--primary" onClick={() => { setExportOpen(false); handleExport(); }}>Export CSV</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {loading ? (
+      {filtersOpen && (
+        <div className="sales-modal-overlay" onClick={() => setFiltersOpen(false)}>
+          <div className="sales-modal" role="dialog" aria-modal="true" aria-labelledby="sales-filter-title" onClick={(e) => e.stopPropagation()}>
+            <h2 className="sales-modal__head" id="sales-filter-title">Filter results</h2>
+            <div className="sales-modal__body">
+              <label className="sales-modal__label" htmlFor="sales-status-filter">Status
+                <select id="sales-status-filter" className="sales-select" value={statusFilter} onChange={(e) => resetToFirstPage(setStatusFilter)(e.target.value)} aria-label="Filter by status">
+                  <option value="all">All statuses</option>
+                  {Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+              </label>
+              <label className="sales-modal__label" htmlFor="sales-payment-filter">Payment
+                <select id="sales-payment-filter" className="sales-select" value={paymentFilter} onChange={(e) => resetToFirstPage(setPaymentFilter)(e.target.value)} aria-label="Filter by payment method">
+                  <option value="all">All payments</option>
+                  <option value="cash">Cash</option>
+                  <option value="gcash">GCash</option>
+                </select>
+              </label>
+            </div>
+            <div className="sales-modal__foot">
+              <button className="ui-btn" onClick={() => { resetToFirstPage(setStatusFilter)('all'); resetToFirstPage(setPaymentFilter)('all'); }}>Reset</button>
+              <button className="ui-btn ui-btn--primary" onClick={() => setFiltersOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSkeleton ? (
         <PageSkeleton stats={3} charts={2} rows={5} />
       ) : (
         <>
@@ -338,6 +427,13 @@ export default function SalesReportPage() {
               <option value="cash">Cash</option>
               <option value="gcash">GCash</option>
             </select>
+            <button type="button" className="ui-btn sales-filter-btn" onClick={() => setFiltersOpen(true)} aria-haspopup="dialog">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              Filter
+              {(statusFilter !== 'all' || paymentFilter !== 'all') && <span className="sales-filter-dot" aria-label="Filters active" />}
+            </button>
           </div>
 
           <div className="sales-summary">
@@ -375,7 +471,7 @@ export default function SalesReportPage() {
                   <ResponsiveContainer width="100%" height={260}>
                     <LineChart data={dailyChart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                      <XAxis dataKey="name" tick={{ fill: 'var(--color-muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="name" tick={{ fill: 'var(--color-muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={16} />
                       <YAxis tick={{ fill: 'var(--color-muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} width={48} />
                       <Tooltip formatter={(v) => currency(v)} contentStyle={{ borderRadius: 8, border: '1px solid var(--color-border)' }} />
                       <Line type="monotone" dataKey="revenue" stroke="#1D4ED8" strokeWidth={2.5} dot={{ r: 3, fill: '#1D4ED8' }} />
@@ -391,10 +487,18 @@ export default function SalesReportPage() {
               ) : (
                 <div className="sales-chart" role="img" aria-label="Best selling items bar chart">
                   <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={topItems} layout="vertical" margin={{ top: 8, right: 16, left: 40, bottom: 0 }}>
+                    <BarChart data={topItems} layout="vertical" margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
                       <XAxis type="number" allowDecimals={false} tick={{ fill: 'var(--color-muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis type="category" dataKey="name" tick={{ fill: 'var(--color-muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} width={90} />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }}
+                        tickFormatter={(n) => (n.length > 16 ? `${n.slice(0, 15)}…` : n)}
+                        axisLine={false}
+                        tickLine={false}
+                        width={140}
+                      />
                       <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid var(--color-border)' }} />
                       <Bar dataKey="qty" fill="#B45309" radius={[0, 4, 4, 0]} />
                     </BarChart>
@@ -406,16 +510,18 @@ export default function SalesReportPage() {
 
           <CardPanel title={busiestHour ? `Peak hours — busiest around ${busiestHour.name}` : 'Peak hours'}>
             {busiestHour ? (
-              <div className="sales-chart" role="img" aria-label="Orders per hour bar chart">
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={peakHours} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                    <XAxis dataKey="name" tick={{ fill: 'var(--color-muted-foreground)', fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
-                    <YAxis allowDecimals={false} tick={{ fill: 'var(--color-muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} width={30} />
-                    <Tooltip content={<PeakTooltip />} />
-                    <Bar dataKey="orders" fill="#1D4ED8" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="sales-chart-scroll" role="img" aria-label="Orders per hour bar chart, 10am to 9pm">
+                <div className="sales-chart sales-chart--wide">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={peakHours} margin={{ top: 8, right: 12, left: 0, bottom: 0 }} barCategoryGap="18%">
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                      <XAxis dataKey="name" tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }} axisLine={false} tickLine={false} interval={0} />
+                      <YAxis allowDecimals={false} domain={[0, peakMax]} ticks={peakTicks} tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }} axisLine={false} tickLine={false} width={28} />
+                      <Tooltip content={<PeakTooltip />} />
+                      <Bar dataKey="orders" fill="#1D4ED8" radius={[4, 4, 0, 0]} maxBarSize={64} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             ) : (
               <div className="ui-chart-empty">No order activity in this period — peak hours will appear here.</div>
@@ -489,8 +595,13 @@ function FragmentRow({ order, expanded, onToggle }) {
         </td>
         <td className="sales-cell--order">#{order.order_number || order.id}</td>
         <td className="sales-cell--items">
-          {(order.items || []).slice(0, 2).map((i) => i.name).filter(Boolean).join(', ')}
-          {(order.items || []).length > 2 && <span className="sales-more"> +{order.items.length - 2}</span>}
+          <span
+            className="sales-items-text"
+            title={(order.items || []).map((i) => i.name).filter(Boolean).join(', ')}
+          >
+            {(order.items || []).slice(0, 2).map((i) => i.name).filter(Boolean).join(', ')}
+            {(order.items || []).length > 2 && <span className="sales-more"> +{order.items.length - 2}</span>}
+          </span>
         </td>
         <td><Badge variant={order.payment_method === 'gcash' ? 'info' : 'muted'}>{order.payment_method === 'gcash' ? 'GCash' : 'Cash'}</Badge></td>
         <td className="sales-cell--total">{currency(order.total_amount)}</td>

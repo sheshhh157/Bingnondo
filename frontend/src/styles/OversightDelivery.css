@@ -11,7 +11,10 @@
 
 .odl-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  /* min() floor: a bare minmax(320px, 1fr) track is 320px even when the viewport
+   * is narrower, which pushes the whole page into horizontal scroll on a 320px
+   * phone. min(320px, 100%) lets the single column shrink to fit instead. */
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 14px;
 }
 
@@ -27,8 +30,11 @@
 }
 
 .odl-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+/* The name/order block is the flexible side of the row; min-width:0 keeps a long
+ * customer name from shoving the status badge off the card. */
+.odl-card__top > div { min-width: 0; }
 .odl-card__order { display: block; font-weight: 700; font-size: 0.95rem; color: var(--color-primary); }
-.odl-card__customer { display: block; font-size: 0.82rem; color: var(--color-muted-foreground); margin-top: 2px; }
+.odl-card__customer { display: block; font-size: 0.82rem; color: var(--color-muted-foreground); margin-top: 2px; overflow-wrap: break-word; }
 
 .odl-card__meta {
   display: flex;

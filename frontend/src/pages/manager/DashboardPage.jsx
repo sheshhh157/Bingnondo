@@ -4,8 +4,7 @@ import { ordersAPI, kitchenAPI, inventoryAPI, MANAGER_ORDER_LIMITS } from '../..
 import useLiveData from '../../hooks/useLiveData';
 import { useSocketEventContext } from '../../context/SocketContext';
 import { currency, stockStatus, stockBadgeVariant, stockStatusText, STATUS_LABEL, dayKey, lastDaysBounds } from '../../utils/format';
-import { keyEvent, orderUpsert, orderStatus, queueUpsert, stockPatch, stockCounts, splitByChannel } from './managerData';
-import LiveControls from './LiveControls';
+import { keyEvent, orderUpsert, orderStatus, queueUpsert, stockPatch, stockCounts, splitByChannel, isAwaitingHandoff, isStaleHandoff } from './managerData';
 import Badge from '../../components/Badge';
 import CardPanel from '../../components/CardPanel';
 import PageHeader from '../../components/PageHeader';
@@ -115,7 +114,7 @@ function ActivityFeed() {
 }
 
 export default function DashboardPage() {
-  const { data: summary, loading, error, refresh, lastUpdated, refreshing } = useLiveData({
+  const { data: summary, loading, error, refresh } = useLiveData({
     fetchFn: async () => {
       // Bounded to a recent window. This used to request the entire order
       // history (up to 10 000 rows of json_agg'd line items) on every 15s poll
@@ -280,9 +279,16 @@ export default function DashboardPage() {
   );
   const todayRevenue = completedToday.reduce((s, o) => s + Number(o.payment_amount || 0), 0);
 
-  // Orders sitting at 'ready' need pickup attention.
+  // Orders sitting at 'ready' need pickup attention — but only while they are
+  // still plausibly waiting. An abandoned handoff stays 'ready' forever, so the
+  // raw count would otherwise present a growing pile of dead tickets as "hand it
+  // over". Stale ones are surfaced separately below instead.
   const readyCount = useMemo(
-    () => windowOrders.filter((o) => o.status === 'ready').length,
+    () => windowOrders.filter((o) => isAwaitingHandoff(o)).length,
+    [windowOrders],
+  );
+  const staleReadyCount = useMemo(
+    () => windowOrders.filter((o) => isStaleHandoff(o)).length,
     [windowOrders],
   );
 
@@ -323,8 +329,6 @@ export default function DashboardPage() {
         </ErrorBanner>
       )}
 
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh dashboard" />
-
       {loading ? (
         <DashboardSkeleton />
       ) : (
@@ -354,6 +358,17 @@ export default function DashboardPage() {
               <span className="dash-ready__count">{readyCount}</span>
               <span className="dash-ready__text">
                 {readyCount === 1 ? 'Order is ready for pickup' : `${readyCount} orders are ready for pickup`} — hand it over →
+              </span>
+            </Link>
+          )}
+
+          {staleReadyCount > 0 && (
+            <Link to="/manager/oversight/kitchen" className="dash-stale">
+              <span className="dash-stale__count">{staleReadyCount}</span>
+              <span className="dash-stale__text">
+                {staleReadyCount === 1
+                  ? 'Order has been waiting over a day — handoff missed'
+                  : `${staleReadyCount} orders have been waiting over a day — handoffs missed`}
               </span>
             </Link>
           )}

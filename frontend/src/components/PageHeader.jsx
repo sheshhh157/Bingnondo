@@ -1,9 +1,14 @@
 // PageHeader — consistent page title + subtitle + optional action buttons.
-export default function PageHeader({ title, sub, actions = [] }) {
+// `badge` renders inline beside the title (for status pills like Live/Offline);
+// `actions` stay in their own group on the trailing edge.
+export default function PageHeader({ title, sub, actions = [], badge }) {
   return (
     <div className="ui-pageheader">
       <div>
-        <h1 className="ui-pageheader__title">{title}</h1>
+        <div className="ui-pageheader__titlerow">
+          <h1 className="ui-pageheader__title">{title}</h1>
+          {badge}
+        </div>
         {sub && <p className="ui-pageheader__sub">{sub}</p>}
       </div>
       {actions.length > 0 && (

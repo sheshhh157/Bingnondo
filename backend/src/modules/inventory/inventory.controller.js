@@ -1,6 +1,7 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
 const menuController = require('../menu/menu.controller');
+const { lengthCap, numInRange } = require('../../lib/validators');
 
 /**
  * Announce a menu availability change caused by an inventory cascade (an
@@ -28,6 +29,7 @@ function broadcastMenuAvailability(rows) {
 function parseCategoryIds(raw) {
   if (raw === undefined || raw === null) return null;
   if (!Array.isArray(raw)) throw Object.assign(new Error('category_ids must be an array.'), { status: 400 });
+  if (raw.length > 50) throw Object.assign(new Error('category_ids is limited to 50 entries.'), { status: 400 });
 
   const ids = [];
   for (const value of raw) {
@@ -169,8 +171,16 @@ async function createItem(req, res, next) {
   try {
     const { name, unit, current_stock = 0, reorder_level = 0 } = req.body;
 
-    if (!name?.trim()) return res.status(400).json({ message: 'Ingredient name is required.' });
-    if (!unit?.trim()) return res.status(400).json({ message: 'Unit is required (e.g. kg, pcs, liters).' });
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ message: 'Ingredient name is required.' });
+    if (typeof unit !== 'string' || !unit.trim()) return res.status(400).json({ message: 'Unit is required (e.g. kg, pcs, liters).' });
+    const nameErr = lengthCap(name, 'Ingredient name', 50);
+    if (nameErr) return res.status(400).json({ message: nameErr });
+    const unitErr = lengthCap(unit, 'Unit', 20);
+    if (unitErr) return res.status(400).json({ message: unitErr });
+    const stockErr = numInRange(current_stock, 'Current stock', { min: 0 });
+    if (stockErr) return res.status(400).json({ message: stockErr });
+    const reorderErr = numInRange(reorder_level, 'Reorder level', { min: 0 });
+    if (reorderErr) return res.status(400).json({ message: reorderErr });
 
     const categoryIds = parseCategoryIds(req.body.category_ids) ?? [];
     const nameById = await loadCategories(categoryIds, res);
@@ -234,14 +244,18 @@ async function updateItem(req, res, next) {
     const updates = {};
 
     if (req.body.name !== undefined) {
-      const name = req.body.name?.trim();
+      const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
       if (!name) return res.status(400).json({ message: 'Ingredient name is required.' });
+      const nameErr = lengthCap(name, 'Ingredient name', 50);
+      if (nameErr) return res.status(400).json({ message: nameErr });
       updates.name = name;
     }
 
     if (req.body.unit !== undefined) {
-      const unit = req.body.unit?.trim();
+      const unit = typeof req.body.unit === 'string' ? req.body.unit.trim() : '';
       if (!unit) return res.status(400).json({ message: 'Unit is required (e.g. kg, pcs, liters).' });
+      const unitErr = lengthCap(unit, 'Unit', 20);
+      if (unitErr) return res.status(400).json({ message: unitErr });
       updates.unit = unit;
     }
 
@@ -362,8 +376,13 @@ async function createTransaction(req, res, next) {
     if (!VALID.includes(change_type)) {
       return res.status(400).json({ message: `change_type must be one of: ${VALID.join(', ')}.` });
     }
-    if (!quantity || Number(quantity) <= 0) {
-      return res.status(400).json({ message: 'Quantity must be a positive number.' });
+    const qtyErr = numInRange(quantity, 'Quantity', { min: 0, exclusive: true });
+    if (qtyErr) {
+      return res.status(400).json({ message: qtyErr });
+    }
+    // Restocks are capped small: large adds are adjustments, not deliveries.
+    if (change_type === 'restock' && Number(quantity) > 200) {
+      return res.status(400).json({ message: 'Restock quantity must not exceed 200.' });
     }
 
     await client.query('BEGIN');

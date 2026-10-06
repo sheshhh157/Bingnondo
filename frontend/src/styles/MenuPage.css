@@ -7,7 +7,6 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
 }
-
 .menu-search {
   display: flex;
   align-items: center;
@@ -17,15 +16,35 @@
   background: var(--color-card);
   padding: 0 10px;
   color: var(--color-muted-foreground);
+  transition: border-color 150ms ease;
 }
+/* One border, one highlight — both on the wrapper, matching .osk-search and
+ * .sales-search. The manager-wide rule `.ml-root :is(a, button, input, …):focus-visible`
+ * scores (0,2,1) and would otherwise paint a ring around the inner text field,
+ * which reads as a second border inside the wrapper; the `.ml-root` prefix below
+ * lifts this override to (0,3,1) so that ring is gone. Focus is the wrapper's
+ * border only — a border tint *and* a box-shadow would be two edges. */
+.ml-root .menu-search__input:focus-visible { outline: none; }
+.menu-search:focus-within {
+  border-color: color-mix(in srgb, var(--color-primary) 70%, var(--color-border-strong));
+}
+/* Magnifier is a flex child; without this it compresses on the x-axis. */
+.menu-search svg { flex-shrink: 0; }
+
 .menu-search__input {
   flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   padding: 10px 0;
   font-size: 0.875rem;
   outline: none;
   color: var(--color-foreground);
+  /* `type="search"` carries a UA field look of its own — WebKit draws it as a
+   * rounded inset box, which is the second border inside the wrapper. Only
+   * `appearance: none` removes it; `border: none` alone does not. */
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .menu-toolbar {
@@ -168,7 +187,9 @@
   gap: 8px;
   padding: 12px 14px;
 }
-.menu-card__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* Availability badge sits at the top-LEFT of the card body on mobile, with the
+ * item name wrapping on the line below it. */
+.menu-card__avail { display: flex; justify-content: flex-start; }
 .menu-card__name {
   font-weight: 600;
   min-width: 0;
@@ -192,9 +213,19 @@
   border-color: #F0D9A8;
 }
 
-@media (max-width: 760px) {
-  .menu-stats { grid-template-columns: repeat(3, 1fr); }
+@media (min-width: 641px) {
+  /* Desktop only: name and Available badge share one top row, badge top-right. */
+  .menu-card__body { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  .menu-card__name { order: 1; flex: 1; min-width: 0; }
+  .menu-card__avail { order: 2; flex: 0 0 auto; }
+  .menu-card__meta { order: 3; flex-basis: 100%; }
 }
-@media (max-width: 560px) {
-  .menu-stats { grid-template-columns: 1fr; }
+
+@media (max-width: 640px) {
+  /* Keep the Menu Items / Available / Unavailable cards on ONE row on phones,
+     with compact spacing so the numbers still fit. */
+  .menu-stats { gap: 8px; }
+  .menu-stats .ui-stat { padding: 10px 12px; gap: 2px; }
+  .menu-stats .ui-stat__label { font-size: 0.62rem; letter-spacing: 0.03em; }
+  .menu-stats .ui-stat__value { font-size: 1.05rem; }
 }

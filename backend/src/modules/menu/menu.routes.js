@@ -1,10 +1,11 @@
 const express = require('express');
 const router  = express.Router();
 const { authenticateToken, requireRoles, requireStaff } = require('../../middleware/auth.middleware');
+const { writeLimiter } = require('../../middleware/rate-limit.middleware');
 const ctrl = require('./menu.controller');
 
 // Reusable guard: authenticated staff with write access (staff / owner / admin)
-const staffWrite = [authenticateToken, requireStaff, requireRoles('staff', 'owner', 'admin')];
+const staffWrite = [authenticateToken, requireStaff, requireRoles('staff', 'owner', 'admin'), writeLimiter];
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 // GET /api/menu  — customers + cashier read-only

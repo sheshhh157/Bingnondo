@@ -149,9 +149,8 @@ export default function ManagerLayout() {
           <img src={logo} alt="Bingnondo logo" width="26" height="26" />
           <span className="ml-topbar__name">Bingnondo</span>
         </div>
-        <ConnPill connected={connected} />
-        {/* Dashboard switcher in mobile topbar */}
         <DashboardSwitcher variant="light" context="header" />
+        <ConnPill connected={connected} />
         <button
           className="ml-topbar__menu"
           onClick={() => setDrawerOpen(true)}
