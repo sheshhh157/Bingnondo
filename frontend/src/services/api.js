@@ -370,9 +370,8 @@ let MOCK_PENDING_PAYMENTS = [
 ];
 
 // ─── PAYMENT VERIFICATION API (§4.0) ─────────────────────────────────────────
-// Switch between mock and real backend by toggling USE_REAL_API below.
-// When backend is ready: set USE_REAL_API = true and remove the mock branches.
-const PV_USE_REAL_API = false;
+// Backend is ready — using real API endpoints.
+const PV_USE_REAL_API = true;
 
 export const paymentVerificationAPI = {
   /**

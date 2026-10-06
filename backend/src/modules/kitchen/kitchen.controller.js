@@ -48,7 +48,17 @@ async function getKitchenOrders(req, res, next) {
        FROM orders o
        JOIN order_items oi ON oi.order_id = o.id
        JOIN menu_items  mi ON mi.id = oi.menu_item_id
-        WHERE o.status IN (${inClause})
+       -- Exclude GCash orders whose payment has not been verified yet.
+       -- A GCash order only enters the kitchen queue once staff approves
+       -- the receipt (payment.status = 'paid'). Counter cash orders and
+       -- COD orders have no payments row or a non-gcash method, so they
+       -- are unaffected by this join.
+       LEFT JOIN payments p ON p.order_id = o.id
+       WHERE o.status IN (${inClause})
+         AND NOT (
+           p.method = 'gcash'
+           AND p.status != 'paid'
+         )
        GROUP BY o.id
        ORDER BY o.created_at ASC`
     );
@@ -75,36 +85,44 @@ async function acknowledgeOrder(req, res, next) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Order not found.' });
     }
-    if (current[0].status !== 'pending') {
+    // Normal counter orders arrive as 'pending' → acknowledge → 'confirmed'
+    // GCash online orders arrive as 'confirmed' in the DB (payment already verified
+    // by staff) but are pushed to the kitchen socket as 'pending' so they land in
+    // the New Orders banner. When kitchen acknowledges, we move them to 'preparing'
+    // directly since the 'confirmed' step was already done by payment verification.
+    const currentStatus = current[0].status;
+
+    if (!['pending', 'confirmed'].includes(currentStatus)) {
       await client.query('ROLLBACK');
       return res.status(409).json({
-        message: `Cannot acknowledge. Order status is "${current[0].status}", expected "pending".`,
+        message: `Cannot acknowledge. Order status is "${currentStatus}", expected "pending" or "confirmed".`,
       });
     }
 
+    const nextStatus = currentStatus === 'confirmed' ? 'preparing' : 'confirmed';
+
     const { rows } = await client.query(
-      `UPDATE orders SET status = 'confirmed', updated_at = NOW()
-       WHERE id = $1
+      `UPDATE orders SET status = $1, updated_at = NOW()
+       WHERE id = $2
        RETURNING id, status, order_channel,
                  'ORD-' || LPAD(id::text, 4, '0') AS order_number`,
-      [req.params.id]
+      [nextStatus, req.params.id]
     );
 
     await client.query(
       `INSERT INTO order_status_history (order_id, status, changed_by)
-       VALUES ($1, 'confirmed', $2)`,
-      [req.params.id, req.user.sub]
+       VALUES ($1, $2, $3)`,
+      [req.params.id, nextStatus, req.user.sub]
     );
 
     await client.query('COMMIT');
 
     const order = rows[0];
 
-    // Notify all rooms that this order is now confirmed
     socketHub.emitOrderStatus({
       orderId: order.id,
       orderNumber: order.order_number,
-      status: 'confirmed',
+      status: nextStatus,
     });
 
     res.json(order);

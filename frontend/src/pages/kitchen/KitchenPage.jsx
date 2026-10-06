@@ -99,7 +99,9 @@ export default function KitchenPage() {
     socket.on('reconnecting',     () => setReconnecting(true));
     socket.on('reconnect_failed', () => setReconnecting(false));
 
-    // New order arrives as 'pending' — play alert so kitchen notices
+    // New order arrives via socket.
+    // New order arrives — backend only emits this for GCash orders
+    // after staff verifies the receipt (payment verified → confirmed).
     socket.on(KITCHEN_EVENTS.NEW_ORDER, (order) => {
       dispatchOrders({ type: 'ADD', payload: order });
       playAlert();
@@ -131,7 +133,9 @@ export default function KitchenPage() {
   }, []);
 
   // ─── Split orders into lanes ──────────────────────────────────────────────
-  // Pending: all unacknowledged orders regardless of channel — needs kitchen attention first
+  // Pending: all unacknowledged orders — needs kitchen attention first.
+  // GCash orders only reach here after staff verifies the receipt
+  // (backend filters them out of getKitchenOrders until payment = 'paid').
   const pendingOrders  = orders.filter((o) => o.status === 'pending');
 
   // Counter: acknowledged counter orders in progress

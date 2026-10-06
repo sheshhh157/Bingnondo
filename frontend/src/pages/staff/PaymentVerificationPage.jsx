@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { paymentVerificationAPI } from '../../services/api';
-import { getSocket } from '../../services/socket';
+import { connectSocket, disconnectSocket } from '../../services/socket';
 import '../../styles/PaymentVerificationPage.css';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -485,29 +485,68 @@ export default function PaymentVerificationPage() {
 
   useEffect(() => { fetchPending(); }, [fetchPending]);
 
-  // ── Socket: real-time new receipt upload ──────────────────────────────────
+  // ── Socket: real-time payment queue updates ───────────────────────────────
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
+    // connectSocket connects the shared socket (if not already connected)
+    // and joins the 'staff' room. Safe to call multiple times.
+    const socket = connectSocket('staff');
 
-    const onPaymentPending = (data) => {
-      // New receipt uploaded — add or update in list
-      setOrders(prev => {
-        const exists = prev.find(o => o.id === data.order_id);
-        if (exists) {
-          return prev.map(o => o.id === data.order_id ? { ...o, ...data, payment_status: 'awaiting_verification' } : o);
-        }
-        return [data, ...prev];
-      });
-      // Flash live indicator
+    const flashLive = (label) => {
       clearTimeout(liveTimerRef.current);
       setLiveIndicator(true);
       liveTimerRef.current = setTimeout(() => setLiveIndicator(false), 2500);
-      showToast(`New receipt uploaded — ${data.order_number}`, 'info');
+      if (label) showToast(label, 'info');
     };
 
-    socket.on('payment:pending', onPaymentPending);
-    return () => socket.off('payment:pending', onPaymentPending);
+    // On reconnect, re-join the staff room (socket forgets rooms on disconnect)
+    const onConnect = () => {
+      socket.emit('join', { room: 'staff' });
+    };
+
+    // payment:pending — customer uploaded (or re-uploaded) a GCash receipt
+    const onPaymentPending = (data) => {
+      setOrders(prev => {
+        const exists = prev.find(o => o.id === data.order_id);
+        if (exists) {
+          return prev.map(o =>
+            o.id === data.order_id
+              ? { ...o, ...data, payment_status: 'awaiting_verification', rejection_reason: null }
+              : o
+          );
+        }
+        return [{ ...data, id: data.order_id }, ...prev];
+      });
+      flashLive(`New receipt — ${data.order_number || `Order #${data.order_id}`}`);
+    };
+
+    // payment:verified — a staff member verified a receipt (incl. ourselves)
+    const onPaymentVerified = ({ orderId }) => {
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+    };
+
+    // payment:rejected — a staff member rejected a receipt (incl. ourselves)
+    const onPaymentRejected = ({ orderId, reason }) => {
+      setOrders(prev => prev.map(o =>
+        o.id === orderId
+          ? { ...o, payment_status: 'rejected', rejection_reason: reason }
+          : o
+      ));
+    };
+
+    socket.on('connect',          onConnect);
+    socket.on('payment:pending',  onPaymentPending);
+    socket.on('payment:verified', onPaymentVerified);
+    socket.on('payment:rejected', onPaymentRejected);
+
+    return () => {
+      socket.off('connect',          onConnect);
+      socket.off('payment:pending',  onPaymentPending);
+      socket.off('payment:verified', onPaymentVerified);
+      socket.off('payment:rejected', onPaymentRejected);
+      clearTimeout(liveTimerRef.current);
+      // Do NOT disconnect — socket is shared across the whole staff app.
+      // Disconnection only happens on logout (AuthContext/disconnectSocket).
+    };
   }, [showToast]);
 
   // ── Verify ────────────────────────────────────────────────────────────────
