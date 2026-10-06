@@ -60,25 +60,13 @@
 .th-filter-btn--active { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
 .th-filter-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
-.th-refresh-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px; height: 32px;
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-muted-foreground);
-  cursor: pointer;
-  transition: all 150ms ease;
-  flex-shrink: 0;
-}
-
-.th-refresh-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
-.th-refresh-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-
 /* ─── Content ────────────────────────────────────────────────────────── */
-.th-content { flex: 1; overflow: auto; }
+/* display:flex so the empty/error state can actually centre itself. It was a
+   plain block, which made .th-state content-height only — its own
+   `justify-content: center` had no extra space to distribute, so the message
+   sat against the top of the panel. A column flex gives the state a real
+   height to centre within. */
+.th-content { flex: 1; overflow: auto; display: flex; flex-direction: column; }
 
 /* ─── States ─────────────────────────────────────────────────────────── */
 .th-state {
@@ -87,7 +75,11 @@
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  padding: 4rem 2rem;
+  /* Grow to fill .th-content so the icon and message centre in the space below
+     the toolbar. Padding is even on all sides — a larger top pad would push
+     the visual centre down and read as uncentred. */
+  flex: 1;
+  padding: 2rem;
   color: var(--color-muted-foreground);
   text-align: center;
 }
@@ -114,6 +106,11 @@
 .th-table-wrap {
   padding: 0 1.5rem 1.5rem;
   overflow-x: auto;
+  /* `.th-content` is now a column flex, so its children shrink by default. This
+     wrapper is the root of BOTH the populated table and the loading skeleton,
+     and both must keep their natural content height and scroll inside
+     .th-content — without this they collapse toward zero. */
+  flex: 1 0 auto;
 }
 
 .th-table {
@@ -273,8 +270,24 @@
 }
 
 @media (max-width: 639px) {
-  .th-toolbar { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
-  .th-toolbar__left { flex-direction: column; gap: 0.2rem; }
+  /* Title and the period tabs share the top row, with the count tucked under
+     the title. This keeps the desktop arrangement and stacks only the left
+     block, so the tabs stay at the right edge via the same `flex: 1` that
+     positions them on desktop — no auto margin needed. */
+  .th-toolbar { flex-direction: row; align-items: center; gap: 0.75rem; }
+  /* Title, then the count directly beneath it. The count qualifies the heading,
+     so it reads as a second line of the same block rather than a third row. */
+  .th-toolbar__left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  /* At 320px the title block and the two tabs cannot share a line, and the
+     base rule's `flex-wrap: wrap` drops the tabs to their own row. This keeps
+     them right-aligned on that row instead of overflowing. */
+  .th-toolbar__filters { margin-left: auto; justify-content: flex-end; }
   .th-table-wrap { padding: 0 0.5rem 1rem; }
 
   /* Six columns do not fit a phone. Drop the two that are redundant there:

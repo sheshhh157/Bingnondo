@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 // The real API, not the mock in services/api.js. That mock mutated a local
-// array and returned success without ever calling POST /api/payments, so
-// "Mark Paid" printed a receipt while recording nothing — no payment row, no
+// array and returned success without ever calling the backend, so "Mark Paid"
+// printed a receipt while recording nothing — no payment row, no
 // kitchen_alerts row, and therefore no ESP32 buzzer.
+//
+// `checkout` creates the order and its payment in one call, so the order row
+// and the money move together. There is no separate "mark paid" step to lose.
 import { paymentsAPI } from '../../../services/cashierApi';
 import '../../../styles/PaymentModal.css';
 
@@ -92,12 +95,16 @@ function DenomKeyboard({ counts, onChange }) {
 }
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
-export default function PaymentModal({ orderId, orderNumber, total, draft, onClose, onSuccess }) {
+// `quote` is the signed, priced cart: { quote_token, total, items }. There is
+// no order id here because no order exists until this payment succeeds — the
+// real number arrives with the checkout response and is shown on the receipt.
+export default function PaymentModal({ quote, total, draft, onClose, onSuccess }) {
   const [method, setMethod]           = useState('');
   const [denomCounts, setDenomCounts] = useState({});
   const [step, setStep]               = useState('select');
   const [processing, setProcessing]   = useState(false);
   const [error, setError]             = useState('');
+  const [orderNumber, setOrderNumber] = useState(null);
   const dialogRef = useRef(null);
 
   const cashGiven = computeTotal(denomCounts);
@@ -120,15 +127,26 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
     setProcessing(true);
     setError('');
     try {
-      await paymentsAPI.process({
-        order_id: orderId,
+      // One call creates the order and records its payment together, so there
+      // is no state in which an order exists unpaid.
+      const { data } = await paymentsAPI.checkout({
+        quote_token: quote.quote_token,
+        items: quote.items,
         method,
-        amount: total,
         cash_given: method === 'cash' ? cashGiven : undefined,
       });
+      setOrderNumber(data.order?.order_number ?? null);
       setStep('receipt');
     } catch (err) {
-      setError(err.response?.data?.message || 'Payment failed. Please try again.');
+      // A 409 means the cart was re-priced since the quote was taken (a menu
+      // price moved, or the contents differ). The quote is stale, so tell the
+      // cashier to confirm again rather than leaving them retrying a token the
+      // backend will keep rejecting.
+      if (err?.status === 409) {
+        setError(`${err.response?.data?.message || 'The order changed since it was quoted.'} Press Confirm Order to refresh the total.`);
+      } else {
+        setError(err.response?.data?.message || 'Payment failed. Please try again.');
+      }
     } finally {
       setProcessing(false);
     }
@@ -148,7 +166,10 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
             {/* ── Header ── */}
             <div className="pm-head">
               <div className="pm-head__left">
-                <span className="pm-head__label">Order #{orderNumber}</span>
+                {/* No order number here by design: the row isn't created until this payment
+                    succeeds, so any number shown now would be a placeholder that
+                    disagreed with the receipt. The real one appears on the receipt. */}
+                <span className="pm-head__label">Counter sale</span>
                 <h2 id="pm-title" className="pm-head__title">Process Payment</h2>
               </div>
               <button className="pm-close" onClick={onClose} aria-label="Close">
@@ -288,7 +309,7 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
             method={method}
             cashGiven={method === 'cash' ? cashGiven : null}
             change={method === 'cash' ? change : null}
-            onDone={() => { onSuccess(method); onClose(); }}
+            onDone={() => { onSuccess(method, orderNumber); onClose(); }}
           />
         )}
       </div>

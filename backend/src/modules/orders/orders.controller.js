@@ -1,7 +1,9 @@
+const crypto = require('crypto');
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
 const { priceCart, CartError } = require('../../services/pricing.service');
 const { ALL_STATUSES, isKnownStatus, canTransition, canTransitionAs } = require('./status-transitions');
+const { signAccessToken } = require('../auth/auth.jwt');
 
 // ─── Helper: format order number ─────────────────────────────────────────────
 function orderNumber(id) {
@@ -30,6 +32,62 @@ function ownsOrder(req, cashierId) {
 }
 
 const NOT_YOUR_ORDER = { message: 'You can only act on your own orders.' };
+
+// ─── Quote tokens ────────────────────────────────────────────────────────────
+// A quote is a signed promise of what a cart costs, issued before the order
+// exists. It exists because the cashier must know the authoritative total to
+// take payment, but writing an order row before payment left abandoned orders
+// in the database forever (every confirm that the customer then walked away
+// from).
+//
+// The total is signed rather than trusted. `POST /api/checkout` re-runs
+// `priceCart` and compares against these claims, so a client that posts its own
+// `total` is rejected instead of being believed.
+//
+// Reuses the access-token secret and its sign/verify pair rather than
+// introducing a second signing key: the payload is a plain claim set, and
+// `auth.jwt.js` already refuses to boot on a missing or weak secret.
+const QUOTE_TYPE = 'quote';
+// Only a replay guard, not a negotiation window. Every confirm re-quotes, so a
+// long checkout is impossible by construction; this only stops an old quote
+// being spent after the menu has moved on.
+const QUOTE_TTL = '5m';
+
+/**
+ * Stable fingerprint of a cart, used to detect edits between quote and checkout.
+ *
+ * Hashes the *validated* lines rather than the raw request so two payloads that
+ * differ only in field order or an explicit-vs-undefined null still hash alike.
+ * Quantity, item, option, flavor and price are all included: a price change in
+ * the database must invalidate the quote, and so must a swapped flavor.
+ */
+function itemsFingerprint(validated) {
+  const canonical = validated
+    .map((i) => [
+      i.menu_item_id,
+      i.menu_item_option_id ?? null,
+      i.menu_item_flavor_id ?? null,
+      i.quantity,
+      Number(i.unit_price).toFixed(2),
+    ].join(':'))
+    .sort()
+    .join('|');
+  return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
+/**
+ * Validate and price a cart without writing anything.
+ *
+ * Shared by the quote endpoint and by checkout, which re-prices rather than
+ * trusting the token's total. Returns the priced lines so callers can insert
+ * exactly what was quoted.
+ *
+ * @throws {CartError} on an invalid cart
+ */
+async function quoteCart(items) {
+  const { totalAmount, validated } = await priceCart(items);
+  return { totalAmount, validated, fingerprint: itemsFingerprint(validated) };
+}
 
 // Reporting buckets default to Asia/Manila. Real clients always send
 // their own (see getOrderReport); this only covers callers like curl that
@@ -64,6 +122,49 @@ function isValidTimeZone(tz) {
 // Status starts as 'pending' so it lands in kitchen's New Orders tab first.
 // Kitchen acknowledges → 'confirmed' → 'preparing' → 'ready'.
 // A 'pending' payment row is created; cashier marks paid via POST /api/payments.
+// ─── POST /api/orders/quote ───────────────────────────────────────────────────
+// Price a cart and hand back a signed quote. Writes nothing.
+//
+// This is the first half of the two-phase counter checkout: the cashier gets an
+// authoritative total without creating a row, so a customer who walks away at
+// the payment step leaves no trace at all. `POST /api/checkout` is the second
+// half and turns the quote into a paid order.
+//
+// Must be routed above `/:id` or Express reads "quote" as an id.
+async function quoteOrder(req, res, next) {
+  try {
+    const { items, special_request } = req.body;
+
+    let priced;
+    try {
+      priced = await quoteCart(items);
+    } catch (err) {
+      if (err instanceof CartError) return res.status(400).json({ message: err.message });
+      throw err;
+    }
+
+    // The claims are what checkout re-checks. `sub` pins the quote to the
+    // cashier who asked for it; checkout rejects a quote spent by anyone else.
+    const quote_token = signAccessToken({
+      sub: req.user.sub,
+      type: QUOTE_TYPE,
+      fingerprint: priced.fingerprint,
+      // Minor units, so the comparison at checkout can't drift on a float.
+      total: Math.round(priced.totalAmount * 100),
+    }, { expiresIn: QUOTE_TTL });
+
+    res.json({
+      quote_token,
+      total: priced.totalAmount,
+      items: priced.validated,
+      special_request: special_request || null,
+      expires_in: QUOTE_TTL,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function createOrder(req, res, next) {
   const client = await db.getClient();
   try {
@@ -860,9 +961,11 @@ async function updateOrderItems(req, res, next) {
   }
 }
 
-module.exports = { createOrder, getOrders, getOrderTotals, getOrderReport, getOrderById, updateOrderStatus, cancelOrder, updateOrderItems };
+module.exports = {
+  quoteOrder,
+  createOrder, getOrders, getOrderTotals, getOrderReport, getOrderById, updateOrderStatus, cancelOrder, updateOrderItems };
 
 // Internal helpers, exposed for tests. They hold the rules that decide which
 // orders count as revenue, so they are worth asserting directly — testing them
 // through HTTP would only prove the numbers moved.
-module.exports.__internal = { buildOrderFilters, escapeLike, isValidTimeZone, isIsoDateTime, LATEST_PAYMENT_JOIN, DEFAULT_REPORT_TZ };
+module.exports.__internal = { buildOrderFilters, escapeLike, isValidTimeZone, isIsoDateTime, LATEST_PAYMENT_JOIN, DEFAULT_REPORT_TZ, quoteCart, itemsFingerprint, QUOTE_TYPE, QUOTE_TTL };

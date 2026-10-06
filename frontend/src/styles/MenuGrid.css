@@ -132,6 +132,15 @@
   flex: 1 0 auto;
   min-height: 0;
   min-width: 0;
+  /* Must be stretch. The manager stylesheet sets `.menu-card__body` to
+     `align-items: flex-start` above 640px, and these generic class names are
+     shared, so that rule lands here too. In a column flex it makes every child
+     shrink-to-fit its content: the footer became exactly
+     `price + gap + button` wide instead of the card's width, which left the
+     add button floating ~46px in from the right edge on desktop. Reset it so
+     the footer fills the card and `justify-content: space-between` can push
+     the button flush right. */
+  align-items: stretch;
 }
 
 .menu-grid--scroll .menu-card__text {
@@ -213,8 +222,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  /* 32px square so the glyph reads as a deliberate control rather than a
+     glyph-sized dot next to the price. 28px read as an afterthought and left
+     the row looking unbalanced against 0.9375rem price text. */
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: var(--radius-md);
   border: none;
   background: var(--color-primary);
@@ -224,9 +237,24 @@
   flex-shrink: 0;
 }
 
+/* An inline SVG is a flex item here, but its baseline still reserves descender
+   space inside the button's 32px box and nudges the glyph up by a pixel or two.
+   `display: block` removes the inline formatting context entirely, so the
+   flex centring lands the cross exactly on the +. */
+.menu-grid--scroll .menu-card__add > svg {
+  display: block;
+  flex-shrink: 0;
+}
+
 .menu-grid--scroll .menu-card__add:hover:not(:disabled) {
   background: #991B1B;
   transform: scale(1.08);
+}
+
+/* Keyboard focus gets the same treatment as hover — the ring sits outside the
+   button so the 32px target stays visually 32px. */
+.menu-grid--scroll .menu-card__add:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .menu-grid--scroll .menu-card__add:disabled {
@@ -328,15 +356,20 @@
   .menu-grid--scroll .skeleton-line--name { height: calc(1.35 * 0.8125rem * 3); }
 }
 
-/* Touch screens: 28px is a small target for the button that adds an item. */
+/* Touch screens: the base is 32px, which is still below the ~44px comfortable
+   target for a thumb. Override rather than scale up from 28px. */
 @media (pointer: coarse) {
   .menu-grid--scroll .menu-card__add {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
   }
 }
 
+/* Reduced motion: the hover/active scale is the only movement on the button, so
+   dropping the transition stops it while leaving the colour change intact. */
 @media (prefers-reduced-motion: reduce) {
   .menu-card, .menu-card__add { transition: none; }
+  .menu-card__add:hover:not(:disabled),
+  .menu-card__add:active:not(:disabled) { transform: none; }
   .skeleton-block, .skeleton-line { animation: none; background: var(--color-muted); }
 }

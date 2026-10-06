@@ -112,10 +112,6 @@
   align-items: center;
 }
 
-.od-item__right {
-  display: contents;
-}
-
 .od-item__info {
   grid-area: info;
   min-width: 0;

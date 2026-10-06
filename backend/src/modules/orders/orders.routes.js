@@ -9,6 +9,11 @@ const canOrder = [authenticateToken, requireStaff, requireRoles('cashier', 'staf
 // Kitchen staff + higher roles can update status
 const canUpdateStatus = [authenticateToken, requireStaff, requireRoles('kitchen_staff', 'cashier', 'staff', 'owner', 'admin', 'manager')];
 
+// POST /api/orders/quote — price a cart, write nothing, return a signed quote.
+// Registered before '/:id' for the same reason '/totals' is: Express would
+// otherwise read "quote" as an order id.
+router.post('/quote', ...canOrder, ctrl.quoteOrder);
+
 // POST /api/orders — create a counter order
 router.post('/', ...canOrder, ctrl.createOrder);
 

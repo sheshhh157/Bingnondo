@@ -7,9 +7,8 @@ import OrderDraft from './components/OrderDraft';
 import PaymentModal from './components/PaymentModal';
 import CashierHeader from './components/CashierHeader';
 import TransactionHistory from './components/TransactionHistory';
+import { VIEWS } from './constants';
 import '../../styles/CashierPage.css';
-
-export const VIEWS = { ORDER: 'order', HISTORY: 'history' };
 
 export default function CashierPage() {
   const { user, logout } = useAuth();
@@ -24,8 +23,11 @@ export default function CashierPage() {
   const [search, setSearch]               = useState('');
   const [menuLoading, setMenuLoading]     = useState(true);
   const [menuError, setMenuError]         = useState('');
-  const [paymentModal, setPaymentModal]   = useState(null);      // { orderId, orderNumber, total, draft } | null
+  const [paymentModal, setPaymentModal]   = useState(null);      // { quote, total, draft } | null
   const [placingOrder, setPlacingOrder]   = useState(false);
+  // The signed quote from the last confirm: { quote_token, total, items }.
+  // Holds no order id, because no order exists until payment succeeds.
+  const [quote, setQuote]                 = useState(null);
   const [toastMsg, setToastMsg]           = useState('');
   const toastRef = useRef(null);
   const activeCategoryRef = useRef(null);
@@ -34,12 +36,16 @@ export default function CashierPage() {
   // Above that the CSS ignores it and shows both, as before.
   const [pane, setPane]                     = useState('menu');   // 'menu' | 'cart'
 
-  // Track the last confirmed order so we can PATCH it instead of creating a new one
-  const [confirmedOrder, setConfirmedOrder] = useState(null); // { id, orderNumber, snapshotDraft }
-  // snapshotDraft = the draft at the moment the order was last sent to backend,
-  // used to detect whether the cashier changed anything before re-confirming.
+  // There is deliberately no "confirmed order" state here any more. Confirming
+  // only issues a quote, so there is no order id or snapshotDraft to track —
+  // the draft and the quote survive a closed payment modal on their own.
 
   // ─── Fetch menu ───────────────────────────────────────────────────
+  // Runs on mount and on retry. The initial category is chosen with a
+  // functional update so `activeCategory` is never read here: depending on it
+  // rebuilt this callback on every tab change, which then forced the mount
+  // effect below to omit it from its dependencies to avoid refetching the whole
+  // menu each time the cashier switched tabs.
   const fetchMenu = useCallback(async () => {
     setMenuLoading(true);
     setMenuError('');
@@ -49,15 +55,15 @@ export default function CashierPage() {
       const items = data.items || (Array.isArray(data) ? data : []);
       setCategories(cats);
       setMenuItems(items);
-      if (cats.length > 0 && !activeCategory) setActiveCategory(cats[0].id);
+      setActiveCategory((prev) => (prev === null && cats.length > 0 ? cats[0].id : prev));
     } catch {
       setMenuError('Failed to load menu. Please refresh.');
     } finally {
       setMenuLoading(false);
     }
-  }, [activeCategory]);
+  }, []);
 
-  useEffect(() => { fetchMenu(); }, []);
+  useEffect(() => { fetchMenu(); }, [fetchMenu]);
 
   // Keep the selected category visible in the narrow, horizontally scrolling
   // tab row. On wider layouts the row does not overflow, so this is a no-op.
@@ -135,111 +141,62 @@ export default function CashierPage() {
   const removeItem    = (lineKey) => setDraft((prev) => prev.filter((d) => d.lineKey !== lineKey));
   const updateQty     = (lineKey, qty) => { if (qty < 1) { removeItem(lineKey); return; } setDraft((prev) => prev.map((d) => (d.lineKey === lineKey ? { ...d, qty } : d))); };
   const updateNote    = (lineKey, note) => setDraft((prev) => prev.map((d) => (d.lineKey === lineKey ? { ...d, note } : d)));
-  const clearDraft    = () => { setDraft([]); setConfirmedOrder(null); setVariantPick(null); };
-  const draftTotal    = draft.reduce((sum, d) => sum + d.price * d.qty, 0);
+  const clearDraft    = () => { setDraft([]); setQuote(null); setVariantPick(null); };
+  // Authoritative total from the last quote, not the client's running sum.
+  // The two agree in practice; if they ever don't, the server's number is the
+  // one the payment is settled against, so it is what the cashier must see.
+  const draftTotal    = quote ? quote.total : draft.reduce((sum, d) => sum + d.price * d.qty, 0);
   // Total units, not lines: "3 items" should read 3 when one line is qty 3.
   const draftQty     = draft.reduce((sum, d) => sum + d.qty, 0);
 
-  //  ─── Draft changed since last confirm? ───────────────────────────
-  // Simple check: compare sorted line keys+qty+note against the snapshot.
-  // lineKey, not id: switching a variant (Solo to Sharing, Hot to Iced) is a
-  // different line, so it has to count as a change or the PATCH would be
-  // skipped and the kitchen would make the item the cashier had just replaced.
-  const draftChangedSinceConfirm = () => {
-    if (!confirmedOrder) return true; // never confirmed yet → treat as changed
-    const snap  = confirmedOrder.snapshotDraft;
-    if (snap.length !== draft.length) return true;
-    return draft.some((d) => {
-      const s = snap.find((x) => x.lineKey === d.lineKey);
-      return !s || s.qty !== d.qty || s.note !== d.note;
-    });
-  };
-
-  // ─── Place / Update Order ─────────────────────────────────────────
+  // ─── Price the cart and open payment ───────────────────────────────
+  // Named for what it used to do (create or update an order). It now only
+  // quotes: nothing is persisted until the payment succeeds.
   const placeOrder = async () => {
-    if (draft.length === 0) return;
+if (draft.length === 0) return;
     setPlacingOrder(true);
     try {
       const items = draft.map(({ id, menu_item_option_id, menu_item_flavor_id, qty, note }) => ({
-      menu_item_id: id,
-      menu_item_option_id: menu_item_option_id ?? null,
-      menu_item_flavor_id: menu_item_flavor_id ?? null,
-      quantity: qty,
-      notes: note,
-    }));
+        menu_item_id: id,
+        menu_item_option_id: menu_item_option_id ?? null,
+        menu_item_flavor_id: menu_item_flavor_id ?? null,
+        quantity: qty,
+        notes: note,
+      }));
 
-      let orderId, orderNumber;
+      // Price it, but write nothing. There is no order row from here until the
+      // payment succeeds, so a customer who walks away leaves nothing behind.
+      // Every confirm re-quotes, which keeps the quote a fresh replay guard
+      // rather than a long-lived price lock.
+      const { data } = await ordersAPI.quote({ items });
+      setQuote(data);
+      showToast('Order ready. Take payment to send it to the kitchen.');
 
-      if (confirmedOrder && !draftChangedSinceConfirm()) {
-        // Nothing changed — just re-open the payment modal for the same order
-        orderId     = confirmedOrder.id;
-        orderNumber = confirmedOrder.orderNumber;
-      } else if (confirmedOrder && draftChangedSinceConfirm()) {
-        // Draft was edited — PATCH the existing order's items
-        try {
-          await ordersAPI.updateItems(confirmedOrder.id, items);
-          orderId     = confirmedOrder.id;
-          orderNumber = confirmedOrder.orderNumber;
-          setConfirmedOrder({ id: orderId, orderNumber, snapshotDraft: [...draft] });
-          showToast(`Order #${orderNumber} updated!`);
-        } catch (patchErr) {
-          // 409 has two distinct meanings here, and conflating them is harmful:
-          //
-          //   a) the kitchen acknowledged the order -> items are locked, but the
-          //      cashier still needs to settle it, so carrying on to payment is right;
-          //   b) payment was already collected -> the money is taken and the price
-          //      is settled. Telling the cashier to "proceed to payment" here is
-          //      exactly wrong, and invites a second attempt at an already-paid order.
-          //
-          // The backend sends a specific message for each, so branch on it.
-          const message = patchErr?.response?.data?.message || '';
-          if (patchErr?.status === 409 && /payment has already been collected/i.test(message)) {
-            // Price is settled by the money already taken. Drop the edits and
-            // send the cashier straight back to the order as it stands.
-            setDraft(confirmedOrder.snapshotDraft);
-            showToast(message);
-            setConfirmedOrder(null);
-          } else if (patchErr?.status === 409) {
-            showToast(`Kitchen already started #${confirmedOrder.orderNumber} — items are locked. Proceed to payment.`);
-            orderId     = confirmedOrder.id;
-            orderNumber = confirmedOrder.orderNumber;
-            // Revert draft to the last confirmed snapshot so totals match
-            setDraft(confirmedOrder.snapshotDraft);
-          } else {
-            throw patchErr;
-          }
-        }
-      } else {
-        // Brand new order — POST
-        const { data } = await ordersAPI.create({ order_type: 'counter', cashier_id: user?.sub || user?.id, items });
-        orderId     = data.id;
-        orderNumber = data.order_number || data.id;
-        setConfirmedOrder({ id: orderId, orderNumber, snapshotDraft: [...draft] });
-        showToast(`Order #${orderNumber} created. Take payment to send it to the kitchen.`);
-      }
-
-      // Open the payment modal — draft stays intact so cashier can come back
-      setPaymentModal({ orderId, orderNumber, total: draftTotal, draft: [...draft] });
+      // Open the payment modal — draft and quote stay intact so the cashier can
+      // close, change their mind, and re-open without re-pricing from scratch.
+      setPaymentModal({ quote: data, total: data.total, draft: [...draft] });
 
     } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to place order. Try again.');
+      showToast(err.response?.data?.message || 'Failed to price this order. Try again.');
     } finally {
       setPlacingOrder(false);
     }
   };
 
   // ─── Payment success → clear everything ──────────────────────────
-  const handlePaymentSuccess = (method) => {
-    showToast(`Payment via ${method} confirmed. `);
+  const handlePaymentSuccess = (method, orderNumber) => {
+    showToast(`Payment via ${method} confirmed${orderNumber ? ` — order #${orderNumber}` : ''}.`);
     setPaymentModal(null);
     clearDraft(); // now we clear — payment is done
     setPane('menu'); // on a phone the cart is the whole screen; go back to ordering
   };
 
-  // ─── Close modal without paying → keep draft & confirmedOrder ────
+  // ─── Close modal without paying ───────────────────────────────────
+  // Nothing was written when the quote was issued, so there is nothing to undo
+  // here — this is the case that used to strand a 'pending' order row in the
+  // database. The draft and quote are kept so the cashier can re-open payment.
   const handleModalClose = () => {
     setPaymentModal(null);
-    // draft and confirmedOrder are intentionally left intact
   };
 
   // ─── Filtered items ───────────────────────────────────────────────
@@ -251,11 +208,10 @@ export default function CashierPage() {
 
   // ─── Confirm button label ─────────────────────────────────────────
   // Give the cashier a visual hint about what will happen on press.
-  const confirmLabel = (() => {
-    if (!confirmedOrder) return 'Confirm Order';
-    if (draftChangedSinceConfirm()) return 'Update Order';
-    return 'Open Payment'; // nothing changed, just reopen
-  })();
+  // One action, always: price the cart and open payment. There is no separate
+  // "update" step any more — nothing is persisted until the money is in, so
+  // there is no existing order to amend.
+  const confirmLabel = 'Confirm Order';
 
   return (
     <div className="cashier-root">
@@ -325,7 +281,7 @@ export default function CashierPage() {
                 onClear={clearDraft}
                 onConfirm={placeOrder}
                 confirmLabel={confirmLabel}
-                isConfirmed={!!confirmedOrder}
+                isConfirmed={!!quote}
                 loading={placingOrder}
               />
             </aside>
@@ -369,8 +325,7 @@ export default function CashierPage() {
       {/* Payment Modal */}
       {paymentModal && (
         <PaymentModal
-          orderId={paymentModal.orderId}
-          orderNumber={paymentModal.orderNumber}
+          quote={paymentModal.quote}
           total={paymentModal.total}
           draft={paymentModal.draft}
           onClose={handleModalClose}

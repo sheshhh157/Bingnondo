@@ -1,4 +1,4 @@
-import { VIEWS } from '../CashierPage';
+import { VIEWS } from '../constants';
 import '../../../styles/CashierHeader.css';
 import logo from '../../../assets/logo1.png';
 import DashboardSwitcher from '../../../components/DashboardSwitcher';
