@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import ConnectionStatus from './ConnectionStatus';
 import DashboardSwitcher from '../../../components/DashboardSwitcher';
@@ -5,7 +6,18 @@ import logo1 from '../../../assets/logo2.png';
 
 export default function KitchenHeader({ counterCount, onlineCount, connected, reconnecting }) {
   const { user, logout } = useAuth();
-  const now = new Date();
+  // Ticked on the minute, not on every render: the clock used to be derived
+  // from `new Date()` during render with nothing to re-render it, so it froze
+  // at whatever time the page happened to load.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const ms = 60000 - (Date.now() % 60000);
+    const t = setTimeout(() => {
+      setNow(new Date());
+    }, ms);
+    return () => clearTimeout(t);
+  }, [now]);
+
   const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
   const dateStr = now.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 

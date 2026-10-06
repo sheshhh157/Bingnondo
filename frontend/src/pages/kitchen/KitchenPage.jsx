@@ -1,10 +1,25 @@
-import { useState, useEffect, useReducer, useCallback } from 'react';
+import { useState, useEffect, useReducer, useCallback, useRef } from 'react';
 import { kitchenAPI } from '../../services/api';
 import { getSocket, KITCHEN_EVENTS } from '../../services/socket';
 import KitchenHeader from './components/KitchenHeader';
 import OrderColumn from './components/OrderColumn';
 import OrderCard from './components/OrderCard';
 import '../../styles/KitchenPage.css';
+
+// ─── Data helpers ─────────────────────────────────────────────────────────────
+// getOrders resolves to the array either directly or under `.data` depending on
+// whether the interceptor unwrapped it. Normalising in one place stops the two
+// call sites drifting apart.
+function toOrderList(res) {
+  const data = res?.data ?? res ?? [];
+  return Array.isArray(data) ? data : [];
+}
+
+function loadOrders(dispatch) {
+  return kitchenAPI.getOrders()
+    .then((res) => dispatch({ type: 'LOAD', payload: toOrderList(res) }))
+    .catch((err) => { throw err?.response?.data?.message || 'Failed to load orders.'; });
+}
 
 // ─── Reducers ────────────────────────────────────────────────────────────────
 function ordersReducer(state, action) {
@@ -44,6 +59,21 @@ function playAlert() {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+
+// Remembered so a refresh does not spring the order list back open on someone
+// who deliberately expanded it. Per device, and failures are non-fatal.
+// `null` means this device has never chosen, which starts collapsed.
+const NEW_ORDERS_COLLAPSED_KEY = 'bingnondo_kitchen_new_orders_collapsed';
+
+function readNewOrdersCollapsed() {
+  try {
+    const stored = localStorage.getItem(NEW_ORDERS_COLLAPSED_KEY);
+    return stored === null ? null : stored === '1';
+  } catch {
+    return null;
+  }
+}
+
 export default function KitchenPage() {
   const [orders, dispatchOrders] = useReducer(ordersReducer, []);
   const [connected, setConnected] = useState(true);
@@ -56,18 +86,21 @@ export default function KitchenPage() {
   const [buzzerOffline, setBuzzerOffline] = useState(false);
   const [devicesLoaded, setDevicesLoaded] = useState(false);
 
+  // New Orders banner. Collapsed by default so the lanes own the screen; a
+  // device that has explicitly expanded it keeps that choice across refreshes.
+  const [newOrdersOpen, setNewOrdersOpen] = useState(() => readNewOrdersCollapsed() === false);
+  const bannerRef = useRef(null);
+  const prevPendingIds = useRef(null);
+  const arrivalPrimed = useRef(false);
+
   // Initial load
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const ordersRes = await kitchenAPI.getOrders();
-        const ordersData = ordersRes?.data ?? ordersRes ?? [];
-        if (!cancelled) {
-          dispatchOrders({ type: 'LOAD', payload: Array.isArray(ordersData) ? ordersData : [] });
-        }
-      } catch (err) {
-        if (!cancelled) setError(err?.response?.data?.message || 'Failed to load orders.');
+        await loadOrders(dispatchOrders);
+      } catch (message) {
+        if (!cancelled) setError(message);
       } finally {
         if (!cancelled) setPageLoading(false);
       }
@@ -81,37 +114,30 @@ export default function KitchenPage() {
     const socket = getSocket();
     let firstConnect = true;
 
-    const refetchAll = async () => {
-      try {
-        const ordersRes = await kitchenAPI.getOrders();
-        const ordersData = ordersRes?.data ?? ordersRes ?? [];
-        dispatchOrders({ type: 'LOAD', payload: Array.isArray(ordersData) ? ordersData : [] });
-await kitchenAPI.getAlerts?.().catch(() => null);
-      } catch { /* ignore */ }
-    };
+    const refetchAll = () => { loadOrders(dispatchOrders).catch(() => {}); };
 
-    const onReconnecting    = () => setReconnecting(true);
-    const onReconnectedEvent = () => {
+    const markReconnecting = () => setReconnecting(true);
+    const markReconnected = () => {
       setConnected(true);
       setReconnecting(false);
       refetchAll();
     };
-    socket.on('connect',         () => {
+    socket.on('connect', () => {
       setConnected(true);
       setReconnecting(false);
       if (!firstConnect) refetchAll();
       firstConnect = false;
     });
-    socket.on('disconnect',       (reason) => {
+    socket.on('disconnect', (reason) => {
       setConnected(false);
       if (reason === 'io server disconnect') setReconnecting(true);
     });
-    socket.on('reconnecting',     onReconnecting);
+    socket.on('reconnecting', markReconnecting);
     socket.on('reconnect_failed', () => setReconnecting(false));
     // socket.js drives the refresh+reconnect cycle after a server kick;
     // reflect its state in the page's indicator.
-    window.addEventListener('socket:reconnecting', onReconnecting);
-    window.addEventListener('socket:reconnected', onReconnectedEvent);
+    window.addEventListener('socket:reconnecting', markReconnecting);
+    window.addEventListener('socket:reconnected', markReconnected);
 
     // A new order arrives as 'pending' and the card appears in New Orders.
     // Deliberately silent: the buzzer and the beep are paid-only triggers, so
@@ -136,8 +162,8 @@ await kitchenAPI.getAlerts?.().catch(() => null);
       socket.off(KITCHEN_EVENTS.NEW_ORDER);
       socket.off(KITCHEN_EVENTS.KITCHEN_ALERT);
       socket.off(KITCHEN_EVENTS.ORDER_STATUS_UPDATE);
-      window.removeEventListener('socket:reconnecting', onReconnecting);
-      window.removeEventListener('socket:reconnected', onReconnectedEvent);
+      window.removeEventListener('socket:reconnecting', markReconnecting);
+      window.removeEventListener('socket:reconnected', markReconnected);
     };
   }, []);
 
@@ -171,20 +197,86 @@ await kitchenAPI.getAlerts?.().catch(() => null);
 
   // ─── Split orders into lanes ──────────────────────────────────────────────
   // Pending: all unacknowledged orders regardless of channel — needs kitchen attention first
-  const pendingOrders  = orders.filter((o) => o.status === 'pending');
+  const pendingOrders = orders.filter((o) => o.status === 'pending');
+  const pendingCount  = pendingOrders.length;
 
   // Counter: acknowledged counter orders in progress
-  const counterOrders  = orders.filter(
+  const counterOrders = orders.filter(
     (o) => o.order_channel !== 'mobile_app' && o.status !== 'pending'
   );
 
   // Online: acknowledged online orders in progress
-  const onlineOrders   = orders.filter(
+  const onlineOrders = orders.filter(
     (o) => o.order_channel === 'mobile_app' && o.status !== 'pending'
   );
 
+  // An unacknowledged order is one nobody has started, so never let the banner
+  // stay collapsed when one lands. Comparing ids rather than counts means a
+  // reconnect reload also surfaces whatever arrived while this screen was
+  // disconnected, which is the point.
+  //
+  // Priming waits for the first load to land: the mount render has `orders`
+  // still empty, so priming there would treat the entire initial queue as a
+  // new arrival.
+  useEffect(() => {
+    if (pageLoading) return;
+    const pending = orders.filter((o) => o.status === 'pending');
+    const ids = new Set(pending.map((o) => o.id));
+    if (!arrivalPrimed.current) {
+      arrivalPrimed.current = true;
+      prevPendingIds.current = ids;
+      return;
+    }
+    const prev = prevPendingIds.current;
+    prevPendingIds.current = ids;
+    const added = pending.filter((o) => !prev.has(o.id));
+    if (added.length === 0) return;
+    setNewOrdersOpen(true);
+  }, [orders, pageLoading]);
+
+  // The toggle uses `aria-disabled` rather than `disabled`: a real `disabled`
+  // button is dropped from the accessibility tree, which would hide the inline
+  // "No new orders" text from screen readers. This keeps it announced while
+  // exposing that there is nothing to open, hence the guard here.
+  function handleBannerClick() {
+    if (pendingCount === 0) return;
+    toggleNewOrders();
+  }
+
+  // Auto-expand is not a preference change, so it deliberately does not touch
+  // the stored value: only a deliberate tap persists.
+  function toggleNewOrders() {
+    setNewOrdersOpen((open) => {
+      const next = !open;
+      try {
+        localStorage.setItem(NEW_ORDERS_COLLAPSED_KEY, next ? '0' : '1');
+      } catch {
+        // Private mode or storage disabled: the banner still toggles, it just
+        // will not remember itself.
+      }
+      return next;
+    });
+  }
+
+  // Close on outside click or Escape, matching the dashboard switcher dropdown.
+  useEffect(() => {
+    if (newOrdersOpen) return undefined;
+    function onPointerDown(e) {
+      if (!bannerRef.current?.contains(e.target)) setNewOrdersOpen(false);
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setNewOrdersOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [newOrdersOpen]);
+
   return (
-    <div className="kp-root">
+    <div className={`kp-root${counterOrders.length > 0 ? ' kp-root--tall-counter' : ''}`}>
       <KitchenHeader
         counterCount={counterOrders.length}
         onlineCount={onlineOrders.length}
@@ -226,35 +318,76 @@ await kitchenAPI.getAlerts?.().catch(() => null);
           <div className="kp-display">
 
             {/* TOP — New Orders banner (pending, all channels) */}
-            <section className="kp-banner" aria-label="New Orders">
-              <div className="kp-banner__header">
+            <section
+              className={`kp-banner${newOrdersOpen ? '' : ' kp-banner--collapsed'}`}
+              ref={bannerRef}
+              aria-label="New Orders"
+            >
+              <button
+                type="button"
+                className="kp-banner__toggle"
+                onClick={handleBannerClick}
+                aria-expanded={newOrdersOpen}
+                aria-controls="kp-new-orders-panel"
+                aria-disabled={pendingCount === 0}
+              >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M8 1.5a5 5 0 015 5V9l1 2H2L3 9V6.5a5 5 0 015-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
                   <path d="M6.5 12.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  {pendingOrders.length > 0 && (
+                  {pendingCount > 0 && (
                     <circle cx="12" cy="3" r="2.5" fill="currentColor"/>
                   )}
                 </svg>
                 <span className="kp-banner__label">New Orders</span>
-                {pendingOrders.length > 0 && (
-                  <span className="kp-banner__count" aria-label={`${pendingOrders.length} new orders`}>
-                    {pendingOrders.length}
+                {pendingCount === 0 && (
+                  <span className="kp-banner__empty">No new orders</span>
+                )}
+                {pendingCount > 0 && (
+                  <span className="kp-banner__count" aria-label={`${pendingCount} new orders`}>
+                    {pendingCount}
                   </span>
                 )}
-              </div>
+                {/* Only meaningful when something is actually waiting: this
+                    points at the Acknowledge button on the cards below. */}
+                {pendingCount > 0 && (
+                  <span className="kp-banner__hint" aria-hidden="true">Tap to acknowledge</span>
+                )}
 
-              {pendingOrders.length === 0 ? (
-                <p className="kp-banner__empty">No new orders</p>
-              ) : (
-                <div className="kp-banner__cards">
-                  {pendingOrders.map((order) => (
-                    <OrderCard
-                      key={order.id}
-                      order={order}
-                      lane="pending"
-                      onStatusChange={handleStatusChange}
+                {pendingCount > 0 && (
+                  <svg
+                    className="kp-banner__chevron"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M4 6l4 4 4-4"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     />
-                  ))}
+                  </svg>
+                )}
+              </button>
+
+              {/* Only rendered when there are orders to show. The empty message lives in
+                  the header row instead, so an idle banner never spends a whole
+                  row on three words. */}
+              {newOrdersOpen && pendingCount > 0 && (
+                <div className="kp-banner__panel" id="kp-new-orders-panel">
+                  <div className="kp-banner__cards">
+                    {pendingOrders.map((order) => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
+                        lane="pending"
+                        onStatusChange={handleStatusChange}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
             </section>
