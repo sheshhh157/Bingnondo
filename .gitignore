@@ -28,3 +28,11 @@ build
 # Regenerate with pg_dump --schema-only when needed.
 /all_tables.sql
 /bingnondo_schema_live.sql
+
+# Local layout/snapshot probes that drive a headless browser against localhost
+# for UI verification. These are development tools, not app code, so they must
+# stay out of the repo. The tracked scripts/ files (measure.mjs,
+# screenshot.mjs, seed-demo-orders.sql) do not match these patterns and are
+# unaffected.
+scripts/probe-*.mjs
+scripts/shot-*.mjs
