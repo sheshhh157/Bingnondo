@@ -131,8 +131,11 @@ export const inventoryAPI = {
   outOfStock: (id) =>
     apiRequest(`/inventory/${id}/out-of-stock`, { method: 'POST' }),
 
-  /** DELETE /api/inventory/:id — remove an ingredient (cascades recipe links + history) */
-  remove: (id) => apiRequest(`/inventory/${id}`, { method: 'DELETE' }),
+  // NOTE: there is deliberately no `remove` helper here. DELETE
+  // /api/inventory/:id cascades recipe links and erases movement history, and
+  // the server now gates that route to owner/admin. The staff UI's delete
+  // action was removed, so nothing calls it - re-adding this helper is the
+  // first step to accidentally wiring destructive delete back into a staff page.
 };
 
 // ─── STAFF MENU (§4.2) — full CRUD, separate from cashier read-only ───────────
