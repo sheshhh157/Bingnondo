@@ -19,6 +19,7 @@ const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 const adminConfigRoutes   = require('./src/modules/admin/admin.switch-config.routes');
 const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
 const supportChatRoutes = require('./src/modules/support-chat/support-chat.routes');
+const uploadRoutes      = require('./src/modules/upload/upload.routes');
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
 const socketHub  = require('./src/sockets');
@@ -52,6 +53,7 @@ app.use('/api/auth', authRoutes);
 
 // ─── Menu & Inventory Routes ───────────────────────────────────────────────────
 app.use('/api/menu',      menuRoutes);
+app.use('/api/upload',    uploadRoutes);
 app.use('/api/inventory', inventoryRoutes);
 
 // ─── Orders & Payments Routes ──────────────────────────────────────────────────

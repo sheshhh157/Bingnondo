@@ -872,6 +872,34 @@ select.mn-field__input { cursor: pointer; }
   opacity: 0.75;
 }
 
+.mn-upload__error {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--color-destructive);
+  margin: 4px 0 0;
+}
+
+.mn-upload__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  margin-right: auto;
+}
+
+.mn-spinner--sm {
+  width: 14px;
+  height: 14px;
+}
+
+.mn-modal__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ─── Ingredient linker ─────────────────────────────────────────────── */
 .mn-linker {
   display: flex;

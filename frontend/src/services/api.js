@@ -507,7 +507,49 @@ export const categoriesAPI = {
   remove: (id) => apiRequest(`/menu/categories/${id}`, { method: 'DELETE' }),
 };
 
-export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMenuAPI, categoriesAPI };
+// ─── UPLOAD API ───────────────────────────────────────────────────────────────
+// Uses a raw fetch (no Content-Type override) so the browser sets the
+// multipart/form-data boundary automatically.
+async function uploadRequest(endpoint, formData) {
+  const accessToken = tokenStorage.getAccess();
+  const res = await fetch(`${BASE_URL}${endpoint}`, {
+    method: 'POST',
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.message || 'Upload failed.');
+    err.response = { status: res.status, data };
+    throw err;
+  }
+  return { data };
+}
+
+export const uploadAPI = {
+  /**
+   * Upload a menu item photo to Cloudinary.
+   * @param {File} file  — the image File object from the input
+   * @returns {{ data: { url: string, public_id: string } }}
+   */
+  uploadMenuImage: (file) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return uploadRequest('/upload/menu-image', fd);
+  },
+
+  /**
+   * Delete a menu item photo from Cloudinary.
+   * @param {string} public_id  — e.g. 'bingnondo/menu/abc123'
+   */
+  deleteMenuImage: (public_id) =>
+    apiRequest('/upload/menu-image', {
+      method: 'DELETE',
+      body: JSON.stringify({ public_id }),
+    }),
+};
+
+export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMenuAPI, categoriesAPI, uploadAPI };
 // ─── KITCHEN ──────────────────────────────────────────────────────────────────
 export const kitchenAPI = {
   getOrders: () => apiClient.get('/api/kitchen/orders'),
