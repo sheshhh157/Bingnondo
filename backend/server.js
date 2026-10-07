@@ -20,9 +20,10 @@ const adminConfigRoutes   = require('./src/modules/admin/admin.switch-config.rou
 const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
 const supportChatRoutes   = require('./src/modules/support-chat/support-chat.routes');
 const uploadRoutes        = require('./src/modules/upload/upload.routes');
-const deliveryRoutes                     = require('./src/modules/delivery/delivery.routes');
-const { ridersRouter, riderRouter }      = require('./src/modules/delivery/rider.routes');
-const adminRiderRoutes                   = require('./src/modules/admin/admin.riders.routes');
+const deliveryRoutes      = require('./src/modules/delivery/delivery.routes');
+const { ridersRouter }    = require('./src/modules/delivery/rider.routes');   // staff dropdown only (GET /api/riders)
+const adminRiderRoutes    = require('./src/modules/admin/admin.riders.routes');
+const riderRoutes         = require('./src/modules/rider/rider.routes');      // rider-scoped (/api/rider/*)
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
 const socketHub  = require('./src/sockets');
@@ -50,7 +51,8 @@ app.use(express.json());
 app.use('/api', generalApiLimiter);
 
 // ─── Auth Routes (with tighter rate limits on sensitive endpoints) ─────────────
-app.use('/api/auth/staff/login',     loginLimiter);
+app.use('/api/auth/login',           loginLimiter);   // shared login (staff + rider)
+app.use('/api/auth/staff/login',     loginLimiter);   // legacy staff-only route
 app.use('/api/auth/forgot-password', otpLimiter);
 app.use('/api/auth', authRoutes);
 
@@ -64,6 +66,15 @@ app.use('/api/orders',   ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/kitchen',  kitchenRoutes);
 
+// ─── Rider Routes ─────────────────────────────────────────────────────────────
+// Requires JWT type='rider' — enforced by requireRider middleware inside the router
+// 7.2: GET  /api/rider/delivery/current
+//      PATCH /api/rider/delivery/:id/status
+// 7.3: GET  /api/rider/deliveries
+//      GET  /api/rider/profile
+//      PATCH /api/rider/profile
+app.use('/api/rider', riderRoutes);
+
 // ─── Admin Routes (NEW) ────────────────────────────────────────────────────────
 // Staff account management + dashboard access grants + PIN management
 app.use('/api/admin/staff-accounts', adminStaffRoutes);
@@ -74,7 +85,6 @@ app.use('/api/admin/system-settings', adminSettingsRoutes);
 app.use('/api/admin/riders',          adminRiderRoutes);   // §6.5 Rider CRUD (admin)
 app.use('/api/deliveries',            deliveryRoutes);     // §4.3 Delivery Assignment
 app.use('/api/riders',                ridersRouter);       // §4.3 available riders dropdown
-app.use('/api/rider',                 riderRouter);        // §7.2 Rider-scoped delivery routes
 app.use('/api/support-chat',          supportChatRoutes);
 // PayMongo webhook — no auth middleware (signed by PayMongo header)
 const paymentsCtrl = require('./src/modules/payments/payments.controller');
@@ -153,6 +163,10 @@ server.listen(PORT, () => {
   console.log(`              GET/PUT  /api/admin/staff-accounts/:id/dashboard-access`);
   console.log(`              POST     /api/admin/staff-accounts/:id/switch-pin`);
   console.log(`              GET/PUT  /api/admin/switch-config`);
+  console.log(`Rider:        GET  /api/rider/delivery/current`);
+  console.log(`              PATCH /api/rider/delivery/:id/status`);
+  console.log(`              GET  /api/rider/deliveries`);
+  console.log(`              GET/PATCH /api/rider/profile`);
   console.log(`Settings:     GET/POST/PATCH/DELETE /api/admin/system-settings/esp32-devices`);
   console.log(`              GET/PUT              /api/admin/system-settings/business-hours`);
   console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);

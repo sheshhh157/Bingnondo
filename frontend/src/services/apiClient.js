@@ -1,16 +1,15 @@
 /**
- * apiClient.js — Real HTTP client adapted to the Bingnondo backend.
+ * apiClient.js — Real HTTP client for the Bingnondo backend.
  *
- * Key differences vs the generic version:
- *  - Auth responses are NOT wrapped in { data: ... }
- *    Backend returns: { accessToken, refreshToken, user, message }
- *  - JWT payload uses { sub, type, role } — not { id, email, role }
- *  - All other endpoints return their own shapes (see per-module comments)
+ * Shared login:
+ *   POST /api/auth/login handles both Staff and Rider.
+ *   Backend checks staff_accounts first, then riders.
+ *   Response: { accessToken, refreshToken, user: { type: 'staff'|'rider', role?, ... } }
  *
  * Handles:
- *  - Automatic Bearer JWT attachment
- *  - Silent token refresh on 401 (one retry per request)
- *  - auth:expired event dispatch so AuthContext can redirect to /login
+ *   - Automatic Bearer JWT attachment
+ *   - Silent token refresh on 401 (one retry per request)
+ *   - auth:expired event dispatch so AuthContext can redirect to /login
  */
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -49,7 +48,6 @@ async function silentRefresh() {
 
   if (!res.ok) throw new Error('Refresh failed.');
   const body = await res.json();
-  // Response shape: { accessToken, refreshToken }
   setTokens(body.accessToken, body.refreshToken);
   return body.accessToken;
 }
@@ -64,7 +62,6 @@ async function request(method, path, body = null, retry = true) {
 
   const res = await fetch(`${BASE_URL}${path}`, options);
 
-  // 401 → try silent token refresh once
   if (res.status === 401 && retry) {
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
@@ -99,24 +96,28 @@ async function request(method, path, body = null, retry = true) {
   return data;
 }
 
-export const get   = (path)         => request('GET',    path);
-export const post  = (path, body)   => request('POST',   path, body);
-export const put   = (path, body)   => request('PUT',    path, body);
-export const patch = (path, body)   => request('PATCH',  path, body);
-export const del   = (path)         => request('DELETE', path);
+export const get   = (path)       => request('GET',    path);
+export const post  = (path, body) => request('POST',   path, body);
+export const put   = (path, body) => request('PUT',    path, body);
+export const patch = (path, body) => request('PATCH',  path, body);
+export const del   = (path)       => request('DELETE', path);
 
 /**
  * authClient — called by AuthContext.
  *
- * staffLogin returns the raw response shape from the backend:
- *   { accessToken, refreshToken, user, message }
- * (no { data: ... } wrapper — different from mock api.js)
+ * login() uses the shared endpoint POST /api/auth/login.
+ * Backend resolves whether the credentials belong to a staff member
+ * or a rider and returns the appropriate JWT type in user.type.
+ *
+ * Response shape: { accessToken, refreshToken, user, message }
+ *   user.type: 'staff' | 'rider'
+ *   user.role: 'cashier' | 'kitchen_staff' | 'staff' | 'owner' | 'admin' (staff only, undefined for rider)
  */
 export const authClient = {
-  staffLogin: async (credentials) => {
+  login: async (credentials) => {
     // Use request() with retry=false so a 401 (wrong credentials) is treated
     // as a plain error — NOT as an expired token that triggers auth:expired + reload.
-    const res = await request('POST', '/api/auth/staff/login', credentials, false);
+    const res = await request('POST', '/api/auth/login', credentials, false);
     // res = { accessToken, refreshToken, user, message }
     setTokens(res.accessToken, res.refreshToken);
     return res;

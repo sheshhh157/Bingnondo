@@ -14,17 +14,114 @@ const {
 const BCRYPT_ROUNDS = 12;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPER: strip sensitive fields before sending user object to client
+// HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 function sanitizeStaff(row) {
   const { password_hash, ...safe } = row;
   return safe;
 }
 
+function sanitizeRider(row) {
+  const { password_hash, ...safe } = row;
+  return safe;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// STAFF — LOGIN
-// POST /api/auth/staff/login
+// SHARED LOGIN — Staff + Rider
+// POST /api/auth/login
 // Body: { email, password }
+//
+// Resolution order:
+//   1. Check staff_accounts — if found, verify password, return type='staff'
+//   2. Check riders         — if found, verify password, return type='rider'
+//   3. Neither found        — 401
+// ─────────────────────────────────────────────────────────────────────────────
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required.' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // ── 1. Check staff_accounts ──────────────────────────────────────────────
+    const { rows: staffRows } = await db.query(
+      'SELECT * FROM staff_accounts WHERE email = $1',
+      [normalizedEmail]
+    );
+
+    if (staffRows.length > 0) {
+      const staff = staffRows[0];
+
+      const match = await bcrypt.compare(password, staff.password_hash);
+      if (!match) {
+        return res.status(401).json({ message: 'Invalid credentials. Try again.' });
+      }
+      if (staff.status === 'deactivated') {
+        return res.status(403).json({ message: 'Account suspended. Contact your administrator.' });
+      }
+
+      const payload = { sub: staff.id, type: 'staff', role: staff.role };
+      const accessToken  = signAccessToken(payload);
+      const refreshToken = signRefreshToken(payload);
+
+      return res.status(200).json({
+        message: 'Login successful.',
+        accessToken,
+        refreshToken,
+        user: { ...sanitizeStaff(staff), type: 'staff' },
+      });
+    }
+
+    // ── 2. Check riders ──────────────────────────────────────────────────────
+    const { rows: riderRows } = await db.query(
+      "SELECT * FROM riders WHERE email = $1 AND status != 'inactive'",
+      [normalizedEmail]
+    );
+
+    if (riderRows.length > 0) {
+      const rider = riderRows[0];
+
+      if (!rider.password_hash) {
+        return res.status(401).json({ message: 'Account not set up yet. Contact your administrator.' });
+      }
+
+      const match = await bcrypt.compare(password, rider.password_hash);
+      if (!match) {
+        return res.status(401).json({ message: 'Invalid credentials. Try again.' });
+      }
+
+      // Update last_login
+      await db.query(
+        'UPDATE riders SET last_login = NOW() WHERE id = $1',
+        [rider.id]
+      );
+
+      const payload = { sub: rider.id, type: 'rider' };
+      const accessToken  = signAccessToken(payload);
+      const refreshToken = signRefreshToken(payload);
+
+      return res.status(200).json({
+        message: 'Login successful.',
+        accessToken,
+        refreshToken,
+        user: { ...sanitizeRider(rider), type: 'rider' },
+      });
+    }
+
+    // ── 3. Not found in either table ─────────────────────────────────────────
+    return res.status(401).json({ message: 'Invalid credentials. Try again.' });
+
+  } catch (err) {
+    console.error('[login]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAFF LOGIN (existing — kept for backward compatibility)
+// POST /api/auth/staff/login
 // ─────────────────────────────────────────────────────────────────────────────
 exports.staffLogin = async (req, res) => {
   try {
@@ -46,20 +143,19 @@ exports.staffLogin = async (req, res) => {
     if (!match) {
       return res.status(401).json({ message: 'Invalid credentials. Try again.' });
     }
-
     if (staff.status === 'deactivated') {
       return res.status(403).json({ message: 'Account suspended. Contact your administrator.' });
     }
 
     const payload = { sub: staff.id, type: 'staff', role: staff.role };
-    const accessToken = signAccessToken(payload);
+    const accessToken  = signAccessToken(payload);
     const refreshToken = signRefreshToken(payload);
 
     return res.status(200).json({
       message: 'Login successful.',
       accessToken,
       refreshToken,
-      user: sanitizeStaff(staff),
+      user: { ...sanitizeStaff(staff), type: 'staff' },
     });
   } catch (err) {
     console.error('[staffLogin]', err);
@@ -68,9 +164,8 @@ exports.staffLogin = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FORGOT PASSWORD  (staff only)
+// FORGOT PASSWORD (staff only)
 // POST /api/auth/forgot-password
-// Body: { email }
 // ─────────────────────────────────────────────────────────────────────────────
 exports.forgotPassword = async (req, res) => {
   try {
@@ -84,7 +179,6 @@ exports.forgotPassword = async (req, res) => {
       [normalizedEmail]
     );
 
-    // Always return 200 — don't reveal whether the email exists
     if (staffRows.length === 0) {
       return res.status(200).json({ message: 'If that email is registered, a reset code has been sent.' });
     }
@@ -102,7 +196,6 @@ exports.forgotPassword = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // RESET PASSWORD
 // POST /api/auth/reset-password
-// Body: { email, otp, newPassword, confirmPassword }
 // ─────────────────────────────────────────────────────────────────────────────
 exports.resetPassword = async (req, res) => {
   try {
@@ -144,7 +237,6 @@ exports.resetPassword = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // REFRESH TOKEN
 // POST /api/auth/refresh
-// Body: { refreshToken }
 // ─────────────────────────────────────────────────────────────────────────────
 exports.refreshToken = async (req, res) => {
   try {
@@ -158,21 +250,31 @@ exports.refreshToken = async (req, res) => {
       return res.status(401).json({ message: 'Invalid or expired refresh token.' });
     }
 
-    // Verify the staff account still exists and is active
-    const { rows } = await db.query(
-      'SELECT id, status, role FROM staff_accounts WHERE id = $1',
-      [decoded.sub]
-    );
-    if (rows.length === 0 || rows[0].status !== 'active') {
-      return res.status(401).json({ message: 'Account not found or inactive.' });
+    // Verify account still exists and is active — check correct table by type
+    if (decoded.type === 'rider') {
+      const { rows } = await db.query(
+        "SELECT id, status FROM riders WHERE id = $1 AND status != 'inactive'",
+        [decoded.sub]
+      );
+      if (rows.length === 0) {
+        return res.status(401).json({ message: 'Account not found or inactive.' });
+      }
+    } else {
+      const { rows } = await db.query(
+        "SELECT id, status FROM staff_accounts WHERE id = $1 AND status = 'active'",
+        [decoded.sub]
+      );
+      if (rows.length === 0) {
+        return res.status(401).json({ message: 'Account not found or inactive.' });
+      }
     }
 
-    const newPayload = { sub: decoded.sub, type: decoded.type, role: decoded.role };
-    const newAccessToken = signAccessToken(newPayload);
+    const newPayload     = { sub: decoded.sub, type: decoded.type, role: decoded.role };
+    const newAccessToken  = signAccessToken(newPayload);
     const newRefreshToken = signRefreshToken(newPayload);
 
     return res.status(200).json({
-      accessToken: newAccessToken,
+      accessToken:  newAccessToken,
       refreshToken: newRefreshToken,
     });
   } catch (err) {
@@ -183,25 +285,29 @@ exports.refreshToken = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGOUT
-// POST /api/auth/logout  (requires valid access token)
+// POST /api/auth/logout
 // ─────────────────────────────────────────────────────────────────────────────
 exports.logout = async (req, res) => {
-  // req.user is set by authenticateToken middleware
-  // Stateless JWT: nothing to invalidate server-side unless you implement
-  // a token blacklist table. For now, client simply deletes stored tokens.
   return res.status(200).json({ message: 'Logged out successfully.' });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ME  — return current user info from token
+// ME — return current user info from token
 // GET /api/auth/me
 // ─────────────────────────────────────────────────────────────────────────────
 exports.me = async (req, res) => {
   try {
-    const { sub } = req.user;
+    const { sub, type } = req.user;
+
+    if (type === 'rider') {
+      const { rows } = await db.query('SELECT * FROM riders WHERE id = $1', [sub]);
+      if (rows.length === 0) return res.status(404).json({ message: 'Rider not found.' });
+      return res.status(200).json({ user: { ...sanitizeRider(rows[0]), type: 'rider' } });
+    }
+
     const { rows } = await db.query('SELECT * FROM staff_accounts WHERE id = $1', [sub]);
     if (rows.length === 0) return res.status(404).json({ message: 'User not found.' });
-    return res.status(200).json({ user: sanitizeStaff(rows[0]) });
+    return res.status(200).json({ user: { ...sanitizeStaff(rows[0]), type: 'staff' } });
   } catch (err) {
     console.error('[me]', err);
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });

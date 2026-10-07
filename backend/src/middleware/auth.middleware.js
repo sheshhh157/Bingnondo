@@ -74,4 +74,17 @@ function requireCustomer(req, res, next) {
   next();
 }
 
-module.exports = { authenticateToken, requireRoles, requireStaff, requireCustomer };
+/**
+ * requireRider
+ * ─────────────
+ * Allows only JWTs with type='rider'.
+ * Used as the gate for all /api/rider/* routes.
+ */
+function requireRider(req, res, next) {
+  if (!req.user || req.user.type !== 'rider') {
+    return res.status(403).json({ message: "You don't have permission to perform this action." });
+  }
+  next();
+}
+
+module.exports = { authenticateToken, requireRoles, requireStaff, requireCustomer, requireRider };
