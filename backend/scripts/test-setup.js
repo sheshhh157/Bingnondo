@@ -1,9 +1,9 @@
 // Test-database bootstrap. Creates the DB named by DB_NAME_TEST (default
 // bingnondo_test) when missing, restores the canonical schema from
-// bingnondo_database.sql, applies all numbered migrations in order (so the
-// test schema is the output of the same chain the dev/prod databases took),
-// then seeds the rows tests rely on (staff accounts of every role, the ESP32
-// test device, one orderable menu item).
+// backend/scripts/base-schema.sql, marks every numbered migration as applied
+// (that file is a schema-only dump of the migrated dev database, so it already
+// reflects the post-migration state), then seeds the rows tests rely on (staff
+// accounts of every role, the ESP32 test device, orderable menu items).
 //
 // Safety: never runs against DB_NAME. If DB_NAME_TEST is unset it defaults
 // to bingnondo_test; if DB_NAME_TEST === DB_NAME it refuses to start.
@@ -18,7 +18,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { Client } = require('pg');
 
-const devDbName = process.env.DB_NAME || 'bingnondo_db';
+const devDbName = process.env.DB_NAME || 'bingnondo';
 const testDbName = process.env.DB_NAME_TEST || 'bingnondo_test';
 
 if (testDbName === devDbName) {
@@ -50,10 +50,9 @@ async function main() {
 
   const hasBase = await testDb.query("SELECT 1 FROM information_schema.tables WHERE table_name = 'orders' LIMIT 1");
   if (hasBase.rows.length === 0) {
-    const schema = fs.readFileSync(path.join(__dirname, '..', '..', 'bingnondo_database.sql'), 'utf8');
+    const schema = fs.readFileSync(path.join(__dirname, 'base-schema.sql'), 'utf8');
     await testDb.query(schema);
-    console.log('[test:setup] restored canonical schema from bingnondo_database.sql');
-
+    console.log('[test:setup] restored canonical schema from scripts/base-schema.sql');
   }
   await testDb.end();
 
@@ -62,13 +61,14 @@ async function main() {
     const r = spawnSync(process.execPath, args, { stdio: 'inherit', env });
     if (r.status !== 0) { console.error(`[test:setup] "${args.join(' ')}" failed`); process.exit(r.status ?? 1); }
   };
-  // Apply the migrations the way the app would apply them on a fresh database.
-  // The canonical file is assumed to be the pre-migration base; running these
-  // for real is what proves the chain reproduces a shippable schema.
-  run([path.join(__dirname, 'migrate.js')]);
+  // base-schema.sql is a dump of an already-migrated database, so the chain is
+  // recorded rather than replayed. Replaying it would not be safe anyway: 008 and
+  // 011 ADD CONSTRAINT with no preceding DROP, and Postgres has no
+  // ADD CONSTRAINT IF NOT EXISTS, so a second run errors on the duplicate name.
+  run([path.join(__dirname, 'migrate.js'), '--mark-all-applied']);
 
-  // Re-seed anchor rows tests assume exist (categories come from migrations
-  // or the canonical schema, staff accounts + ESP32 device are manual anchors).
+  // Re-seed anchor rows tests assume exist (categories come from the restored
+  // schema, staff accounts + ESP32 device are manual anchors).
   const client = new Client({ ...base, database: testDbName });
   await client.connect();
 
