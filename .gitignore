@@ -36,3 +36,13 @@ build
 # unaffected.
 scripts/probe-*.mjs
 scripts/shot-*.mjs
+
+# Kept on disk locally but excluded from this branch: repo-level attributes,
+# CI, and the design/database reference docs. They remain in the working tree
+# as untracked files; this keeps them out of the pushed tree and stops a
+# future `git add .` from re-adding them.
+/.gitattributes
+/.github/
+/bingnondo_architecture_design.md
+/bingnondo_database.sql
+/bingnondo_flow.md

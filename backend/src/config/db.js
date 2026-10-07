@@ -2,7 +2,7 @@ const { Pool } = require('pg');
 
 // Test runs must never touch the dev database. Resolve the target name here,
 // and refuse to start a pool pointed back at DB_NAME.
-let database = process.env.DB_NAME || 'bingnondo_db';
+let database = process.env.DB_NAME || 'bingnondo';
 if (process.env.NODE_ENV === 'test') {
   database = process.env.DB_NAME_TEST || 'bingnondo_test';
   if (database === process.env.DB_NAME) {

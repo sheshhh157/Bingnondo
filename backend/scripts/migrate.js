@@ -18,8 +18,8 @@ const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 const isTestRun = process.env.NODE_ENV === 'test';
 const targetDb = isTestRun
   ? (process.env.DB_NAME_TEST || 'bingnondo_test')
-  : (process.env.DB_NAME || 'bingnondo_db');
-if (isTestRun && targetDb === (process.env.DB_NAME || 'bingnondo_db')) {
+  : (process.env.DB_NAME || 'bingnondo');
+if (isTestRun && targetDb === (process.env.DB_NAME || 'bingnondo')) {
   console.error(`[migrate] NODE_ENV=test but DB_NAME_TEST resolves to the dev database "${targetDb}". Refusing to run.`);
   process.exit(1);
 }
