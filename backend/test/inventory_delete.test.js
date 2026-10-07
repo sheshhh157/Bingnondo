@@ -19,8 +19,8 @@
  *   4. A missing id is a 404, not a silent success, and a second delete of the
  *      same id is a 404 too — so a double-tap cannot delete two things.
  *
- *   5. Cashiers cannot delete. The write routes gate on
- *      staff/owner/admin, and a cashier must not be able to wipe inventory.
+ *   5. Only owners and admins can delete. The route gates on owner/admin, so
+ *      neither an ordinary staff account nor a cashier can wipe inventory.
  *
  * Database-backed tests are skipped when no database is reachable.
  * Each test creates its own throwaway ingredient and cleans up afterwards.
@@ -83,6 +83,11 @@ async function call(method, path, { body, tok } = {}) {
   }
 }
 
+const ownerAccount = async () =>
+  (await db.query(
+    `SELECT id FROM staff_accounts WHERE role = 'owner' AND status = 'active' ORDER BY id LIMIT 1`
+  )).rows[0];
+
 const staffAccount = async () =>
   (await db.query(
     `SELECT id FROM staff_accounts WHERE role = 'staff' AND status = 'active' ORDER BY id LIMIT 1`
@@ -136,9 +141,9 @@ const uniqueName = () => `tmp-del-test-${process.pid}-${nameSeq++}`;
 
 test('deleting an ingredient cascades its recipe links', { skip }, async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
-  const staff = await staffAccount();
-  if (!staff) return t.skip('no active staff account');
-  const tok = signFor(staff.id, 'staff');
+  const owner = await ownerAccount();
+  if (!owner) return t.skip('no active owner account');
+  const tok = signFor(owner.id, 'owner');
 
   await withIngredient({ name: uniqueName(), links: 2, txns: 0 }, async ({ id, menuItemIds }) => {
     const { status, body } = await call('DELETE', `/api/inventory/${id}`, { tok });
@@ -166,9 +171,9 @@ test('deleting an ingredient cascades its recipe links', { skip }, async (t) => 
 
 test('the response names every menu item that lost a recipe link', { skip }, async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
-  const staff = await staffAccount();
-  if (!staff) return t.skip('no active staff account');
-  const tok = signFor(staff.id, 'staff');
+  const owner = await ownerAccount();
+  if (!owner) return t.skip('no active owner account');
+  const tok = signFor(owner.id, 'owner');
 
   await withIngredient({ name: uniqueName(), links: 3, txns: 0 }, async ({ id, menuItemIds }) => {
     const { status, body } = await call('DELETE', `/api/inventory/${id}`, { tok });
@@ -189,9 +194,9 @@ test('the response names every menu item that lost a recipe link', { skip }, asy
 
 test('deleting an ingredient with transaction history is blocked', { skip }, async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
-  const staff = await staffAccount();
-  if (!staff) return t.skip('no active staff account');
-  const tok = signFor(staff.id, 'staff');
+  const owner = await ownerAccount();
+  if (!owner) return t.skip('no active owner account');
+  const tok = signFor(owner.id, 'owner');
 
   await withIngredient({ name: uniqueName(), links: 1, txns: 1 }, async ({ id }) => {
     const { status, body } = await call('DELETE', `/api/inventory/${id}`, { tok });
@@ -208,9 +213,9 @@ test('deleting an ingredient with transaction history is blocked', { skip }, asy
 
 test('deleting an ingredient linked to nothing still succeeds', { skip }, async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
-  const staff = await staffAccount();
-  if (!staff) return t.skip('no active staff account');
-  const tok = signFor(staff.id, 'staff');
+  const owner = await ownerAccount();
+  if (!owner) return t.skip('no active owner account');
+  const tok = signFor(owner.id, 'owner');
 
   await withIngredient({ name: uniqueName(), links: 0, txns: 0 }, async ({ id }) => {
     const { status, body } = await call('DELETE', `/api/inventory/${id}`, { tok });
@@ -222,9 +227,9 @@ test('deleting an ingredient linked to nothing still succeeds', { skip }, async 
 
 test('deleting a missing ingredient is a 404, and a repeat delete changes nothing', { skip }, async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
-  const staff = await staffAccount();
-  if (!staff) return t.skip('no active staff account');
-  const tok = signFor(staff.id, 'staff');
+  const owner = await ownerAccount();
+  if (!owner) return t.skip('no active owner account');
+  const tok = signFor(owner.id, 'owner');
 
   await withIngredient({ name: uniqueName() }, async ({ id }) => {
     assert.equal((await call('DELETE', `/api/inventory/${id}`, { tok })).status, 200);
@@ -240,10 +245,28 @@ test('deleting a missing ingredient is a 404, and a repeat delete changes nothin
   });
 });
 
-test('a cashier cannot delete an ingredient', { skip }, async (t) => {
+test('a staff account cannot delete an ingredient', { skip }, async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
   const staff = await staffAccount();
   if (!staff) return t.skip('no active staff account');
+
+  await withIngredient({ name: uniqueName() }, async ({ id }) => {
+    const { status } = await call('DELETE', `/api/inventory/${id}`, {
+      tok: signFor(staff.id, 'staff'),
+    });
+    assert.equal(status, 403,
+      'a hard delete destroys an audit trail, so it stays owner/admin only');
+
+    const still = await db.query(
+      `SELECT count(*)::int n FROM inventory_items WHERE id = $1`, [id]);
+    assert.equal(still.rows[0].n, 1, 'the ingredient must still exist after a refused delete');
+  });
+});
+
+test('a cashier cannot delete an ingredient', { skip }, async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+  const owner = await ownerAccount();
+  if (!owner) return t.skip('no active owner account');
   const cashier = await cashierAccount();
   if (!cashier) return t.skip('no active cashier account');
   const tok = signFor(cashier.id, 'cashier');
@@ -257,8 +280,8 @@ test('a cashier cannot delete an ingredient', { skip }, async (t) => {
       `SELECT count(*)::int n FROM inventory_items WHERE id = $1`, [id]);
     assert.equal(still.rows[0].n, 1, 'the ingredient must still exist after a refused delete');
 
-    // And a supervisor can still do it.
-    const ok = await call('DELETE', `/api/inventory/${id}`, { tok: signFor(staff.id, 'staff') });
+    // And an owner can still do it.
+    const ok = await call('DELETE', `/api/inventory/${id}`, { tok: signFor(owner.id, 'owner') });
     assert.equal(ok.status, 200);
   });
 });

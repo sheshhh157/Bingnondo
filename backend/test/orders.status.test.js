@@ -215,11 +215,11 @@ const kitchenSet = (id, status) => call('PATCH', `/api/kitchen/orders/${id}/stat
  * `kitchen_alerts` all cascade on `orders.id`, and the sequence is advanced by
  * the test, so the table is left exactly as found.
  */
-const withTestOrder = async ({ status, payment = 'pending', items = 1, cashierId = null }, fn) => {
+const withTestOrder = async ({ status, payment = 'pending', items = 1, cashierId = null, orderType = 'counter' }, fn) => {
   const created = await db.query(
     `INSERT INTO orders (order_type, status, order_channel, total_amount, cashier_id)
-     VALUES ('counter', $1, 'web_counter', 100, $2) RETURNING id`,
-    [status, cashierId]);
+     VALUES ($1, $2, 'web_counter', 100, $3) RETURNING id`,
+    [orderType, status, cashierId]);
   const id = created.rows[0].id;
 
   const menuItem = await db.query(`SELECT id, price FROM menu_items ORDER BY id LIMIT 1`);
@@ -428,7 +428,9 @@ test('kitchen_staff cannot list or read orders', async (t) => {
 test('kitchen still allows confirmed -> preparing -> ready', async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
 
-  await withTestOrder({ status: 'confirmed' }, async (id) => {
+  // Online orders keep the full chain and stop at 'ready'. Counter orders are
+  // the ones that complete in the same step — covered separately below.
+  await withTestOrder({ status: 'confirmed', orderType: 'online' }, async (id) => {
     const first = await kitchenSet(id, 'preparing');
     assert.equal(first.status, 200, 'confirmed -> preparing must still work');
     assert.equal(await statusOf(id), 'preparing');
@@ -439,6 +441,28 @@ test('kitchen still allows confirmed -> preparing -> ready', async (t) => {
 
     // Both real transitions should be on the record.
     assert.equal(await historyCount(id), 2);
+  });
+});
+
+test('marking a counter order ready also completes it', async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+
+  // A counter ticket has no delivery leg, so the handoff is the whole job:
+  // marking it ready must land on 'completed' rather than parking it there
+  // for someone to close by hand.
+  await withTestOrder({ status: 'confirmed', orderType: 'counter' }, async (id) => {
+    const first = await kitchenSet(id, 'preparing');
+    assert.equal(first.status, 200);
+    assert.equal(await statusOf(id), 'preparing');
+
+    const second = await kitchenSet(id, 'ready');
+    assert.equal(second.status, 200, 'preparing -> ready must still work');
+    assert.equal(await statusOf(id), 'completed',
+      'a counter order finishes the moment the kitchen marks it ready');
+
+    // preparing, then ready, then completed: both writes from the ready step are
+    // recorded so the history explains how it closed.
+    assert.equal(await historyCount(id), 3);
   });
 });
 
