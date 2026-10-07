@@ -18,8 +18,11 @@ const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
 const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 const adminConfigRoutes   = require('./src/modules/admin/admin.switch-config.routes');
 const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
-const supportChatRoutes = require('./src/modules/support-chat/support-chat.routes');
-const uploadRoutes      = require('./src/modules/upload/upload.routes');
+const supportChatRoutes   = require('./src/modules/support-chat/support-chat.routes');
+const uploadRoutes        = require('./src/modules/upload/upload.routes');
+const deliveryRoutes                     = require('./src/modules/delivery/delivery.routes');
+const { ridersRouter, riderRouter }      = require('./src/modules/delivery/rider.routes');
+const adminRiderRoutes                   = require('./src/modules/admin/admin.riders.routes');
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
 const socketHub  = require('./src/sockets');
@@ -68,7 +71,11 @@ app.use('/api/admin/staff-accounts', adminStaffRoutes);
 app.use('/api/admin/switch-config',  adminConfigRoutes);
 // System settings: ESP32 devices, business hours, menu categories
 app.use('/api/admin/system-settings', adminSettingsRoutes);
-app.use('/api/support-chat', supportChatRoutes);
+app.use('/api/admin/riders',          adminRiderRoutes);   // §6.5 Rider CRUD (admin)
+app.use('/api/deliveries',            deliveryRoutes);     // §4.3 Delivery Assignment
+app.use('/api/riders',                ridersRouter);       // §4.3 available riders dropdown
+app.use('/api/rider',                 riderRouter);        // §7.2 Rider-scoped delivery routes
+app.use('/api/support-chat',          supportChatRoutes);
 // PayMongo webhook — no auth middleware (signed by PayMongo header)
 const paymentsCtrl = require('./src/modules/payments/payments.controller');
 app.post('/api/webhooks/paymongo', paymentsCtrl.paymongoWebhook);

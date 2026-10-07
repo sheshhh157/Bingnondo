@@ -19,6 +19,20 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/riders',
+    label: 'Riders',
+    sub: 'Manage rider accounts',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v4l3 3"/>
+        <path d="M5 3 2 6l3 3"/>
+        <path d="m19 3 3 3-3 3"/>
+        <path d="M2 6h20"/>
+      </svg>
+    ),
+  },
+  {
     to: '/admin/settings',
     label: 'System Settings',
     sub: 'Devices & config',

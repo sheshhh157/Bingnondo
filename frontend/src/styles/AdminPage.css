@@ -864,3 +864,86 @@
   background: rgba(94,200,122,0.08);
   border-color: rgba(94,200,122,0.2);
 }
+/* ─── Riders Page additions ───────────────────────────────────────────── */
+
+/* Stats row */
+.ap-stats-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.ap-stat-chip { display: flex; flex-direction: column; align-items: center; padding: 12px 20px; background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); min-width: 90px; }
+.ap-stat-chip--green { border-color: #BBF7D0; background: #F0FDF4; }
+.ap-stat-chip--amber { border-color: #FDE68A; background: #FFFBEB; }
+.ap-stat-chip__val   { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; color: var(--color-foreground); line-height: 1; }
+.ap-stat-chip__label { font-family: var(--font-body); font-size: 0.75rem; color: var(--color-muted-foreground); margin-top: 4px; }
+
+/* Search bar */
+.ap-search-bar { position: relative; margin-bottom: 16px; }
+.ap-search-bar__icon  { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--color-muted-foreground); pointer-events: none; }
+.ap-search-bar__input { width: 100%; padding: 9px 36px 9px 36px; font-family: var(--font-body); font-size: 0.875rem; background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-foreground); outline: none; box-sizing: border-box; }
+.ap-search-bar__input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 15%, transparent); }
+.ap-search-bar__clear { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--color-muted-foreground); font-size: 0.8rem; padding: 2px 4px; }
+
+/* Error banner */
+.ap-error-banner { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: var(--radius-md); color: var(--color-destructive); font-family: var(--font-body); font-size: 0.875rem; margin-bottom: 16px; }
+
+/* Table extensions */
+.ap-table__primary   { font-family: var(--font-body); font-size: 0.875rem; font-weight: 600; color: var(--color-foreground); margin: 0; }
+.ap-table__secondary { font-family: var(--font-body); font-size: 0.75rem; color: var(--color-muted-foreground); margin: 2px 0 0; }
+.ap-table__none      { color: var(--color-muted-foreground); font-size: 0.875rem; }
+.ap-table__note      { font-family: var(--font-body); font-size: 0.75rem; color: var(--color-muted-foreground); font-style: italic; }
+.ap-table__td--mono  { font-family: monospace; font-size: 0.85rem; }
+
+/* Buttons extensions */
+.ap-btn--xs          { padding: 5px 10px; font-size: 0.75rem; }
+.ap-btn--danger-ghost { color: var(--color-destructive); border-color: transparent; background: transparent; }
+.ap-btn--danger-ghost:hover:not(:disabled) { background: #FEF2F2; border-color: #FECACA; }
+
+/* Badge extensions */
+.ap-badge--warning   { background: #FFFBEB; color: #92400E; border-color: #FDE68A; }
+
+/* Form grid (2-col in modal) */
+.ap-form-grid        { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ap-form-field       { display: flex; flex-direction: column; gap: 5px; }
+.ap-form-field--full { grid-column: 1 / -1; }
+.ap-form-label       { font-family: var(--font-body); font-size: 0.8125rem; font-weight: 600; color: var(--color-foreground); }
+.ap-form-optional    { font-weight: 400; color: var(--color-muted-foreground); font-size: 0.75rem; }
+.ap-form-input       { padding: 8px 10px; font-family: var(--font-body); font-size: 0.875rem; background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-foreground); outline: none; width: 100%; box-sizing: border-box; }
+.ap-form-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 15%, transparent); }
+.ap-form-input--error { border-color: var(--color-destructive); }
+.ap-form-textarea    { resize: vertical; min-height: 60px; }
+.ap-form-error       { font-family: var(--font-body); font-size: 0.75rem; color: var(--color-destructive); margin: 0; }
+
+/* Modal extensions */
+.ap-modal--sm    { max-width: 400px; }
+.ap-modal__desc  { font-family: var(--font-body); font-size: 0.875rem; color: var(--color-muted-foreground); margin: 0 0 14px; }
+.ap-modal--confirm { text-align: center; padding: 28px 24px 24px; }
+
+/* Confirm modal */
+.ap-confirm__icon          { font-size: 2rem; margin-bottom: 12px; display: block; }
+.ap-confirm__icon--danger  { color: var(--color-destructive); }
+.ap-confirm__icon--success { color: #15803D; }
+.ap-confirm__title  { font-family: var(--font-display); font-size: 1.125rem; font-weight: 700; margin: 0 0 8px; color: var(--color-foreground); }
+.ap-confirm__msg    { font-family: var(--font-body); font-size: 0.875rem; color: var(--color-muted-foreground); margin: 0 0 20px; }
+.ap-confirm__actions { display: flex; gap: 8px; justify-content: center; }
+
+/* Skeleton */
+.ap-skeleton { height: 14px; background: var(--color-muted); border-radius: var(--radius-sm); animation: ap-pulse 1.5s ease-in-out infinite; }
+
+/* Empty state */
+.ap-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 20px; color: var(--color-muted-foreground); }
+.ap-empty p { font-family: var(--font-body); font-size: 0.875rem; margin: 0; }
+
+/* Page header (shared) */
+.ap-page__header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+.ap-page__title  { font-family: var(--font-display); font-size: 1.375rem; font-weight: 700; color: var(--color-foreground); margin: 0; }
+.ap-page__sub    { font-family: var(--font-body); font-size: 0.875rem; color: var(--color-muted-foreground); margin: 4px 0 0; }
+
+/* Table footer */
+.ap-table__footer { font-family: var(--font-body); font-size: 0.8125rem; color: var(--color-muted-foreground); padding: 10px 16px; border-top: 1px solid var(--color-border); }
+
+/* Animations */
+@keyframes ap-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+@media (max-width: 600px) {
+  .ap-form-grid { grid-template-columns: 1fr; }
+  .ap-stats-row { gap: 8px; }
+  .ap-stat-chip { min-width: 70px; padding: 10px 14px; }
+}

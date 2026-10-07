@@ -761,41 +761,52 @@ export const adminAPI = {
     }),
 };
 
+// ─── DELIVERY API (§4.3) ──────────────────────────────────────────────────────
 export const deliveryAPI = {
-  /** GET /api/deliveries — all deliveries for staff view */
-  getAll: async () => {
-    await delay(400);
-    return { data: { deliveries: [...MOCK_DELIVERIES] } };
+  /** GET /api/deliveries?status=... — all deliveries for staff view */
+  getAll: (status) => {
+    const qs = status && status !== 'all' ? `?status=${status}` : '';
+    return apiClient.get(`/api/deliveries${qs}`);
   },
 
-  /** POST /api/deliveries/:id/assign — assign rider or book Lalamove */
-  assign: async (id, payload) => {
-    await delay(500);
-    const delivery = MOCK_DELIVERIES.find((d) => d.id === id);
-    if (!delivery) throw { response: { data: { message: 'Delivery not found.' } } };
+  /** POST /api/deliveries/:id/assign — assign registered rider or ad-hoc */
+  // payload: { rider_id?, rider_name?, rider_contact? }
+  assign: (id, payload) =>
+    apiClient.post(`/api/deliveries/${id}/assign`, payload),
 
-    delivery.status = 'assigned';
-    delivery.delivery_preference = payload.delivery_preference;
+  /** PATCH /api/deliveries/:id/status — update delivery status (staff) */
+  updateStatus: (id, status) =>
+    apiClient.patch(`/api/deliveries/${id}/status`, { status }),
 
-    if (payload.delivery_preference === 'lalamove') {
-      // Simulate Lalamove booking ID
-      delivery.lalamove_booking_id = `LLM-${Date.now().toString().slice(-8)}`;
-    } else {
-      delivery.rider_name    = payload.rider_name;
-      delivery.rider_contact = payload.rider_contact;
-    }
+  /** GET /api/riders?status=available — available riders for assignment dropdown */
+  getAvailableRiders: () =>
+    apiClient.get('/api/riders?status=available'),
+};
 
-    return { data: { ...delivery } };
+// ─── RIDER MANAGEMENT API (§6.5 — Admin) ─────────────────────────────────────
+export const adminRidersAPI = {
+  /** GET /api/admin/riders — list all riders */
+  getAll: (status) => {
+    const qs = status ? `?status=${status}` : '';
+    return apiClient.get(`/api/admin/riders${qs}`);
   },
 
-  /** PATCH /api/deliveries/:id/status — update delivery status */
-  updateStatus: async (id, status) => {
-    await delay(350);
-    const delivery = MOCK_DELIVERIES.find((d) => d.id === id);
-    if (!delivery) throw { response: { data: { message: 'Delivery not found.' } } };
-    delivery.status = status;
-    return { data: { ...delivery } };
-  },
+  /** GET /api/admin/riders/:id — single rider */
+  getById: (id) => apiClient.get(`/api/admin/riders/${id}`),
+
+  /** POST /api/admin/riders — create new rider */
+  create: (payload) => apiClient.post('/api/admin/riders', payload),
+
+  /** PUT /api/admin/riders/:id — update rider info */
+  update: (id, payload) => apiClient.put(`/api/admin/riders/${id}`, payload),
+
+  /** PATCH /api/admin/riders/:id/status — activate or deactivate */
+  updateStatus: (id, status) =>
+    apiClient.patch(`/api/admin/riders/${id}/status`, { status }),
+
+  /** POST /api/admin/riders/:id/reset-password — admin resets password */
+  resetPassword: (id, password) =>
+    apiClient.post(`/api/admin/riders/${id}/reset-password`, { password }),
 };
 
 // ─── SUPPORT CHAT API (§4.5) ──────────────────────────────────────────────────
