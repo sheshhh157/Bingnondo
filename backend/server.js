@@ -18,6 +18,7 @@ const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
 const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 const adminConfigRoutes   = require('./src/modules/admin/admin.switch-config.routes');
 const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
+const riderRoutes         = require('./src/modules/rider/rider.routes');
 
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
@@ -46,7 +47,8 @@ app.use(express.json());
 app.use('/api', generalApiLimiter);
 
 // ─── Auth Routes (with tighter rate limits on sensitive endpoints) ─────────────
-app.use('/api/auth/staff/login',     loginLimiter);
+app.use('/api/auth/login',           loginLimiter);   // shared login (staff + rider)
+app.use('/api/auth/staff/login',     loginLimiter);   // legacy staff-only route
 app.use('/api/auth/forgot-password', otpLimiter);
 app.use('/api/auth', authRoutes);
 
@@ -58,6 +60,15 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/orders',   ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/kitchen',  kitchenRoutes);
+
+// ─── Rider Routes ─────────────────────────────────────────────────────────────
+// Requires JWT type='rider' — enforced by requireRider middleware inside the router
+// 7.2: GET  /api/rider/delivery/current
+//      PATCH /api/rider/delivery/:id/status
+// 7.3: GET  /api/rider/deliveries
+//      GET  /api/rider/profile
+//      PATCH /api/rider/profile
+app.use('/api/rider', riderRoutes);
 
 // ─── Admin Routes (NEW) ────────────────────────────────────────────────────────
 // Staff account management + dashboard access grants + PIN management
@@ -144,6 +155,10 @@ server.listen(PORT, () => {
   console.log(`              GET/PUT  /api/admin/staff-accounts/:id/dashboard-access`);
   console.log(`              POST     /api/admin/staff-accounts/:id/switch-pin`);
   console.log(`              GET/PUT  /api/admin/switch-config`);
+  console.log(`Rider:        GET  /api/rider/delivery/current`);
+  console.log(`              PATCH /api/rider/delivery/:id/status`);
+  console.log(`              GET  /api/rider/deliveries`);
+  console.log(`              GET/PATCH /api/rider/profile`);
   console.log(`Settings:     GET/POST/PATCH/DELETE /api/admin/system-settings/esp32-devices`);
   console.log(`              GET/PUT              /api/admin/system-settings/business-hours`);
   console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);
