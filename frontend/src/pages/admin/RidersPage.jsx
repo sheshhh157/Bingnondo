@@ -678,8 +678,8 @@ export default function RidersPage() {
     setLoading(true);
     try {
       const res = await adminAPI.listRiders({ page, limit: LIMIT, search: search || undefined, status: statusF !== 'all' ? statusF : undefined });
-      setRiders(res.data || []);
-      setTotal(res.total || 0);
+      setRiders(res.data?.data || []);
+      setTotal(res.data?.total || 0);
     } catch (err) {
       toast.error('Failed to load riders.');
       console.error(err);

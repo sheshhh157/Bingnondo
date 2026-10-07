@@ -18,6 +18,7 @@ const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
 const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 const adminConfigRoutes   = require('./src/modules/admin/admin.switch-config.routes');
 const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
+const adminRidersRoutes   = require('./src/modules/admin/riders.routes');
 
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
@@ -66,6 +67,8 @@ app.use('/api/admin/staff-accounts', adminStaffRoutes);
 app.use('/api/admin/switch-config',  adminConfigRoutes);
 // System settings: ESP32 devices, business hours, menu categories
 app.use('/api/admin/system-settings', adminSettingsRoutes);
+// Rider management (§6.5) + available-riders endpoint for staff delivery assignment
+app.use('/api/admin/riders', adminRidersRoutes);
 
 // PayMongo webhook — no auth middleware (signed by PayMongo header)
 const paymentsCtrl = require('./src/modules/payments/payments.controller');
@@ -147,4 +150,9 @@ server.listen(PORT, () => {
   console.log(`Settings:     GET/POST/PATCH/DELETE /api/admin/system-settings/esp32-devices`);
   console.log(`              GET/PUT              /api/admin/system-settings/business-hours`);
   console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);
+  console.log(`Riders:       GET/POST             /api/admin/riders`);
+  console.log(`              GET/PUT              /api/admin/riders/:id`);
+  console.log(`              PATCH                /api/admin/riders/:id/status`);
+  console.log(`              POST                 /api/admin/riders/:id/reset-password`);
+  console.log(`              GET                  /api/admin/riders/available  (staff + admin)`);
 });
