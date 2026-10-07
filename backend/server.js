@@ -14,11 +14,11 @@ const inventoryRoutes   = require('./src/modules/inventory/inventory.routes');
 const ordersRoutes      = require('./src/modules/orders/orders.routes');
 const paymentsRoutes    = require('./src/modules/payments/payments.routes');
 const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
-// NEW ▼
-const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
-const adminConfigRoutes   = require('./src/modules/admin/admin.switch-config.routes');
-const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
-const adminRidersRoutes   = require('./src/modules/admin/riders.routes');
+const adminStaffRoutes              = require('./src/modules/admin/admin.routes');
+const adminConfigRoutes             = require('./src/modules/admin/admin.switch-config.routes');
+const adminSettingsRoutes           = require('./src/modules/admin/admin.settings.routes');
+const adminRidersRoutes             = require('./src/modules/admin/riders.routes');
+const adminCustomerRestrictionsRoutes = require('./src/modules/admin/customer-restrictions.routes'); // §6.4
 
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
@@ -60,7 +60,7 @@ app.use('/api/orders',   ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/kitchen',  kitchenRoutes);
 
-// ─── Admin Routes (NEW) ────────────────────────────────────────────────────────
+// ─── Admin Routes ─────────────────────────────────────────────────────────────
 // Staff account management + dashboard access grants + PIN management
 app.use('/api/admin/staff-accounts', adminStaffRoutes);
 // Switch config (per-staff and per-dashboard PIN requirement toggles)
@@ -69,6 +69,8 @@ app.use('/api/admin/switch-config',  adminConfigRoutes);
 app.use('/api/admin/system-settings', adminSettingsRoutes);
 // Rider management (§6.5) + available-riders endpoint for staff delivery assignment
 app.use('/api/admin/riders', adminRidersRoutes);
+// Customer Restrictions (§6.4) — Admin + Owner only
+app.use('/api/admin/customer-restrictions', adminCustomerRestrictionsRoutes);
 
 // PayMongo webhook — no auth middleware (signed by PayMongo header)
 const paymentsCtrl = require('./src/modules/payments/payments.controller');
@@ -155,4 +157,7 @@ server.listen(PORT, () => {
   console.log(`              PATCH                /api/admin/riders/:id/status`);
   console.log(`              POST                 /api/admin/riders/:id/reset-password`);
   console.log(`              GET                  /api/admin/riders/available  (staff + admin)`);
+  console.log(`Restrictions: GET                  /api/admin/customer-restrictions`);
+  console.log(`              GET                  /api/admin/customer-restrictions/:id/violations`);
+  console.log(`              PATCH                /api/admin/customer-restrictions/:id`);
 });

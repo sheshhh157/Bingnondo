@@ -365,6 +365,7 @@ export const categoriesAPI = {
 };
 
 export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMenuAPI, categoriesAPI };
+
 // ─── KITCHEN ──────────────────────────────────────────────────────────────────
 export const kitchenAPI = {
   getOrders: () => apiClient.get('/api/kitchen/orders'),
@@ -445,7 +446,7 @@ export const switchAPI = {
     }),
 };
 
-// ─── ADMIN API (real backend — replaces mock) ─────────────────────────────────
+// ─── ADMIN API (real backend) ─────────────────────────────────────────────────
 export const adminAPI = {
   // ── Staff Accounts ──────────────────────────────────────────────────────────
   listStaffAccounts: (params = {}) => {
@@ -575,7 +576,7 @@ export const adminAPI = {
       method: 'DELETE',
     }),
 
-  // ── Riders (6.5 Rider Management) ──────────────────────────────────────────
+  // ── Riders (§6.5) ───────────────────────────────────────────────────────────
   listRiders: (params = {}) => {
     const q = new URLSearchParams();
     if (params.page)   q.set('page',   params.page);
@@ -592,10 +593,10 @@ export const adminAPI = {
       body: JSON.stringify({
         full_name:     data.full_name,
         mobile_number: data.mobile_number,
-        email:         data.email     || undefined,
+        email:         data.email        || undefined,
         plate_number:  data.plate_number || undefined,
         vehicle_type:  data.vehicle_type,
-        notes:         data.notes     || undefined,
+        notes:         data.notes        || undefined,
         password:      data.temp_password,   // backend field name
       }),
     }),
@@ -623,6 +624,29 @@ export const adminAPI = {
     apiRequest(`/admin/riders/${id}/reset-password`, {
       method: 'POST',
       body: JSON.stringify({ new_password }),
+    }),
+
+  // ── Customer Restrictions (§6.4) ────────────────────────────────────────────
+  listCustomerRestrictions: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.page)               q.set('page',               params.page);
+    if (params.limit)              q.set('limit',              params.limit);
+    if (params.search)             q.set('search',             params.search);
+    if (params.restriction_level)  q.set('restriction_level',  params.restriction_level);
+    const qs = q.toString();
+    return apiRequest(`/admin/customer-restrictions${qs ? `?${qs}` : ''}`);
+  },
+
+  getCustomerViolations: (customerId) =>
+    apiRequest(`/admin/customer-restrictions/${customerId}/violations`),
+
+  overrideCustomerRestriction: (customerId, data) =>
+    apiRequest(`/admin/customer-restrictions/${customerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        restriction_level: data.restriction_level,
+        reason:            data.reason,
+      }),
     }),
 };
 
@@ -662,6 +686,7 @@ export const deliveryAPI = {
     return { data: { ...delivery } };
   },
 };
+
 // ─── SUPPORT CHAT MOCK DATA (§4.4) ────────────────────────────────────────────
 let MOCK_CHAT_THREADS = [
   {
