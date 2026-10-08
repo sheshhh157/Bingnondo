@@ -186,7 +186,7 @@ exports.getCustomerViolations = async (req, res) => {
  * Logs action to audit_log.
  */
 exports.overrideCustomerRestriction = async (req, res) => {
-  const client = await db.connect();
+  const client = await db.getClient();
   try {
     const customerId = parseInt(req.params.customer_id, 10);
     if (!customerId) return res.status(400).json({ message: 'Invalid customer ID.' });

@@ -864,3 +864,44 @@
   background: rgba(94,200,122,0.08);
   border-color: rgba(94,200,122,0.2);
 }
+/* ── CustomerRestrictions — icon action buttons ─────────────────── */
+.cr-action-btns {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.cr-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+/* View violations — neutral/blue tint */
+.cr-action-btn--history {
+  color: rgba(232,224,212,0.35);
+}
+.cr-action-btn--history:hover {
+  color: #7EB8D4;
+  background: rgba(126,184,212,0.1);
+  border-color: rgba(126,184,212,0.2);
+}
+
+/* Override restriction — amber/gold tint */
+.cr-action-btn--override {
+  color: rgba(232,224,212,0.35);
+}
+.cr-action-btn--override:hover {
+  color: #C9963C;
+  background: rgba(201,150,60,0.1);
+  border-color: rgba(201,150,60,0.2);
+}
