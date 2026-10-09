@@ -11,9 +11,6 @@ const ROLE_LABELS = {
   owner:         'Owner / Manager',
 };
 
-// Dashboards admin can grant (admin itself is excluded — always full re-login)
-const GRANTABLE_DASHBOARDS = ['cashier', 'kitchen_staff', 'staff', 'owner'];
-
 // ── tiny helpers ──────────────────────────────────────────────────────────────
 let _toastId = 0;
 
@@ -185,241 +182,8 @@ function CreateModal({ open, onClose, onCreated, toast }) {
   );
 }
 
-// ── Dashboard Access Modal ─────────────────────────────────────────────────────
-// Opens when admin clicks "Manage Access" on a staff row.
-// Shows: granted dashboards (checkboxes), PIN set/unset, PIN require config.
-function DashboardAccessModal({ open, onClose, account, toast, onSaved }) {
-  const [access, setAccess]           = useState(null);   // fetched data
-  const [loading, setLoading]         = useState(false);
-  const [saving, setSaving]           = useState(false);
-  const [selected, setSelected]       = useState([]);     // checked dashboards
-  const [newPin, setNewPin]           = useState('');
-  const [pinError, setPinError]       = useState('');
-  const [savingPin, setSavingPin]     = useState(false);
-  const [perStaffPin, setPerStaffPin] = useState(null);   // null = not configured
-  const [savingConfig, setSavingConfig] = useState(false);
-
-  // lastFetchedId tracks which staff we loaded data for.
-  // Closing + reopening the SAME staff modal keeps checkboxes intact.
-  // Opening a DIFFERENT staff modal resets everything and fetches fresh.
-  const lastFetchedId = useRef(null);
-
-  useEffect(() => {
-    // Modal closed or no account — preserve existing state
-    if (!open || !account) return;
-
-    // Same staff as before — keep selections as-is, no re-fetch
-    if (lastFetchedId.current === account.id) return;
-
-    // New staff — clear state then fetch
-    lastFetchedId.current = account.id;
-    setAccess(null);
-    setSelected([]);
-    setPerStaffPin(null);
-    setNewPin('');
-    setPinError('');
-    setLoading(true);
-
-    adminAPI.getDashboardAccess(account.id)
-      .then(res => {
-        const d = res.data?.data || res.data;
-        setAccess(d);
-        setSelected((d.granted_dashboards || []).map(g => g.target_dashboard || g.dashboard));
-        setPerStaffPin(d.per_staff_requires_pin ?? null);
-      })
-      .catch(() => toast.error('Failed to load access settings.'))
-      .finally(() => setLoading(false));
-  }, [open, account]);
-
-  async function saveAccess() {
-    setSaving(true);
-    try {
-      await adminAPI.setDashboardAccess(account.id, selected);
-      toast.success('Dashboard access updated.');
-
-      // Update local access state immediately so re-opening the modal
-      // shows the correct checked state without a refetch
-      setAccess(prev => ({
-        ...prev,
-        granted_dashboards: selected.map(d => ({ target_dashboard: d })),
-      }));
-
-      onSaved(); // refresh the parent table row's "Access" column count
-    } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to save access.');
-    } finally { setSaving(false); }
-  }
-
-  async function savePin() {
-    if (!/^\d{4,6}$/.test(newPin)) { setPinError('PIN must be 4–6 digits.'); return; }
-    setSavingPin(true);
-    setPinError('');
-    try {
-      await adminAPI.setStaffSwitchPin(account.id, newPin);
-      toast.success('PIN set successfully.');
-      setNewPin('');
-      // refresh
-      const res = await adminAPI.getDashboardAccess(account.id);
-      setAccess(res.data?.data || res.data);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to set PIN.');
-    } finally { setSavingPin(false); }
-  }
-
-  async function removePin() {
-    setSavingPin(true);
-    try {
-      await adminAPI.removeStaffSwitchPin(account.id);
-      toast.success('PIN removed.');
-      const res = await adminAPI.getDashboardAccess(account.id);
-      setAccess(res.data?.data || res.data);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to remove PIN.');
-    } finally { setSavingPin(false); }
-  }
-
-  async function savePerStaffConfig(value) {
-    setSavingConfig(true);
-    try {
-      await adminAPI.setPerStaffSwitchConfig(account.id, value);
-      setPerStaffPin(value);
-      toast.success(`PIN ${value ? 'required' : 'not required'} for this staff member.`);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to update config.');
-    } finally { setSavingConfig(false); }
-  }
-
-  function toggleDashboard(d) {
-    setSelected(prev =>
-      prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
-    );
-  }
-
-  if (!open) return null;
-
-  const pinSet = access?.pin_set;
-
-  return (
-    <Modal open={open} onClose={onClose} title={`Dashboard Access — ${account?.full_name}`} width={520}>
-      {loading ? (
-        <div style={{display:'flex',justifyContent:'center',padding:'32px'}}><Spinner size={24}/></div>
-      ) : (
-        <>
-          {/* ── Section 1: Granted dashboards ── */}
-          <div style={{marginBottom:20}}>
-            <p className="ap-label" style={{marginBottom:10}}>Dashboards this staff can switch to</p>
-            <p style={{fontSize:'0.6875rem',color:'rgba(232,224,212,0.35)',marginBottom:12,lineHeight:1.5}}>
-              Check a dashboard to grant access. The dropdown will only appear in the staff's header if at least one is checked. Admin is always excluded — admin requires a full re-login.
-            </p>
-            <div style={{display:'flex',flexDirection:'column',gap:8}}>
-              {GRANTABLE_DASHBOARDS
-                .filter(d => d !== account?.role) // can't grant their own role
-                .map(d => (
-                  <label key={d} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',fontSize:'0.8125rem',color:'rgba(232,224,212,0.8)'}}>
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(d)}
-                      onChange={() => toggleDashboard(d)}
-                      style={{accentColor:'#c9963c',width:14,height:14,cursor:'pointer'}}
-                    />
-                    {ROLE_LABELS[d]}
-                  </label>
-                ))
-              }
-            </div>
-          </div>
-
-          <div style={{borderTop:'1px solid rgba(255,255,255,0.07)',marginBottom:20}}/>
-
-          {/* ── Section 2: PIN configuration ── */}
-          <div style={{marginBottom:20}}>
-            <p className="ap-label" style={{marginBottom:4}}>Switch PIN</p>
-            <p style={{fontSize:'0.6875rem',color:'rgba(232,224,212,0.35)',marginBottom:12,lineHeight:1.5}}>
-              {pinSet
-                ? `A PIN is set for ${account?.full_name}. ${access?.pin_set_by_admin ? 'Set by admin.' : 'Changed by staff.'} Staff can update their own PIN after you set the initial one.`
-                : 'No PIN is set. Set one below if you want to require a PIN on switch.'
-              }
-            </p>
-
-            {/* Set / replace PIN */}
-            <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap'}}>
-              <div style={{flex:1,minWidth:140}}>
-                <Field id="da-pin" error={pinError}>
-                  <TextInput
-                    id="da-pin"
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder={pinSet ? 'Replace PIN (4–6 digits)' : 'Set PIN (4–6 digits)'}
-                    value={newPin}
-                    onChange={e => { setNewPin(e.target.value.replace(/\D/g,'')); setPinError(''); }}
-                    error={pinError}
-                  />
-                </Field>
-              </div>
-              <Btn variant="gold" onClick={savePin} loading={savingPin} disabled={!newPin || savingPin}>
-                {pinSet ? 'Replace PIN' : 'Set PIN'}
-              </Btn>
-              {pinSet && (
-                <Btn variant="danger" onClick={removePin} loading={savingPin} disabled={savingPin}>
-                  Remove PIN
-                </Btn>
-              )}
-            </div>
-          </div>
-
-          <div style={{borderTop:'1px solid rgba(255,255,255,0.07)',marginBottom:20}}/>
-
-          {/* ── Section 3: PIN requirement config (per-staff) ── */}
-          <div style={{marginBottom:20}}>
-            <p className="ap-label" style={{marginBottom:4}}>Require PIN on switch (per-staff)</p>
-            <p style={{fontSize:'0.6875rem',color:'rgba(232,224,212,0.35)',marginBottom:12,lineHeight:1.5}}>
-              This overrides the per-dashboard setting for this staff member specifically. Set to "Not configured" to fall back to the per-dashboard setting.
-            </p>
-            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-              {[
-                { label: 'Not configured',  value: null  },
-                { label: 'PIN required',    value: true  },
-                { label: 'PIN not required', value: false },
-              ].map(opt => (
-                <button
-                  key={String(opt.value)}
-                  onClick={() => savePerStaffConfig(opt.value)}
-                  disabled={savingConfig || perStaffPin === opt.value}
-                  style={{
-                    padding:'6px 12px',
-                    borderRadius:7,
-                    fontSize:'0.75rem',
-                    fontWeight:600,
-                    border:'1px solid',
-                    cursor: savingConfig || perStaffPin === opt.value ? 'default' : 'pointer',
-                    opacity: savingConfig ? 0.5 : 1,
-                    background: perStaffPin === opt.value ? 'rgba(201,150,60,0.15)' : 'rgba(255,255,255,0.05)',
-                    borderColor: perStaffPin === opt.value ? 'rgba(201,150,60,0.5)' : 'rgba(255,255,255,0.1)',
-                    color: perStaffPin === opt.value ? '#c9963c' : 'rgba(232,224,212,0.7)',
-                    fontFamily: 'var(--font-body)',
-                    transition: 'all 0.12s',
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Footer ── */}
-          <div className="ap-modal__footer">
-            <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
-            <Btn variant="primary" onClick={saveAccess} loading={saving}>Save access</Btn>
-          </div>
-        </>
-      )}
-    </Modal>
-  );
-}
-
 // ── Staff table row ───────────────────────────────────────────────────────────
-function StaffRow({ account, onStatusChange, onReset, onManageAccess, actionLoading }) {
+function StaffRow({ account, onStatusChange, onReset, actionLoading }) {
   const isActive = account.status === 'active';
   const busy = actionLoading === account.id;
 
@@ -436,15 +200,6 @@ function StaffRow({ account, onStatusChange, onReset, onManageAccess, actionLoad
       </td>
       <td><Badge type={account.role} label={ROLE_LABELS[account.role]||account.role}/></td>
       <td><Badge type={isActive?'active':'inactive'} label={isActive?'Active':'Inactive'}/></td>
-      <td>
-        {account.dashboard_access && account.dashboard_access.length > 0 ? (
-          <span style={{fontSize:'0.7rem',color:'rgba(201,150,60,0.8)',fontWeight:500}}>
-            {account.dashboard_access.length} dashboard{account.dashboard_access.length > 1 ? 's' : ''}
-          </span>
-        ) : (
-          <span style={{fontSize:'0.7rem',color:'rgba(232,224,212,0.25)'}}>None</span>
-        )}
-      </td>
       <td style={{fontSize:'0.75rem',color:'rgba(232,224,212,0.4)',whiteSpace:'nowrap'}}>
         {new Date(account.created_at).toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})}
       </td>
@@ -455,19 +210,6 @@ function StaffRow({ account, onStatusChange, onReset, onManageAccess, actionLoad
           </div>
         ) : (
           <div className="ap-row-actions">
-            {/* Manage dashboard access */}
-            <button
-              className="ap-row-btn ap-row-btn--default"
-              onClick={() => onManageAccess(account)}
-              title="Manage dashboard access"
-              aria-label="Manage dashboard access"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-              </svg>
-            </button>
-
             {/* Reset password */}
             <button
               className="ap-row-btn ap-row-btn--default"
@@ -576,17 +318,10 @@ export default function StaffAccounts() {
   const [filterStatus, setFilterStatus] = useState('');
 
   const [createOpen, setCreateOpen]         = useState(false);
-  const [accessTarget, setAccessTarget]     = useState(null);   // for dashboard access modal
-  const lastAccessTarget = useRef(null); // keep last target so modal stays mounted
   const [resetTarget, setResetTarget]       = useState(null);   // for reset password modal
   const [actionRow, setActionRow]           = useState(null);
   const [actionType, setActionType]         = useState(null);
   const [actionLoading, setActionLoading]   = useState(null);
-
-  // Keep lastAccessTarget in sync so modal stays mounted with last account
-  useEffect(() => {
-    if (accessTarget) lastAccessTarget.current = accessTarget;
-  }, [accessTarget]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -674,7 +409,7 @@ export default function StaffAccounts() {
               <table className="ap-table">
                 <thead>
                   <tr>
-                    {['Staff member','Role','Status','Access','Created',''].map(h=>(
+                    {['Staff member','Role','Status','Created',''].map(h=>(
                       <th key={h} className={h===''?'ap-table__th--right':''}>{h}</th>
                     ))}
                   </tr>
@@ -684,7 +419,6 @@ export default function StaffAccounts() {
                     <StaffRow key={a.id} account={a}
                       onStatusChange={r=>{setActionRow(r);setActionType(r.status==='active'?'deactivate':'reactivate');}}
                       onReset={r=>setResetTarget(r)}
-                      onManageAccess={r=>setAccessTarget(r)}
                       actionLoading={actionLoading}
                     />
                   ))}
@@ -708,15 +442,6 @@ export default function StaffAccounts() {
         onClose={()=>setCreateOpen(false)}
         onCreated={load}
         toast={toast}
-      />
-
-      {/* Keep modal always mounted so state persists on close/reopen of same staff */}
-      <DashboardAccessModal
-        open={!!accessTarget}
-        onClose={()=>setAccessTarget(null)}
-        account={accessTarget || lastAccessTarget.current}
-        toast={toast}
-        onSaved={load}
       />
 
       <ResetPasswordModal

@@ -169,7 +169,7 @@ exports.getCustomerViolations = async (req, res) => {
       [customerId]
     );
 
-    res.json(rows);
+    res.json({ data: rows });
   } catch (err) {
     console.error('[customer-restrictions] getCustomerViolations:', err);
     res.status(500).json({ message: 'Something went wrong. Please try again.' });

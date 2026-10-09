@@ -14,12 +14,6 @@ router.post  ('/',                    ctrl.createStaffAccount);    // POST /api/
 router.patch ('/:id/status',          ctrl.updateStaffStatus);     // PATCH /api/admin/staff-accounts/:id/status
 router.post  ('/:id/reset-password',  ctrl.resetStaffPassword);   // POST /api/admin/staff-accounts/:id/reset-password
 
-// ─── Dashboard Access per Staff ───────────────────────────────────────────────
-router.get   ('/:id/dashboard-access', ctrl.getDashboardAccess);  // GET  /api/admin/staff-accounts/:id/dashboard-access
-router.put   ('/:id/dashboard-access', ctrl.setDashboardAccess);  // PUT  /api/admin/staff-accounts/:id/dashboard-access
 
-// ─── Switch PIN (admin-managed) ───────────────────────────────────────────────
-router.post  ('/:id/switch-pin',      ctrl.adminSetSwitchPin);    // POST   /api/admin/staff-accounts/:id/switch-pin
-router.delete('/:id/switch-pin',      ctrl.adminRemoveSwitchPin); // DELETE /api/admin/staff-accounts/:id/switch-pin
 
 module.exports = router;

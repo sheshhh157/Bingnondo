@@ -1,5 +1,4 @@
 import { useAuth } from '../../../context/AuthContext';
-import DashboardSwitcher from '../../../components/DashboardSwitcher';
 import logo1 from '../../../assets/logo2.png';
 
 export default function KitchenHeader({ counterCount, onlineCount }) {
@@ -51,9 +50,6 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
           <span className="kp-header__time">{timeStr}</span>
           <span className="kp-header__date">{dateStr}</span>
         </div>
-
-        {/* Dashboard switcher — only visible if admin granted access to other dashboards */}
-        <DashboardSwitcher variant="light" context="header" />
 
         <div className="kp-header__user">
           <span className="kp-header__username">

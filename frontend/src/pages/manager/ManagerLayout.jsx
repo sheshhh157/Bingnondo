@@ -3,7 +3,6 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocketContext, useSocketEvent } from '../../context/SocketContext';
 import { useToast } from '../../context/ToastContext';
-import DashboardSwitcher from '../../components/DashboardSwitcher';
 import useLiveData from '../../hooks/useLiveData';
 import { timeStamp } from '../../utils/format';
 import { OPERATIONAL_INITIAL, fetchOperationalSnapshot, OPERATIONAL_EVENTS, stockCounts, queueTone, useNow } from './managerData';
@@ -150,8 +149,6 @@ export default function ManagerLayout() {
           <span className="ml-topbar__name">Bingnondo</span>
         </div>
         <ConnPill connected={connected} />
-        {/* Dashboard switcher in mobile topbar */}
-        <DashboardSwitcher variant="light" context="header" />
         <button
           className="ml-topbar__menu"
           onClick={() => setDrawerOpen(true)}
@@ -218,11 +215,6 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
         </div>
       </div>
 
-      {/* Dashboard switcher — below brand, above nav */}
-      <div style={{ padding: '4px 0 8px' }}>
-        <DashboardSwitcher variant="light" context="sidebar" />
-      </div>
-
       <nav className="ml-nav" aria-label="Manager navigation">
         {SECTIONS.map((section) => (
           <div key={section.label} className="ml-section">
@@ -271,11 +263,7 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
           </div>
           <div className="ml-user__info">
             <span className="ml-user__name">{user?.full_name || 'Manager'}</span>
-            <span className="ml-user__role">
-              {user?.home_role && user.home_role !== user.role
-                ? `Manager (switched)`
-                : user?.role || 'manager'}
-            </span>
+            <span className="ml-user__role">{user?.role || 'manager'}</span>
           </div>
         </div>
 

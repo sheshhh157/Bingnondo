@@ -745,43 +745,9 @@ export const adminAPI = {
       method: 'DELETE',
     }),
 
-  // ── ESP32 Devices ───────────────────────────────────────────────────────────
-  listDevices: () =>
-    apiRequest('/admin/system-settings/esp32-devices'),
-
-  registerDevice: (data) =>
-    apiRequest('/admin/system-settings/esp32-devices', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  removeDevice: (id) =>
-    apiRequest(`/admin/system-settings/esp32-devices/${id}`, {
-      method: 'DELETE',
-    }),
 };
 
-// ─── DELIVERY API (§4.3) ──────────────────────────────────────────────────────
-export const deliveryAPI = {
-  /** GET /api/deliveries?status=... — all deliveries for staff view */
-  getAll: (status) => {
-    const qs = status && status !== 'all' ? `?status=${status}` : '';
-    return apiClient.get(`/api/deliveries${qs}`);
-  },
 
-  /** POST /api/deliveries/:id/assign — assign registered rider or ad-hoc */
-  // payload: { rider_id?, rider_name?, rider_contact? }
-  assign: (id, payload) =>
-    apiClient.post(`/api/deliveries/${id}/assign`, payload),
-
-  /** PATCH /api/deliveries/:id/status — update delivery status (staff) */
-  updateStatus: (id, status) =>
-    apiClient.patch(`/api/deliveries/${id}/status`, { status }),
-
-  /** GET /api/riders?status=available — available riders for assignment dropdown */
-  getAvailableRiders: () =>
-    apiClient.get('/api/riders?status=available'),
-};
 
 // ─── RIDER MANAGEMENT API (§6.5 — Admin) ─────────────────────────────────────
 export const adminRidersAPI = {

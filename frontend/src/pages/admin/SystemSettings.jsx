@@ -56,72 +56,6 @@ function Section({ title, subtitle, action, children }) {
   );
 }
 
-// ── ESP32 Device card ────────────────────────────────────────────────
-function DeviceCard({ device, onDelete }) {
-  return (
-    <div className="ap-device">
-      <div className={`ap-device__icon ap-device__icon--${device.is_online?'online':'offline'}`}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-          <line x1="12" y1="18" x2="12.01" y2="18"/>
-        </svg>
-      </div>
-      <div className="ap-device__info">
-        <div className="ap-device__label">{device.location_label}</div>
-        <div className="ap-device__code">{device.device_code}</div>
-      </div>
-      <Badge type={device.is_online?'online':'offline'} label={device.is_online?'Online':'Offline'}/>
-      <Btn variant="ghost" size="icon" onClick={()=>onDelete(device)} aria-label={`Remove ${device.location_label}`}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-        </svg>
-      </Btn>
-    </div>
-  );
-}
-
-// ── Add Device modal ─────────────────────────────────────────────────
-function AddDeviceModal({ open, onClose, onAdded, toast }) {
-  const [form, setForm] = useState({ device_code:'', location_label:'' });
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
-  const set = (k,v) => { setForm(f=>({...f,[k]:v})); setErrors(e=>({...e,[k]:''})); };
-
-  async function submit() {
-    const e={};
-    if(!form.device_code.trim())    e.device_code    = 'Device code is required.';
-    if(!form.location_label.trim()) e.location_label = 'Location label is required.';
-    if(Object.keys(e).length){setErrors(e);return;}
-    setLoading(true);
-    try {
-      await adminAPI.registerDevice(form);
-      toast.success(`Device "${form.location_label}" registered.`);
-      onAdded(); onClose();
-      setForm({device_code:'',location_label:''});
-    } catch(err) { toast.error(err.message||'Failed to register device.'); }
-    finally { setLoading(false); }
-  }
-  return (
-    <Modal open={open} onClose={onClose} title="Register ESP32 device" width={420}>
-      <Field label="Device code" id="dev-code" error={errors.device_code}>
-        <TextInput id="dev-code" value={form.device_code} onChange={e=>set('device_code',e.target.value)} placeholder="e.g. ESP32-KITCHEN-01" error={errors.device_code}/>
-      </Field>
-      <Field label="Location label" id="dev-loc" error={errors.location_label}>
-        <TextInput id="dev-loc" value={form.location_label} onChange={e=>set('location_label',e.target.value)} placeholder="e.g. Main Kitchen" error={errors.location_label}/>
-      </Field>
-      <p style={{fontSize:'0.6875rem',color:'rgba(232,224,212,0.3)',lineHeight:1.6}}>
-        Device code must match the one flashed onto the ESP32 unit. Connect the device to the same network as the server.
-      </p>
-      <div className="ap-modal__footer">
-        <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
-        <Btn variant="primary" onClick={submit} loading={loading}>Register</Btn>
-      </div>
-    </Modal>
-  );
-}
-
-
 // ── Business Hours ────────────────────────────────────────────────────
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 function BusinessHours({ hours, onChange }) {
@@ -195,26 +129,18 @@ export default function SystemSettings() {
   const { toasts, dismiss, toast } = useToast();
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
-  const [devices, setDevices]       = useState([]);
   const [hours, setHours]           = useState({});
   const [categories, setCategories] = useState([]);
-  const [addDevOpen, setAddDevOpen] = useState(false);
-  const [delDevice, setDelDevice]   = useState(null);
-  const [delLoading, setDelLoading] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      // apiRequest wraps the full JSON body as { data },
-      // and backend returns { data: rows } — so the real array is at response.data.data
-      const [hoursRes, catsRes, devsRes] = await Promise.all([
+      const [hoursRes, catsRes] = await Promise.all([
         adminAPI.getBusinessHours(),
         adminAPI.listCategories(),
-        adminAPI.listDevices(),
       ]);
       const hoursData = hoursRes.data?.data ?? hoursRes.data ?? [];
       const catsData  = catsRes.data?.data  ?? catsRes.data  ?? [];
-      const devsData  = devsRes.data?.data  ?? devsRes.data  ?? [];
       // Convert array from backend [ {day_of_week, day_label, open_time, close_time, is_closed} ]
       // to the shape BusinessHours component expects: { Monday: { open, close, closed } }
       const hoursMap = {};
@@ -227,7 +153,6 @@ export default function SystemSettings() {
       });
       setHours(hoursMap);
       setCategories(catsData.map(c => ({ id: c.id, name: c.name })));
-      setDevices(devsData);
     } catch { toast.error('Failed to load settings.'); }
     finally { setLoading(false); }
   }, []);
@@ -267,13 +192,6 @@ export default function SystemSettings() {
       toast.success(`Category "${cat.name}" removed.`);
     } catch(err) { toast.error(err?.response?.data?.message || err.message || 'Failed to remove category.'); }
   }
-  async function handleDelDevice() {
-    setDelLoading(true);
-    try { await adminAPI.removeDevice(delDevice.id); toast.success(`Device "${delDevice.location_label}" removed.`); setDelDevice(null); loadAll(); }
-    catch(err) { toast.error(err.message||'Failed to remove.'); }
-    finally { setDelLoading(false); }
-  }
-
   const PlusIcon = ()=><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
 
   if (loading) return <div className="ap-page"><div className="ap-loading"><Spinner size={24}/></div></div>;
@@ -282,15 +200,6 @@ export default function SystemSettings() {
     <>
       <Toasts toasts={toasts} dismiss={dismiss}/>
       <div className="ap-page">
-
-        {/* ESP32 Devices */}
-        <Section title="ESP32 Devices" subtitle="Kitchen alert hardware registered to this system"
-          action={<Btn variant="ghost" size="sm" onClick={()=>setAddDevOpen(true)} icon={<PlusIcon/>}>Register device</Btn>}>
-          {devices.length===0
-            ? <p style={{fontSize:'0.75rem',color:'rgba(232,224,212,0.3)'}}>No devices registered. Add your first ESP32 unit.</p>
-            : <div style={{display:'flex',flexDirection:'column',gap:8}}>{devices.map(d=><DeviceCard key={d.id} device={d} onDelete={setDelDevice}/>)}</div>
-          }
-        </Section>
 
         {/* Business Hours */}
         <Section title="Business hours" subtitle="Controls when online ordering is available"
@@ -308,11 +217,6 @@ export default function SystemSettings() {
         </Section>
       </div>
 
-      <AddDeviceModal open={addDevOpen} onClose={()=>setAddDevOpen(false)} onAdded={loadAll} toast={toast}/>
-      <ConfirmModal open={!!delDevice} onClose={()=>setDelDevice(null)} onConfirm={handleDelDevice} loading={delLoading}
-        title="Remove device"
-        message={`Remove "${delDevice?.location_label}" (${delDevice?.device_code})? The device will stop receiving alerts.`}
-        confirmLabel="Remove" variant="danger"/>
     </>
   );
 }

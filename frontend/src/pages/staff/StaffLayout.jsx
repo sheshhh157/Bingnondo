@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import DashboardSwitcher from '../../components/DashboardSwitcher';
 import '../../styles/StaffLayout.css';
 import logo from '../../assets/logo.png';
 
@@ -43,19 +42,6 @@ const NAV = [
     ),
   },
   {
-    to: '/staff/delivery',
-    label: 'Delivery',
-    sub: 'Assign & track',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3"/>
-        <rect width="13" height="8" x="9" y="11" rx="1"/>
-        <circle cx="11" cy="19" r="2"/>
-        <circle cx="19" cy="19" r="2"/>
-      </svg>
-    ),
-  },
-  {
     to: '/staff/chat',
     label: 'Support Chat',
     sub: 'Customer messages',
@@ -86,11 +72,6 @@ export default function StaffLayout() {
           <span className="sl-brand__name">Bingnondo</span>
           <span className="sl-brand__station">Staff Portal</span>
         </div>
-      </div>
-
-      {/* Dashboard switcher — below brand, above nav */}
-      <div style={{ padding: '4px 8px 8px' }}>
-        <DashboardSwitcher variant="dark" context="sidebar" />
       </div>
 
       {/* Nav */}
@@ -126,11 +107,7 @@ export default function StaffLayout() {
           </div>
           <div className="sl-user__info">
             <span className="sl-user__name">{user?.full_name || 'Staff'}</span>
-            <span className="sl-user__role">
-              {user?.home_role && user.home_role !== user.role
-                ? `Staff (switched)`
-                : 'Staff'}
-            </span>
+            <span className="sl-user__role">Staff</span>
           </div>
         </div>
 
@@ -188,8 +165,6 @@ export default function StaffLayout() {
           <img src={logo} alt="Bingnondo logo" width="26" height="26" />
           <span className="sl-topbar__name">Bingnondo</span>
         </div>
-        {/* Show switcher in mobile topbar too */}
-        <DashboardSwitcher variant="dark" context="sidebar" />
         <button
           className="sl-topbar__menu"
           onClick={() => setDrawerOpen(true)}

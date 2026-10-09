@@ -15,7 +15,6 @@ import StaffLayout from './pages/staff/StaffLayout';
 import PaymentVerificationPage from './pages/staff/PaymentVerificationPage';
 import InventoryPage from './pages/staff/InventoryPage';
 import MenuPage from './pages/staff/MenuPage';
-import DeliveryPage from './pages/staff/DeliveryPage';
 import SupportChatPage from './pages/staff/SupportChatPage';
 
 // Kitchen
@@ -128,7 +127,6 @@ export default function App() {
                 <Route path="payments"  element={<PaymentVerificationPage />} />
                 <Route path="inventory" element={<InventoryPage />} />
                 <Route path="menu"      element={<MenuPage />} />
-                <Route path="delivery"  element={<DeliveryPage />} />
                 <Route path="chat"      element={<SupportChatPage />} />
               </Route>
 

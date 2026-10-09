@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authController   = require('./auth.controller');
-const switchController = require('./auth.switch.controller');
+
 const { authenticateToken } = require('../../middleware/auth.middleware');
 
 // ── Shared Login (Staff + Rider) ───────────────────────────────────────────────
@@ -23,9 +23,6 @@ router.post('/refresh', authController.refreshToken);
 router.post('/logout',  authenticateToken, authController.logout);
 router.get('/me',       authenticateToken, authController.me);
 
-// ── Dashboard Switch (staff only) ─────────────────────────────────────────────
-router.get('/staff/switch-options',      authenticateToken, switchController.getSwitchOptions);
-router.post('/staff/switch-dashboard',   authenticateToken, switchController.switchDashboard);
-router.post('/staff/switch-pin/update',  authenticateToken, switchController.updateOwnSwitchPin);
+
 
 module.exports = router;
