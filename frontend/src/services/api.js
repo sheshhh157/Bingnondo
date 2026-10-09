@@ -785,10 +785,21 @@ export const deliveryAPI = {
 
 // ─── RIDER MANAGEMENT API (§6.5 — Admin) ─────────────────────────────────────
 export const adminRidersAPI = {
-  /** GET /api/admin/riders — list all riders */
-  getAll: (status) => {
-    const qs = status ? `?status=${status}` : '';
-    return apiClient.get(`/api/admin/riders${qs}`);
+  /** GET /api/admin/riders — list all riders
+   *  Accepts either a status string (legacy) or a params object { page, limit, search, status }
+   */
+  getAll: (params) => {
+    const query = new URLSearchParams();
+    if (params && typeof params === 'object') {
+      if (params.page)   query.set('page',   params.page);
+      if (params.limit)  query.set('limit',  params.limit);
+      if (params.search) query.set('search', params.search);
+      if (params.status) query.set('status', params.status);
+    } else if (params) {
+      query.set('status', params);
+    }
+    const qs = query.toString();
+    return apiClient.get(`/api/admin/riders${qs ? `?${qs}` : ''}`);
   },
 
   /** GET /api/admin/riders/:id — single rider */

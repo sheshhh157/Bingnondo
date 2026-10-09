@@ -45,6 +45,11 @@ import DeliveryHistory from './pages/rider/DeliveryHistory';
 import RiderProfile from './pages/rider/RiderProfile';
 
 // ── ProtectedRoute ─────────────────────────────────────────────────────────────
+// allowedRoles: the roles whose HOME is this dashboard.
+// A staff member who switched into this dashboard will have user.role = that
+// dashboard role (e.g. switched to 'cashier' → user.role is 'cashier').
+// So we just check user.role against allowedRoles — switching already
+// changes the token/user.role, no extra logic needed here.
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
   if (loading) return (
@@ -53,7 +58,7 @@ function ProtectedRoute({ children, allowedRoles }) {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
+  if (!allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -70,9 +75,10 @@ function RiderRoute({ children }) {
   return children;
 }
 
+// ── LogoutRoute ────────────────────────────────────────────────────────────────
 function LogoutRoute() {
   const { logout } = useAuth();
-  useEffect(() => { logout(); }, []);
+  useEffect(() => { logout(); }, [logout]);
   return <Navigate to="/login" replace />;
 }
 
@@ -81,21 +87,20 @@ function RoleRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (user.type === 'rider')         return <Navigate to="/rider/active" replace />;
+  if (user.role === 'admin')         return <Navigate to="/admin/accounts" replace />;
   if (user.role === 'cashier')       return <Navigate to="/cashier" replace />;
   if (user.role === 'staff')         return <Navigate to="/staff/payments" replace />;
-  if (user.role === 'owner')         return <Navigate to="/manager/dashboard" replace />;
   if (user.role === 'kitchen_staff') return <Navigate to="/kitchen" replace />;
-  if (user.role === 'admin')         return <Navigate to="/admin/accounts" replace />;
-  if (user.role === 'manager')       return <Navigate to="/manager/dashboard" replace />;
+  if (user.role === 'manager' || user.role === 'owner') return <Navigate to="/manager/dashboard" replace />;
   return <Navigate to="/login" replace />;
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
+    <BrowserRouter>
+      <AuthProvider>
         <SocketProvider>
-          <BrowserRouter>
+          <ToastProvider>
             <Routes>
               {/* ── Shared login (Staff + Rider) ── */}
               <Route path="/login" element={<Login />} />
@@ -137,7 +142,7 @@ export default function App() {
                 }
               />
 
-              {/* ── Admin ── */}
+              {/* ── Admin — admin is NEVER a switch target; always full re-login ── */}
               <Route
                 path="/admin"
                 element={
@@ -193,9 +198,9 @@ export default function App() {
               <Route path="/"       element={<RoleRedirect />} />
               <Route path="*"       element={<Navigate to="/" replace />} />
             </Routes>
-          </BrowserRouter>
+          </ToastProvider>
         </SocketProvider>
-      </ToastProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

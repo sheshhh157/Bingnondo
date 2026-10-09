@@ -22,17 +22,37 @@ async function writeAuditLog(client, actorId, action, targetType, targetId, deta
 // List all riders (all statuses). Admin only.
 exports.listRiders = async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, search, page = 1, limit = 20 } = req.query;
 
-    const conditions = ['1=1'];
+    const conditions = [];
     const params = [];
     let p = 1;
 
-    if (status && ['available', 'on_delivery', 'inactive'].includes(status)) {
+    if (status && status !== 'all' && ['available', 'on_delivery', 'inactive'].includes(status)) {
       conditions.push(`r.status = $${p++}`);
       params.push(status);
     }
 
+    if (search) {
+      conditions.push(
+        `(r.full_name ILIKE $${p} OR r.mobile_number ILIKE $${p} OR r.email ILIKE $${p} OR r.plate_number ILIKE $${p})`
+      );
+      params.push(`%${search.trim()}%`);
+      p++;
+    }
+
+    const where    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const pageNum  = Math.max(1, parseInt(page, 10));
+    const limitVal = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const offset   = (pageNum - 1) * limitVal;
+
+    const { rows: countRows } = await db.query(
+      `SELECT COUNT(*) FROM riders r ${where}`,
+      params
+    );
+    const total = parseInt(countRows[0].count, 10);
+
+    params.push(limitVal, offset);
     const { rows } = await db.query(
       `SELECT
          r.id,
@@ -50,12 +70,13 @@ exports.listRiders = async (req, res) => {
          creator.full_name AS created_by_name
        FROM riders r
        LEFT JOIN staff_accounts creator ON creator.id = r.created_by
-       WHERE ${conditions.join(' AND ')}
-       ORDER BY r.created_at DESC`,
+       ${where}
+       ORDER BY r.created_at DESC
+       LIMIT $${p} OFFSET $${p + 1}`,
       params
     );
 
-    res.json({ riders: rows.map(sanitizeRider) });
+    res.json({ data: rows.map(sanitizeRider), total, page: pageNum, limit: limitVal });
   } catch (err) {
     console.error('[admin.riders] listRiders:', err);
     res.status(500).json({ message: 'Failed to fetch riders.' });

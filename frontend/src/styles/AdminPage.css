@@ -864,6 +864,29 @@
   background: rgba(94,200,122,0.08);
   border-color: rgba(94,200,122,0.2);
 }
+/* ── CustomerRestrictions — icon action buttons ─────────────────── */
+.cr-action-btns {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.cr-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+
 /* ─── Riders Page additions ───────────────────────────────────────────── */
 
 /* Stats row */

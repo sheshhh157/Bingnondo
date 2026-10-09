@@ -14,15 +14,16 @@ const inventoryRoutes   = require('./src/modules/inventory/inventory.routes');
 const ordersRoutes      = require('./src/modules/orders/orders.routes');
 const paymentsRoutes    = require('./src/modules/payments/payments.routes');
 const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
-// NEW ▼
+// Admin + Staff routes
 const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 const adminConfigRoutes   = require('./src/modules/admin/admin.switch-config.routes');
 const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
+const adminRiderRoutes    = require('./src/modules/admin/admin.riders.routes');
+const adminCustomerRestrictionsRoutes = require('./src/modules/admin/customer-restrictions.routes'); // §6.4
 const supportChatRoutes   = require('./src/modules/support-chat/support-chat.routes');
 const uploadRoutes        = require('./src/modules/upload/upload.routes');
 const deliveryRoutes      = require('./src/modules/delivery/delivery.routes');
 const { ridersRouter }    = require('./src/modules/delivery/rider.routes');   // staff dropdown only (GET /api/riders)
-const adminRiderRoutes    = require('./src/modules/admin/admin.riders.routes');
 const riderRoutes         = require('./src/modules/rider/rider.routes');      // rider-scoped (/api/rider/*)
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
@@ -75,7 +76,7 @@ app.use('/api/kitchen',  kitchenRoutes);
 //      PATCH /api/rider/profile
 app.use('/api/rider', riderRoutes);
 
-// ─── Admin Routes (NEW) ────────────────────────────────────────────────────────
+// ─── Admin Routes ──────────────────────────────────────────────────────────────
 // Staff account management + dashboard access grants + PIN management
 app.use('/api/admin/staff-accounts', adminStaffRoutes);
 // Switch config (per-staff and per-dashboard PIN requirement toggles)
@@ -83,6 +84,8 @@ app.use('/api/admin/switch-config',  adminConfigRoutes);
 // System settings: ESP32 devices, business hours, menu categories
 app.use('/api/admin/system-settings', adminSettingsRoutes);
 app.use('/api/admin/riders',          adminRiderRoutes);   // §6.5 Rider CRUD (admin)
+// Customer Restrictions (§6.4) — Admin + Owner only
+app.use('/api/admin/customer-restrictions', adminCustomerRestrictionsRoutes);
 app.use('/api/deliveries',            deliveryRoutes);     // §4.3 Delivery Assignment
 app.use('/api/riders',                ridersRouter);       // §4.3 available riders dropdown
 app.use('/api/support-chat',          supportChatRoutes);
@@ -150,7 +153,8 @@ setTimeout(runSimulatedEvent, 5000);
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`\nBingnondo backend running on http://localhost:${PORT}`);
-  console.log(`Auth:         POST /api/auth/staff/login`);
+  console.log(`Auth:         POST /api/auth/login  (shared staff + rider)`);
+  console.log(`              POST /api/auth/staff/login  (legacy)`);
   console.log(`              GET  /api/auth/staff/switch-options`);
   console.log(`              POST /api/auth/staff/switch-dashboard`);
   console.log(`              POST /api/auth/staff/switch-pin/update`);
@@ -167,6 +171,14 @@ server.listen(PORT, () => {
   console.log(`              PATCH /api/rider/delivery/:id/status`);
   console.log(`              GET  /api/rider/deliveries`);
   console.log(`              GET/PATCH /api/rider/profile`);
+  console.log(`Riders (admin): GET/POST             /api/admin/riders`);
+  console.log(`                GET/PUT              /api/admin/riders/:id`);
+  console.log(`                PATCH                /api/admin/riders/:id/status`);
+  console.log(`                POST                 /api/admin/riders/:id/reset-password`);
+  console.log(`                GET                  /api/riders  (staff dropdown)`);
+  console.log(`Restrictions: GET                  /api/admin/customer-restrictions`);
+  console.log(`              GET                  /api/admin/customer-restrictions/:id/violations`);
+  console.log(`              PATCH                /api/admin/customer-restrictions/:id`);
   console.log(`Settings:     GET/POST/PATCH/DELETE /api/admin/system-settings/esp32-devices`);
   console.log(`              GET/PUT              /api/admin/system-settings/business-hours`);
   console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);
