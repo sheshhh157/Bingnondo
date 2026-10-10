@@ -5,19 +5,19 @@
   background: var(--color-background);
 }
 
-/* ─── Huang Tu sidebar palette ──────────────────────────────────────
- * The sidebar uses hardcoded deep-loam values so it stays rich
+/* ─── Maroon "Lantern Glow" sidebar palette ─────────────────────────
+ * The sidebar uses scoped deep-maroon values so it stays rich
  * regardless of the token cascade. Content area uses tokens normally.
  * ─────────────────────────────────────────────────────────────────── */
 :root {
-  --sl-sidebar-bg:        #2A1600;
-  --sl-sidebar-bg-hover:  #3D2000;
-  --sl-sidebar-border:    #4A2E00;
-  --sl-sidebar-active:    #B45309;
-  --sl-sidebar-fg:        rgba(254,243,199,0.55);
-  --sl-sidebar-fg-active: #FEF3C7;
-  --sl-sidebar-pip:       #D97706;
-  --sl-sidebar-user-bg:   rgba(180,83,9,0.15);
+  --sl-sidebar-bg:        #3B0A0A;
+  --sl-sidebar-bg-hover:  #5C0A14;
+  --sl-sidebar-border:    #7F1D1D;
+  --sl-sidebar-active:    #9F2626;
+  --sl-sidebar-fg:        rgba(255,251,235,0.55);
+  --sl-sidebar-fg-active: #FFFbeb;
+  --sl-sidebar-pip:       #F59E0B;
+  --sl-sidebar-user-bg:   rgba(127,29,29,0.25);
 }
 
 /* ─── Desktop Sidebar (≥1024px) ────────────────────────────────────── */
@@ -31,7 +31,7 @@
   top: 0;
   background: var(--sl-sidebar-bg);
   border-right: 1px solid var(--sl-sidebar-border);
-  box-shadow: 4px 0 24px rgba(61,31,0,0.18);
+  box-shadow: 4px 0 24px rgba(92,10,20,0.22);
   overflow-y: auto;
   z-index: 40;
 }
@@ -48,7 +48,7 @@
   top: 0;
   background: var(--sl-sidebar-bg);
   border-right: 1px solid var(--sl-sidebar-border);
-  box-shadow: 4px 0 24px rgba(61,31,0,0.18);
+  box-shadow: 4px 0 24px rgba(92,10,20,0.22);
   z-index: 40;
   padding: 12px 0;
   gap: 4px;
@@ -119,7 +119,7 @@
   font-family: var(--font-heading);
   font-size: 0.9375rem;
   font-weight: 700;
-  color: #FEF3C7;
+  color: #FFFbeb;
   line-height: 1.1;
   letter-spacing: 0.02em;
 }
@@ -128,7 +128,7 @@
   font-family: var(--font-body);
   font-size: 0.6875rem;
   font-weight: 500;
-  color: rgba(254,243,199,0.4);
+  color: rgba(255,251,235,0.45);
   letter-spacing: 0.06em;
 }
 
@@ -160,12 +160,12 @@
 }
 
 .sl-nav__link--active {
-  background: rgba(180,83,9,0.2);
+  background: rgba(127,29,29,0.25);
   color: var(--sl-sidebar-fg-active);
 }
 
 .sl-nav__link--active:hover {
-  background: rgba(180,83,9,0.25);
+  background: rgba(127,29,29,0.32);
 }
 
 .sl-nav__icon {
@@ -182,8 +182,8 @@
 }
 
 .sl-nav__icon--active {
-  background: rgba(217,119,6,0.2);
-  color: #D97706;
+  background: rgba(245,158,11,0.18);
+  color: #F59E0B;
 }
 
 .sl-nav__labels {
@@ -208,12 +208,12 @@
   font-family: var(--font-body);
   font-size: 0.6875rem;
   font-weight: 400;
-  color: rgba(254,243,199,0.35);
+  color: rgba(255,251,235,0.40);
   line-height: 1;
 }
 
 .sl-nav__link--active .sl-nav__sub {
-  color: rgba(254,243,199,0.55);
+  color: rgba(255,251,235,0.60);
 }
 
 .sl-nav__pip {
@@ -249,15 +249,15 @@
   padding: 9px 10px;
   background: var(--sl-sidebar-user-bg);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(180,83,9,0.2);
+  border: 1px solid rgba(127,29,29,0.25);
 }
 
 .sl-user__avatar {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: #B45309;
-  color: #FEF3C7;
+  background: #7F1D1D;
+  color: #FFFbeb;
   font-family: var(--font-body);
   font-size: 0.8125rem;
   font-weight: 700;
@@ -278,7 +278,7 @@
   font-family: var(--font-body);
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #FEF3C7;
+  color: #FFFbeb;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -287,7 +287,7 @@
 .sl-user__role {
   font-family: var(--font-body);
   font-size: 0.6875rem;
-  color: rgba(254,243,199,0.45);
+  color: rgba(255,251,235,0.50);
   text-transform: capitalize;
 }
 
@@ -303,14 +303,14 @@
   font-family: var(--font-body);
   font-size: 0.8125rem;
   font-weight: 500;
-  color: rgba(254,243,199,0.4);
+  color: rgba(255,251,235,0.45);
   transition: background 160ms ease, color 160ms ease;
   width: 100%;
   text-align: left;
 }
 
 .sl-user__logout:hover {
-  background: rgba(185,28,28,0.15);
+  background: rgba(220,38,38,0.15);
   color: #FCA5A5;
 }
 
@@ -351,8 +351,8 @@
 }
 
 .sl-compact__link--active {
-  background: rgba(180,83,9,0.2);
-  color: #D97706;
+  background: rgba(127,29,29,0.25);
+  color: #F59E0B;
 }
 
 .sl-compact__logout {
@@ -367,12 +367,12 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: rgba(254,243,199,0.35);
+  color: rgba(255,251,235,0.40);
   transition: background 160ms ease, color 160ms ease;
 }
 
 .sl-compact__logout:hover {
-  background: rgba(185,28,28,0.15);
+  background: rgba(220,38,38,0.15);
   color: #FCA5A5;
 }
 
@@ -387,7 +387,7 @@
   font-family: var(--font-heading);
   font-size: 0.9375rem;
   font-weight: 700;
-  color: #FEF3C7;
+  color: #FFFbeb;
   letter-spacing: 0.02em;
 }
 
@@ -401,20 +401,20 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: rgba(254,243,199,0.7);
+  color: rgba(255,251,235,0.75);
   transition: background 160ms ease;
 }
 
 .sl-topbar__menu:hover {
   background: var(--sl-sidebar-bg-hover);
-  color: #FEF3C7;
+  color: #FFFbeb;
 }
 
 /* ─── Mobile drawer ─────────────────────────────────────────────────── */
 .sl-drawer-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(26,14,0,0.5);
+  background: rgba(59,10,10,0.55);
   backdrop-filter: blur(3px);
   z-index: 60;
   display: flex;
@@ -441,20 +441,20 @@
   width: 32px;
   height: 32px;
   border: none;
-  background: rgba(180,83,9,0.15);
+  background: rgba(127,29,29,0.2);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: rgba(254,243,199,0.6);
+  color: rgba(255,251,235,0.65);
   z-index: 1;
   transition: background 160ms ease, color 160ms ease;
 }
 
 .sl-drawer__close:hover {
-  background: rgba(180,83,9,0.3);
-  color: #FEF3C7;
+  background: rgba(127,29,29,0.35);
+  color: #FFFbeb;
 }
 
 /* ─── Main content area ─────────────────────────────────────────────── */
