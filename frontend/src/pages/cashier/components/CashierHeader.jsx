@@ -1,26 +1,13 @@
 import { VIEWS } from '../CashierPage';
 import '../../../styles/CashierHeader.css';
-import logo from '../../../assets/logo1.png';
-export default function CashierHeader({ user, view, onViewChange, onLogout, draftCount }) {
+
+// Note: logo & user info are now in the CashierLayout sidebar.
+// This header only shows the view-switch tabs (Counter Order / My Transactions).
+export default function CashierHeader({ view, onViewChange, draftCount }) {
   return (
     <header className="c-header">
-      {/* Left: wordmark */}
-      <div className="c-header__brand">
-        <img
-          className="c-header__logo"
-          src={logo}
-          alt="Bingnondo Cafe Logo"
-          width="35"
-          height="35"
-        />
-        <div className="c-header__titles">
-          <span className="c-header__cafe">Bingnondo</span>
-          <span className="c-header__role">Cashier Station</span>
-        </div>
-      </div>
-
-      {/* Center: view tabs */}
-      <nav className="c-header__nav" aria-label="Cashier views">
+      {/* View tabs — centered, full-width since sidebar owns branding & user */}
+      <nav className="c-header__nav c-header__nav--full" aria-label="Cashier views">
         <button
           className={`c-header__tab${view === VIEWS.ORDER ? ' c-header__tab--active' : ''}`}
           onClick={() => onViewChange(VIEWS.ORDER)}
@@ -51,29 +38,6 @@ export default function CashierHeader({ user, view, onViewChange, onLogout, draf
           My Transactions
         </button>
       </nav>
-
-      {/* Right: user info + logout */}
-      <div className="c-header__user">
-        <div className="c-header__avatar" aria-hidden="true">
-          {user?.full_name?.[0]?.toUpperCase() || 'C'}
-        </div>
-        <div className="c-header__user-info">
-          <span className="c-header__user-name">{user?.full_name || 'Cashier'}</span>
-          <span className="c-header__user-role">Cashier</span>
-        </div>
-        <button
-          className="c-header__logout"
-          onClick={onLogout}
-          aria-label="Sign out"
-          title="Sign out"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-        </button>
-      </div>
     </header>
   );
 }

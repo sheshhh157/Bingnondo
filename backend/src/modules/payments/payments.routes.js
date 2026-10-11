@@ -5,7 +5,8 @@ const ctrl = require('./payments.controller');
 
 // ── Shared middleware sets ────────────────────────────────────────────────────
 const cashierAccess = [authenticateToken, requireStaff, requireRoles('cashier', 'staff', 'owner', 'admin')];
-const staffAccess   = [authenticateToken, requireStaff, requireRoles('staff', 'owner', 'admin')];
+// 'cashier' added — cashier role can now access payment verification via the Staff Portal tab
+const staffAccess   = [authenticateToken, requireStaff, requireRoles('cashier', 'staff', 'owner', 'admin')];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Counter / POS payments

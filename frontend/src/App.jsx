@@ -8,7 +8,7 @@ import { ToastProvider } from './context/ToastContext';
 import Login from './pages/auth/Login';
 
 // Cashier
-import CashierPage from './pages/cashier/CashierPage';
+import CashierLayout from './pages/cashier/CashierLayout';
 
 // Staff
 import StaffLayout from './pages/staff/StaffLayout';
@@ -109,7 +109,7 @@ export default function App() {
                 path="/cashier"
                 element={
                   <ProtectedRoute allowedRoles={['cashier']}>
-                    <CashierPage />
+                    <CashierLayout />
                   </ProtectedRoute>
                 }
               />

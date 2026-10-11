@@ -3,8 +3,9 @@ const router  = express.Router();
 const { authenticateToken, requireRoles, requireStaff } = require('../../middleware/auth.middleware');
 const ctrl = require('./menu.controller');
 
-// Reusable guard: authenticated staff with write access (staff / owner / admin)
-const staffWrite = [authenticateToken, requireStaff, requireRoles('staff', 'owner', 'admin')];
+// Reusable guard: authenticated staff with write access
+// 'cashier' added — cashier can now manage menu via the Staff Portal tab in the Cashier layout
+const staffWrite = [authenticateToken, requireStaff, requireRoles('cashier', 'staff', 'owner', 'admin')];
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 // GET /api/menu  — customers + cashier read-only

@@ -12,7 +12,8 @@ import '../../styles/CashierPage.css';
 export const VIEWS = { ORDER: 'order', HISTORY: 'history' };
 
 export default function CashierPage() {
-  const { user, logout } = useAuth();
+  // logout is now handled by the CashierLayout sidebar; we keep user for display
+  const { user } = useAuth();
 
   // ─── State ────────────────────────────────────────────────────────
   const [view, setView]                   = useState(VIEWS.ORDER);
@@ -187,7 +188,6 @@ export default function CashierPage() {
         user={user}
         view={view}
         onViewChange={setView}
-        onLogout={logout}
         draftCount={draft.length}
       />
 
