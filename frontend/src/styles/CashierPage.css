@@ -12,6 +12,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding-top: 48px; /* compensate for fixed .c-header height */
 }
 
 /* ─── Workspace (Order view) ─────────────────────────────────────────── */
