@@ -111,7 +111,7 @@
   overflow: hidden;
 }
 .osk-bar__fill { height: 100%; border-radius: 99px; }
-.osk-bar__fill--ok { background: #1D4ED8; }
+.osk-bar__fill--ok { background: var(--color-primary); }
 .osk-bar__fill--low { background: #B45309; }
 .osk-bar__fill--out { background: var(--color-destructive); }
 .osk-bar__value { font-weight: 600; font-size: 0.85rem; }
@@ -182,7 +182,7 @@
 }
 .osk-history__type--restock { background: #E8F3EA; color: #1A7F37; }
 .osk-history__type--deduction { background: #FBEAEA; color: var(--color-destructive); }
-.osk-history__type--adjustment { background: #E8EFFB; color: #1D4ED8; }
+.osk-history__type--adjustment { background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary); }
 .osk-history__qty { font-weight: 700; font-family: var(--font-mono, monospace); }
 .osk-history__who { color: var(--color-muted-foreground); }
 .osk-history__when { color: var(--color-muted-foreground); font-size: 0.75rem; margin-left: auto; }
@@ -193,4 +193,3 @@
 @media (max-width: 760px) {
   .osk-stats { grid-template-columns: repeat(2, 1fr); }
 }
-

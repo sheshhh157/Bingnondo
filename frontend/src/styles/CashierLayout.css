@@ -568,11 +568,13 @@
   min-width: 0;
 }
 
-/* Staff body — top padding accounts for the fixed 52px staff header */
+/* Staff body — top padding accounts for the fixed 52px staff header.
+   No max-width here — each page controls its own width constraints. */
 .cl-staff-body {
   padding: calc(52px + 24px) 28px 48px;
   box-sizing: border-box;
   min-width: 0;
+  width: 100%;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

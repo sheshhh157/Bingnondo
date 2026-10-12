@@ -73,26 +73,26 @@ function LogRow({ entry, expanded, onToggle }) {
         onMouseEnter={e=>{if(!expanded)e.currentTarget.style.background='#1E1C15';}}
         onMouseLeave={e=>{if(!expanded)e.currentTarget.style.background='transparent';}}>
         <td style={{whiteSpace:'nowrap'}}>
-          <div style={{fontSize:'0.75rem',color:'rgba(232,224,212,0.65)'}}>
+          <div style={{fontSize:'0.75rem',color:'var(--color-foreground)'}}>
             {t.toLocaleDateString('en-PH',{month:'short',day:'numeric'})}
           </div>
-          <div style={{fontSize:'0.6875rem',color:'rgba(232,224,212,0.3)'}}>
+          <div style={{fontSize:'0.6875rem',color:'var(--color-muted-foreground)'}}>
             {t.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
           </div>
         </td>
         <td>
-          <div style={{fontSize:'0.8125rem',fontWeight:500,color:'#E8E0D4'}}>{entry.actor_name||`Staff #${entry.actor_id}`}</div>
-          {entry.actor_role&&<div style={{fontSize:'0.6875rem',color:'rgba(232,224,212,0.3)',textTransform:'capitalize',marginTop:1}}>{entry.actor_role.replace('_',' ')}</div>}
+          <div style={{fontSize:'0.8125rem',fontWeight:500,color:'var(--color-foreground)'}}>{entry.actor_name||`Staff #${entry.actor_id}`}</div>
+          {entry.actor_role&&<div style={{fontSize:'0.6875rem',color:'var(--color-muted-foreground)',textTransform:'capitalize',marginTop:1}}>{entry.actor_role.replace('_',' ')}</div>}
         </td>
         <td><ActionBadge action={entry.action}/></td>
-        <td style={{fontSize:'0.75rem',color:'rgba(232,224,212,0.4)'}}>
+        <td style={{fontSize:'0.75rem',color:'var(--color-muted-foreground)'}}>
           {entry.target_type
-            ?<span>{entry.target_type} <span style={{fontFamily:'monospace',color:'rgba(232,224,212,0.25)'}}>#{entry.target_id}</span></span>
-            :<span style={{color:'rgba(232,224,212,0.2)'}}>—</span>
+            ?<span>{entry.target_type} <span style={{fontFamily:'monospace',color:'var(--color-muted-foreground)'}}>#{entry.target_id}</span></span>
+            :<span style={{color:'var(--color-muted-foreground)'}}>—</span>
           }
         </td>
         <td style={{textAlign:'right'}}>
-          <span style={{color:'rgba(232,224,212,0.3)',display:'inline-block',transition:'transform 120ms ease',transform:expanded?'rotate(180deg)':'rotate(0deg)'}}>▾</span>
+          <span style={{color:'var(--color-muted-foreground)',display:'inline-block',transition:'transform 120ms ease',transform:expanded?'rotate(180deg)':'rotate(0deg)'}}>▾</span>
         </td>
       </tr>
       {expanded&&(

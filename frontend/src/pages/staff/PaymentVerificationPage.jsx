@@ -459,6 +459,62 @@ function SkeletonRow() {
   );
 }
 
+// ─── Pagination component ─────────────────────────────────────────────────────
+function PvPagination({ page, total, count, pageSize, onSelect }) {
+  if (total <= 1) return null;
+
+  const start = (page - 1) * pageSize + 1;
+  const end   = Math.min(page * pageSize, count);
+
+  // Build page numbers with ellipsis
+  const pages = [];
+  const add = n => { if (!pages.includes(n) && n >= 1 && n <= total) pages.push(n); };
+  add(1); add(page - 1); add(page); add(page + 1); add(total);
+  pages.sort((a, b) => a - b);
+
+  const items = [];
+  for (let i = 0; i < pages.length; i++) {
+    if (i > 0 && pages[i] - pages[i - 1] > 1) {
+      items.push(<span key={`e${i}`} className="pv-pg-ellipsis">…</span>);
+    }
+    const n = pages[i];
+    items.push(
+      <button
+        key={n}
+        className={`pv-pg-btn pv-pg-btn--num${page === n ? ' pv-pg-btn--active' : ''}`}
+        onClick={() => onSelect(n)}
+        aria-current={page === n ? 'page' : undefined}
+        aria-label={`Page ${n}`}
+      >{n}</button>
+    );
+  }
+
+  return (
+    <div className="pv-pagination" role="navigation" aria-label="Pagination">
+      <span className="pv-pagination__info">{start}–{end} of {count}</span>
+      <div className="pv-pagination__controls">
+        {/* First */}
+        <button className="pv-pg-btn" onClick={() => onSelect(1)} disabled={page === 1} aria-label="First page" title="First">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+        </button>
+        {/* Prev */}
+        <button className="pv-pg-btn" onClick={() => onSelect(p => Math.max(1, p - 1))} disabled={page === 1} aria-label="Previous page" title="Previous">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        {items}
+        {/* Next */}
+        <button className="pv-pg-btn" onClick={() => onSelect(p => Math.min(total, p + 1))} disabled={page === total} aria-label="Next page" title="Next">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        {/* Last */}
+        <button className="pv-pg-btn" onClick={() => onSelect(total)} disabled={page === total} aria-label="Last page" title="Last">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PaymentVerificationPage() {
   const [orders, setOrders]           = useState([]);
@@ -468,6 +524,9 @@ export default function PaymentVerificationPage() {
   const [rejectTarget, setRejectTarget] = useState(null);
   const [lightboxOrder, setLightboxOrder] = useState(null);
   const [liveIndicator, setLiveIndicator] = useState(false);
+  // Pagination
+  const [page, setPage]               = useState(1);
+  const [pageSize, setPageSize]       = useState(10);
   const { toasts, show: showToast }   = useToast();
   const liveTimerRef = useRef(null);
 
@@ -591,6 +650,14 @@ export default function PaymentVerificationPage() {
     rejected: orders.filter(o => o.payment_status === 'rejected').length,
   };
 
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage    = Math.min(page, totalPages);
+  const paginated   = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  // Reset to page 1 when filter/search/pageSize changes
+  useEffect(() => { setPage(1); }, [filter, search, pageSize]);
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="pv-page">
@@ -688,6 +755,20 @@ export default function PaymentVerificationPage() {
           ))}
         </div>
 
+        {/* Rows per page */}
+        <div className="pv-pagesize-wrap">
+          <label className="pv-pagesize-label" htmlFor="pv-pagesize">Rows</label>
+          <select
+            id="pv-pagesize"
+            className="pv-pagesize-select"
+            value={pageSize}
+            onChange={e => setPageSize(Number(e.target.value))}
+            aria-label="Rows per page"
+          >
+            {[10, 20, 50].map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+
         {/* Refresh */}
         <button
           className="pv-btn pv-btn--icon"
@@ -720,7 +801,7 @@ export default function PaymentVerificationPage() {
         ) : filtered.length === 0 ? (
           <EmptyState filter={filter} />
         ) : (
-          filtered.map(order => (
+          paginated.map(order => (
             <div key={order.id} role="listitem">
               <OrderRow
                 order={order}
@@ -732,6 +813,17 @@ export default function PaymentVerificationPage() {
           ))
         )}
       </div>
+
+      {/* ── Pagination ── */}
+      {!loading && filtered.length > 0 && (
+        <PvPagination
+          page={safePage}
+          total={totalPages}
+          count={filtered.length}
+          pageSize={pageSize}
+          onSelect={setPage}
+        />
+      )}
 
       {/* ── Gate rule notice ── */}
       <aside className="pv-notice" aria-label="Important note">

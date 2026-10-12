@@ -115,7 +115,7 @@ function Modal({ open, onClose, title, width=480, children }) {
 function ConfirmModal({ open, onClose, onConfirm, loading, title, message, confirmLabel='Confirm', variant='danger' }) {
   return (
     <Modal open={open} onClose={onClose} title={title} width={380}>
-      <p style={{fontSize:'0.8125rem',color:'rgba(232,224,212,0.6)',lineHeight:1.6}}>{message}</p>
+      <p style={{fontSize:'0.8125rem',color:'var(--color-muted-foreground)',lineHeight:1.6}}>{message}</p>
       <div className="ap-modal__footer">
         <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
         <Btn variant={variant} onClick={onConfirm} loading={loading}>{confirmLabel}</Btn>
@@ -171,7 +171,7 @@ function CreateModal({ open, onClose, onCreated, toast }) {
       <Field label="Temporary password" id="sa-pass" error={errors.temp_password}>
         <TextInput id="sa-pass" type="password" value={form.temp_password} onChange={e=>set('temp_password',e.target.value)} placeholder="Min. 8 characters" error={errors.temp_password}/>
       </Field>
-      <p style={{fontSize:'0.6875rem',color:'rgba(232,224,212,0.3)',lineHeight:1.6}}>
+      <p style={{fontSize:'0.6875rem',color:'var(--color-muted-foreground)',lineHeight:1.6}}>
         Staff will be prompted to change this password on first sign-in. All actions are logged.
       </p>
       <div className="ap-modal__footer">
@@ -200,7 +200,7 @@ function StaffRow({ account, onStatusChange, onReset, actionLoading }) {
       </td>
       <td><Badge type={account.role} label={ROLE_LABELS[account.role]||account.role}/></td>
       <td><Badge type={isActive?'active':'inactive'} label={isActive?'Active':'Inactive'}/></td>
-      <td style={{fontSize:'0.75rem',color:'rgba(232,224,212,0.4)',whiteSpace:'nowrap'}}>
+      <td style={{fontSize:'0.75rem',color:'var(--color-muted-foreground)',whiteSpace:'nowrap'}}>
         {new Date(account.created_at).toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})}
       </td>
       <td className="ap-table__th--right">
@@ -284,7 +284,7 @@ function ResetPasswordModal({ open, onClose, account, toast }) {
 
   return (
     <Modal open={open} onClose={onClose} title={`Reset password — ${account?.full_name}`} width={380}>
-      <p style={{fontSize:'0.8125rem',color:'rgba(232,224,212,0.55)',lineHeight:1.6,marginBottom:14}}>
+      <p style={{fontSize:'0.8125rem',color:'var(--color-muted-foreground)',lineHeight:1.6,marginBottom:14}}>
         Enter a new password for this staff member. They should change it on next login.
       </p>
       <Field id="rp-pass" error={error}>

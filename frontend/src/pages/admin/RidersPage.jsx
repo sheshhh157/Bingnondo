@@ -64,8 +64,8 @@ function Toasts({ toasts, dismiss }) {
 function Spinner({ size = 16 }) {
   return (
     <svg className="ap-spinner" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="#2E2B22" strokeWidth="2.5"/>
-      <path d="M12 3a9 9 0 0 1 9 9" stroke="#C9963C" strokeWidth="2.5" strokeLinecap="round"/>
+      <circle cx="12" cy="12" r="9" stroke="var(--color-border-strong)" strokeWidth="2.5"/>
+      <path d="M12 3a9 9 0 0 1 9 9" stroke="var(--color-gold)" strokeWidth="2.5" strokeLinecap="round"/>
     </svg>
   );
 }
@@ -91,7 +91,7 @@ function Field({ label, id, error, hint, children }) {
     <div className="ap-input-wrap">
       {label && <label className="ap-label" htmlFor={id}>{label}</label>}
       {children}
-      {hint && !error && <span style={{ fontSize: '0.6875rem', color: 'rgba(232,224,212,0.3)', marginTop: '3px' }}>{hint}</span>}
+      {hint && !error && <span style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', marginTop: '3px' }}>{hint}</span>}
       {error && <span className="ap-field-error">{error}</span>}
     </div>
   );
@@ -152,7 +152,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmLabel 
   return (
     <Modal open={open} onClose={onClose} title={title} width={400}>
       <div className="ap-modal__body">
-        <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(232,224,212,0.65)', lineHeight: 1.6 }}>{message}</p>
+        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-muted-foreground)', lineHeight: 1.6 }}>{message}</p>
         <div className="ap-modal__footer">
           <Btn variant="ghost" size="sm" onClick={onClose} disabled={loading}>Cancel</Btn>
           <Btn variant={variant} size="sm" onClick={onConfirm} loading={loading}>{confirmLabel}</Btn>
@@ -443,7 +443,7 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
           <RiderAvatar name={rider?.full_name} status={rider?.status} />
           <div>
             <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-foreground)' }}>{rider?.full_name}</div>
-            <div style={{ fontSize: '0.6875rem', color: 'rgba(232,224,212,0.4)', marginTop: 2 }}>{rider?.mobile_number}</div>
+            <div style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', marginTop: 2 }}>{rider?.mobile_number}</div>
           </div>
         </div>
         <Field label="New Password" id="rd-reset-pw" error={err} hint="Min. 8 characters. Rider must use this on next login.">
@@ -629,7 +629,7 @@ function RiderRow({ rider, onSelect, isSelected }) {
         </div>
       </td>
       <td>
-        <span style={{ fontSize: '0.8125rem', color: 'rgba(232,224,212,0.5)', fontFamily: 'monospace' }}>
+        <span style={{ fontSize: '0.8125rem', color: 'var(--color-muted-foreground)', fontFamily: 'monospace' }}>
           {rider.email || '—'}
         </span>
       </td>
@@ -895,7 +895,7 @@ export default function RidersPage() {
                   icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>}
                   aria-label="Previous page"
                 />
-                <span style={{ fontSize: '0.75rem', color: 'rgba(232,224,212,0.4)', padding: '0 8px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)', padding: '0 8px' }}>
                   {page} / {totalPages}
                 </span>
                 <Btn variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}

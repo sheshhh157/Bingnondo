@@ -300,7 +300,7 @@ function OverrideModal({ open, onClose, customer, onSuccess, toast }) {
           </div>
         )}
 
-        <p style={{ fontSize: '0.6875rem', color: 'rgba(232,224,212,0.28)', lineHeight: 1.6 }}>
+        <p style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', lineHeight: 1.6 }}>
           All admin overrides are permanently logged to the audit trail with your account ID attached.
           Overrides cannot be silently reversed.
         </p>
@@ -354,18 +354,18 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
       <td><RestrictionBadge level={customer.restriction_level || 'none'} /></td>
 
       {/* Updated */}
-      <td style={{ fontSize: '0.75rem', color: 'rgba(232,224,212,0.4)', whiteSpace: 'nowrap' }}>
+      <td style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)', whiteSpace: 'nowrap' }}>
         {customer.updated_at
           ? new Date(customer.updated_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
-          : <span style={{ color: 'rgba(232,224,212,0.2)' }}>Auto</span>
+          : <span style={{ color: 'var(--color-muted-foreground)' }}>Auto</span>
         }
       </td>
 
       {/* Updated by */}
-      <td style={{ fontSize: '0.75rem', color: 'rgba(232,224,212,0.4)' }}>
+      <td style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)' }}>
         {customer.updated_by_name
           ? customer.updated_by_name
-          : <span style={{ color: 'rgba(232,224,212,0.2)' }}>System</span>
+          : <span style={{ color: 'var(--color-muted-foreground)' }}>System</span>
         }
       </td>
 
@@ -522,7 +522,7 @@ export default function CustomerRestrictions() {
             <div className="ap-loading"><Spinner size={24} /></div>
           ) : customers.length === 0 ? (
             <div className="ap-empty">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(232,224,212,0.15)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginBottom: 8 }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-border)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginBottom: 8 }}>
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
                 <polyline points="20 6 9 17 4 12" />

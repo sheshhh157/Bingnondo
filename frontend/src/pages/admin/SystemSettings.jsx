@@ -37,7 +37,7 @@ function Modal({open,onClose,title,width=480,children}){
   return(<div className="ap-overlay" ref={ref} onClick={e=>e.target===ref.current&&onClose()} role="presentation"><div className="ap-modal" style={{maxWidth:width}} role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="ap-modal__head"><span className="ap-modal__title" id="modal-title">{title}</span><button className="ap-modal__close" onClick={onClose} aria-label="Close">✕</button></div><div className="ap-modal__body">{children}</div></div></div>);
 }
 function ConfirmModal({open,onClose,onConfirm,loading,title,message,confirmLabel='Confirm',variant='danger'}){
-  return(<Modal open={open} onClose={onClose} title={title} width={380}><p style={{fontSize:'0.8125rem',color:'rgba(232,224,212,0.6)',lineHeight:1.6}}>{message}</p><div className="ap-modal__footer"><Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn><Btn variant={variant} onClick={onConfirm} loading={loading}>{confirmLabel}</Btn></div></Modal>);
+  return(<Modal open={open} onClose={onClose} title={title} width={380}><p style={{fontSize:'0.8125rem',color:'var(--color-muted-foreground)',lineHeight:1.6}}>{message}</p><div className="ap-modal__footer"><Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn><Btn variant={variant} onClick={onConfirm} loading={loading}>{confirmLabel}</Btn></div></Modal>);
 }
 
 // ── Section wrapper ──────────────────────────────────────────────────
@@ -102,7 +102,7 @@ function CategoryManager({ categories, onAdd, onRemove }) {
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div className="ap-tags">
         {categories.length === 0
-          ? <span style={{fontSize:'0.75rem',color:'rgba(232,224,212,0.3)'}}>No categories yet.</span>
+          ? <span style={{fontSize:'0.75rem',color:'var(--color-muted-foreground)'}}>No categories yet.</span>
           : categories.map(c=>(
               <div key={c.id} className="ap-tag">
                 {c.name}

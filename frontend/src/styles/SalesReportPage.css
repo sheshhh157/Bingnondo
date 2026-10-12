@@ -106,8 +106,8 @@
 .sales-method strong { color: var(--color-foreground); }
 .sales-method--cash { border-color: color-mix(in srgb, #1A7F37 25%, white); color: #1A7F37; }
 .sales-method--cash strong { color: #1A7F37; }
-.sales-method--gcash { border-color: color-mix(in srgb, #1D4ED8 25%, white); color: #1D4ED8; }
-.sales-method--gcash strong { color: #1D4ED8; }
+.sales-method--gcash { border-color: color-mix(in srgb, var(--color-primary) 25%, white); color: var(--color-primary); }
+.sales-method--gcash strong { color: var(--color-primary); }
 .sales-cancel {
   display: inline-flex;
   align-items: center;
