@@ -1,617 +1,471 @@
-/* ═══════════════════════════════════════════════════════════════════════════════
-   CashierLayout.css
-   Collapsible sidebar + staff-page header injection
-   Brand palette: deep maroon #5C0A14→#7F1D1D / gold #D97706→#F59E0B / ivory #FFFbeb
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
-/* ── Design tokens ─────────────────────────────────────────────────────────── */
-:root {
-  --cl-sidebar-w:           232px;   /* expanded width */
-  --cl-sidebar-w-collapsed: 60px;    /* icon-rail width */
-  --cl-transition:          200ms cubic-bezier(0.4, 0, 0.2, 1);
-
-  --cl-bg:          #5C0A14;
-  --cl-bg-hover:    #7F1D1D;
-  --cl-border:      rgba(159,38,38,0.6);
-  --cl-gold:        #D97706;
-  --cl-gold-bright: #F59E0B;
-  --cl-gold-glow:   rgba(217,119,6,0.18);
-  --cl-fg:          rgba(255,251,235,0.55);
-  --cl-fg-active:   #FFFbeb;
-  --cl-pip:         #F59E0B;
-  --cl-user-bg:     rgba(127,29,29,0.25);
-}
-
-/* ── Root flex container ───────────────────────────────────────────────────── */
-.cl-root {
+/* ─── Root grid ───────────────────────────────────────────────────── */
+.al-root {
   display: flex;
   min-height: 100dvh;
-  background: var(--color-background, #FDF6E3);
+  background: var(--color-background);
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   DESKTOP SIDEBAR  (≥ 768px)
-   ══════════════════════════════════════════════════════════════════════════════ */
-.cl-sidebar {
-  display: none;               /* shown via media query */
+/* ─── Imperial Ink sidebar palette ──────────────────────────────────
+ * Admin uses its own dark ink + vermillion palette — intentionally
+ * distinct from every other module (Staff uses warm loam, Kitchen
+ * uses deep slate, Cashier uses cream). Admin = imperial control.
+ * The base --color-* heritage tokens are re-inked in .al-root (see
+ * index.css); these --al-* vars stay private to the admin shell.
+ * ─────────────────────────────────────────────────────────────────── */
+.al-root {
+  /* Dark maroon sidebar — matches Cashier/Manager pattern */
+  --al-sidebar-bg:         #5C0A14;
+  --al-sidebar-bg-hover:   #7F1D1D;
+  --al-sidebar-surface:    rgba(127,29,29,0.25);
+  --al-sidebar-border:     rgba(159,38,38,0.6);
+  --al-sidebar-border-hi:  rgba(217,119,6,0.5);
+  --al-sidebar-active-bg:  rgba(217,119,6,0.18);
+  --al-sidebar-active-bar: #F59E0B;
+  --al-sidebar-gold:       #D97706;
+  --al-sidebar-fg:         rgba(255,251,235,0.55);
+  --al-sidebar-fg-active:  #FFFbeb;
+  --al-content-bg:         var(--color-background);
+  --al-card-bg:            var(--color-card);
+  --al-card-border:        var(--color-border);
+  --al-card-border-hi:     var(--color-border-strong);
+}
+
+/* ─── Desktop Sidebar (≥1024px) ────────────────────────────────────── */
+.al-sidebar {
+  display: none;
   flex-direction: column;
-  width: var(--cl-sidebar-w);
+  width: 232px;
   flex-shrink: 0;
   height: 100dvh;
   position: sticky;
   top: 0;
-  background: var(--cl-bg);
-  border-right: 1px solid var(--cl-border);
-  box-shadow: 4px 0 24px rgba(92,10,20,0.22);
-  overflow: hidden;            /* clip during collapse */
+  background: var(--al-sidebar-bg);
+  border-right: 1px solid var(--al-sidebar-border-hi);
   overflow-y: auto;
   z-index: 40;
-  transition: width var(--cl-transition);
-  /* Prevent text-overflow flicker during collapse */
-  white-space: nowrap;
 }
 
-.cl-sidebar--collapsed {
-  width: var(--cl-sidebar-w-collapsed);
-}
-
-/* ── Sidebar collapse/expand toggle (sits at very top of sidebar) ─────────── */
-.cl-sidebar__toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 14px 10px 15px;
-  border: none;
-  background: transparent;
-  color: rgba(255,251,235,0.35);
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  border-bottom: 1px solid var(--cl-border);
-  transition: background var(--cl-transition), color var(--cl-transition);
-  flex-shrink: 0;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.cl-sidebar__toggle:hover {
-  background: var(--cl-bg-hover);
-  color: var(--cl-fg-active);
-}
-
-.cl-sidebar--collapsed .cl-sidebar__toggle {
-  justify-content: center;
-  padding: 10px 0;
-}
-
-/* ── Brand ─────────────────────────────────────────────────────────────────── */
-.cl-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 14px 14px;
-  border-bottom: 1px solid var(--cl-border);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.cl-brand__logo {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
-.cl-brand__text {
-  display: flex;
+/* ─── Tablet Icon Strip (768–1023px) ───────────────────────────────── */
+.al-sidebar-compact {
+  display: none;
   flex-direction: column;
-  gap: 1px;
-  overflow: hidden;
-  transition: opacity var(--cl-transition), width var(--cl-transition);
-}
-
-.cl-brand__text--hidden {
-  opacity: 0;
-  width: 0;
-  pointer-events: none;
-}
-
-.cl-brand__name {
-  font-family: 'Playfair Display SC', Georgia, serif;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: #FFFbeb;
-  line-height: 1.15;
-  letter-spacing: 0.02em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cl-brand__station {
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.6rem;
-  font-weight: 600;
-  color: rgba(255,251,235,0.38);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-/* ── Nav ───────────────────────────────────────────────────────────────────── */
-.cl-nav {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 10px 8px;
-  gap: 2px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.cl-nav__group-label {
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(255,251,235,0.22);
-  padding: 4px 10px 2px;
-  display: block;
-}
-
-.cl-nav__group-label--spaced {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--cl-border);
-}
-
-/* Thin divider replacing section label when sidebar is collapsed */
-.cl-nav__divider {
-  height: 1px;
-  background: var(--cl-border);
-  margin: 8px 10px;
-}
-
-.cl-nav__link {
-  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  transition: background var(--cl-transition), color var(--cl-transition);
-  position: relative;
-  color: var(--cl-fg);
-  border: none;
-  background: transparent;
-  width: 100%;
-  cursor: pointer;
-  text-align: left;
-}
-
-/* When collapsed — centre the icon */
-.cl-nav__link--collapsed {
-  justify-content: center;
-  padding: 9px 0;
-}
-
-.cl-nav__link:hover {
-  background: var(--cl-bg-hover);
-  color: var(--cl-fg-active);
-}
-
-.cl-nav__link--active {
-  background: var(--cl-gold-glow);
-  color: var(--cl-fg-active);
-}
-
-.cl-nav__link--active:hover {
-  background: rgba(217,119,6,0.24);
-}
-
-.cl-nav__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
+  width: 56px;
   flex-shrink: 0;
-  color: inherit;
-  background: transparent;
-  transition: background var(--cl-transition);
+  height: 100dvh;
+  position: sticky;
+  top: 0;
+  background: var(--al-sidebar-bg);
+  border-right: 1px solid var(--al-sidebar-border-hi);
+  z-index: 40;
+  padding: 12px 0;
+  gap: 4px;
 }
 
-.cl-nav__icon--active {
-  background: rgba(245,158,11,0.2);
-  color: var(--cl-gold-bright);
-}
-
-.cl-nav__labels {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.cl-nav__label {
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cl-nav__sub {
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.6875rem;
-  font-weight: 400;
-  color: rgba(255,251,235,0.33);
-  line-height: 1;
-}
-
-.cl-nav__link--active .cl-nav__sub { color: rgba(255,251,235,0.55); }
-
-.cl-nav__pip {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--cl-pip);
-  flex-shrink: 0;
-}
-
-/* ── User block ────────────────────────────────────────────────────────────── */
-.cl-user {
-  padding: 10px 8px 14px;
-  border-top: 1px solid var(--cl-border);
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow: hidden;
-}
-
-.cl-user__card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  background: var(--cl-user-bg);
-  border-radius: 8px;
-  border: 1px solid rgba(159,38,38,0.3);
-  overflow: hidden;
-  min-width: 0;
-}
-
-.cl-user__card--collapsed {
-  justify-content: center;
-  padding: 9px 0;
-  background: transparent;
-  border-color: transparent;
-}
-
-.cl-user__avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #7F1D1D;
-  color: #FDE68A;
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 1.5px solid #9F2626;
-}
-
-.cl-user__info {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.cl-user__name {
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #FFFbeb;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cl-user__role {
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.6875rem;
-  color: rgba(255,251,235,0.42);
-  text-transform: capitalize;
-}
-
-.cl-user__logout {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: rgba(255,251,235,0.38);
-  transition: background var(--cl-transition), color var(--cl-transition);
-  width: 100%;
-  text-align: left;
-}
-
-.cl-user__logout--collapsed {
-  justify-content: center;
-  padding: 8px 0;
-}
-
-.cl-user__logout:hover {
-  background: rgba(220,38,38,0.16);
-  color: #FCA5A5;
-}
-
-/* ══════════════════════════════════════════════════════════════════════════════
-   MOBILE TOP BAR + DRAWER  (< 768px)
-   ══════════════════════════════════════════════════════════════════════════════ */
-.cl-topbar {
+/* ─── Mobile Top Bar (<768px) ──────────────────────────────────────── */
+.al-topbar {
   display: none;
   align-items: center;
   justify-content: space-between;
   height: 52px;
   padding: 0 16px;
-  background: var(--cl-bg);
-  border-bottom: 1px solid var(--cl-border);
+  background: var(--al-sidebar-bg);
+  border-bottom: 1px solid var(--al-sidebar-border);
   position: fixed;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 50;
 }
 
-.cl-topbar__brand {
+/* ─── Responsive breakpoints ───────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .al-sidebar         { display: flex; }
+  .al-sidebar-compact { display: none; }
+  .al-topbar          { display: none; }
+  .al-main            { margin-left: 0; padding-top: 0; }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .al-sidebar         { display: none; }
+  .al-sidebar-compact { display: flex; }
+  .al-topbar          { display: none; }
+  .al-main            { margin-left: 0; padding-top: 0; }
+}
+@media (max-width: 767px) {
+  .al-sidebar         { display: none; }
+  .al-sidebar-compact { display: none; }
+  .al-topbar          { display: flex; }
+  .al-main            { padding-top: 52px; }
+}
+
+/* ─── Brand ─────────────────────────────────────────────────────────── */
+.al-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 20px 16px 16px;
+  border-bottom: 1px solid var(--al-sidebar-border);
+  flex-shrink: 0;
 }
-
-.cl-topbar__name {
-  font-family: 'Playfair Display SC', Georgia, serif;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: #FFFbeb;
-  letter-spacing: 0.02em;
-}
-
-.cl-topbar__menu {
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: rgba(255,251,235,0.7);
-  transition: background var(--cl-transition);
-}
-
-.cl-topbar__menu:hover {
-  background: var(--cl-bg-hover);
-  color: #FFFbeb;
-}
-
-/* Drawer overlay */
-.cl-drawer-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(92,10,20,0.45);
-  backdrop-filter: blur(3px);
-  z-index: 60;
-  display: flex;
-  animation: cl-fade-in 0.2s ease;
-}
-
-.cl-drawer {
-  position: relative;
-  width: 264px;
-  max-width: 85vw;
-  height: 100%;
-  background: var(--cl-bg);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  animation: cl-slide-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border-right: 1px solid var(--cl-border);
-}
-
-.cl-drawer__close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+.al-brand__logo {
   width: 32px;
   height: 32px;
-  border: none;
-  background: rgba(159,38,38,0.2);
-  border-radius: 8px;
+  object-fit: contain;
+  border-radius: 2px;
+  opacity: 0.9;
+}
+.al-brand__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.al-brand__name {
+  font-family: var(--font-heading);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--al-sidebar-gold);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.al-brand__station {
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: rgba(255,251,235,0.38);
+  letter-spacing: 0.12em;
+  line-height: 1;
+}
+
+/* ─── Nav ────────────────────────────────────────────────────────────── */
+.al-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 10px 0;
+  gap: 2px;
+  overflow-y: auto;
+}
+.al-nav__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-left: 2px solid transparent;
+  color: var(--al-sidebar-fg);
+  text-decoration: none;
+  transition: background 120ms ease, color 120ms ease;
+  position: relative;
+}
+.al-nav__link:hover {
+  background: var(--al-sidebar-bg-hover);
+  color: var(--al-sidebar-fg-active);
+}
+.al-nav__link--active {
+  background: var(--al-sidebar-active-bg);
+  border-left-color: var(--al-sidebar-active-bar);
+  color: var(--al-sidebar-fg-active);
+}
+.al-nav__icon {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  color: rgba(255,251,235,0.6);
-  z-index: 1;
-  transition: background var(--cl-transition), color var(--cl-transition);
+  width: 20px;
+  transition: color 120ms ease;
 }
-
-.cl-drawer__close:hover {
-  background: rgba(159,38,38,0.38);
-  color: #FFFbeb;
+.al-nav__icon--active {
+  color: var(--al-sidebar-active-bar);
 }
-
-/* ══════════════════════════════════════════════════════════════════════════════
-   STAFF PAGE INJECTED HEADER
-   Thin header bar above each Staff Portal page carrying the hamburger toggle
-   ══════════════════════════════════════════════════════════════════════════════ */
-.cl-staff-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0 24px;
-  height: 52px;
-  background: #7F1D1D;
-  border-bottom: 1px solid rgba(159,38,38,0.5);
-  flex-shrink: 0;
-  /* Fixed so it never scrolls with the page regardless of scroll container */
-  position: fixed;
-  top: 0;
-  /* Left offset = sidebar width; JS toggles a class on cl-root to switch */
-  left: var(--cl-sidebar-w);
-  right: 0;
-  z-index: 20;
-  transition: left var(--cl-transition);
-}
-
-/* When sidebar is collapsed, header shifts left to fill the narrower gap */
-.cl-root--collapsed .cl-staff-header {
-  left: var(--cl-sidebar-w-collapsed);
-}
-
-/* On mobile there's no sidebar — header goes full width below the topbar */
-@media (max-width: 767px) {
-  .cl-staff-header {
-    left: 0;
-    top: 52px; /* below the mobile topbar */
-  }
-}
-
-/* Push staff body down so fixed header doesn't overlap content */
-/* padding-top combined with rest of padding in the MAIN CONTENT AREA block below */
-
-/* Hamburger toggle inside the staff header */
-.cl-staff-header__toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: rgba(255,251,235,0.06);
-  border-radius: 8px;
-  cursor: pointer;
-  color: rgba(255,251,235,0.7);
-  flex-shrink: 0;
-  transition: background var(--cl-transition), color var(--cl-transition);
-}
-
-.cl-staff-header__toggle:hover {
-  background: rgba(255,251,235,0.12);
-  color: #FFFbeb;
-}
-
-.cl-staff-header__toggle:focus-visible {
-  outline: 2px solid var(--cl-gold-bright);
-  outline-offset: 2px;
-}
-
-.cl-staff-header__title-group {
+.al-nav__labels {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
 }
-
-.cl-staff-header__title {
-  font-family: 'Playfair Display SC', Georgia, serif;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: #FFFbeb;
-  margin: 0;
-  line-height: 1.15;
+.al-nav__label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.cl-staff-header__sub {
-  font-family: 'Karla', system-ui, sans-serif;
+.al-nav__sub {
   font-size: 0.6875rem;
-  color: rgba(255,251,235,0.4);
+  color: rgba(255,251,235,0.35);
+  line-height: 1.2;
+}
+.al-nav__link--active .al-nav__sub {
+  color: rgba(255,251,235,0.55);
+}
+.al-nav__pip {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--al-sidebar-active-bar);
+}
+
+/* ─── User section ───────────────────────────────────────────────────── */
+.al-user {
+  padding: 12px 12px;
+  border-top: 1px solid var(--al-sidebar-border);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.al-user__card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  background: rgba(127,29,29,0.10);
+  border: 1px solid rgba(127,29,29,0.22);
+  border-radius: 2px;
+}
+.al-user__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 2px;
+  background: rgba(127,29,29,0.22);
+  border: 1px solid rgba(127,29,29,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255,251,235,0.85);
+  flex-shrink: 0;
+}
+.al-user__info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.al-user__name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--al-sidebar-fg-active);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-/* ══════════════════════════════════════════════════════════════════════════════
-   MAIN CONTENT AREA
-   ══════════════════════════════════════════════════════════════════════════════ */
-.cl-main {
-  flex: 1;
-  min-width: 0;
+.al-user__role {
+  font-size: 0.625rem;
+  color: var(--al-sidebar-gold);
+  letter-spacing: 0.06em;
+}
+.al-user__logout {
   display: flex;
-  flex-direction: column;
-  /* No overflow:hidden here — sticky headers inside need a real scroll ancestor */
-}
-
-/* Staff wrapper — no scroll container needed, window/body scrolls */
-.cl-staff-wrapper {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-/* Staff body — top padding accounts for the fixed 52px staff header.
-   No max-width here — each page controls its own width constraints. */
-.cl-staff-body {
-  padding: calc(52px + 24px) 28px 48px;
-  box-sizing: border-box;
-  min-width: 0;
+  align-items: center;
+  gap: 7px;
   width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: 1px solid rgba(255,251,235,0.08);
+  border-radius: 2px;
+  color: rgba(255,251,235,0.38);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.al-user__logout:hover {
+  background: rgba(127,29,29,0.12);
+  border-color: rgba(127,29,29,0.30);
+  color: rgba(255,251,235,0.65);
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   RESPONSIVE BREAKPOINTS
-   ══════════════════════════════════════════════════════════════════════════════ */
+/* ─── Compact (tablet) nav ───────────────────────────────────────────── */
+.al-compact__brand {
+  padding: 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--al-sidebar-border);
+  width: 100%;
+  margin-bottom: 6px;
+}
+.al-compact__nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 2px;
+  width: 100%;
+  align-items: center;
+  padding: 4px 0;
+}
+.al-compact__link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  color: var(--al-sidebar-fg);
+  text-decoration: none;
+  transition: all 120ms ease;
+}
+.al-compact__link:hover {
+  background: var(--al-sidebar-bg-hover);
+  color: var(--al-sidebar-fg-active);
+}
+.al-compact__link--active {
+  background: var(--al-sidebar-active-bg);
+  border-color: rgba(127,29,29,0.35);
+  color: var(--al-sidebar-active-bar);
+}
+.al-compact__logout {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: none;
+  border: none;
+  color: var(--al-sidebar-fg);
+  cursor: pointer;
+  transition: color 120ms ease;
+  padding: 0;
+}
+.al-compact__logout:hover { color: var(--al-sidebar-fg-active); }
 
-/* Desktop (≥ 768px): sidebar visible, no topbar */
-@media (min-width: 768px) {
-  .cl-sidebar  { display: flex; }
-  .cl-topbar   { display: none; }
-  .cl-main     { padding-top: 0; }
+/* ─── Mobile topbar ──────────────────────────────────────────────────── */
+.al-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.al-topbar__name {
+  font-family: var(--font-heading);
+  font-size: 0.9375rem;
+  color: var(--al-sidebar-gold);
+  font-weight: 600;
+}
+.al-topbar__menu {
+  background: none;
+  border: none;
+  color: rgba(255,251,235,0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 4px;
 }
 
-/* Mobile (< 768px): topbar + drawer, no sidebar */
-@media (max-width: 767px) {
-  .cl-sidebar  { display: none !important; }
-  .cl-topbar   { display: flex; }
-  .cl-main     { padding-top: 52px; }
-  /* Mobile: topbar(52px) + staff-header(52px) + gap */
-  .cl-staff-body { padding: calc(52px + 52px + 16px) 16px 40px; }
-  .cl-staff-header { padding: 0 16px; }
+/* ─── Mobile drawer ──────────────────────────────────────────────────── */
+.al-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(92,10,20,0.55);
+  z-index: 200;
+  display: flex;
+}
+.al-drawer {
+  width: 260px;
+  height: 100%;
+  background: var(--al-sidebar-bg);
+  border-right: 1px solid var(--al-sidebar-border-hi);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-y: auto;
+}
+.al-drawer__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: rgba(255,251,235,0.45);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  z-index: 1;
 }
 
-/* Sidebar toggle button inside c-header — hidden on mobile (topbar handles it) */
-@media (max-width: 767px) {
-  .c-header__sidebar-toggle { display: none !important; }
+/* ─── Main content area ─────────────────────────────────────────────── */
+.al-main {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--al-content-bg);
+  display: flex;
+  flex-direction: column;
+}
+/* ─── Manager View section (within Admin sidebar) ────────────────────
+ * These styles add the Manager View nav section into the admin shell.
+ * Manager pages render their own ml-root layout and handle all their
+ * own backend calls — the admin sidebar just provides the entry points.
+ * ─────────────────────────────────────────────────────────────────── */
+
+/* Section label above Admin Controls and Manager View groups */
+.al-nav__section-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 16px 2px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,251,235,0.28);
+  user-select: none;
+  pointer-events: none;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   KEYFRAMES
-   ══════════════════════════════════════════════════════════════════════════════ */
-@keyframes cl-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+/* Manager View label gets a slightly distinct tint */
+.al-nav__section-label--manager {
+  color: rgba(217,119,6,0.55);
+  margin-top: 2px;
+}
+.al-nav__section-label--manager svg {
+  flex-shrink: 0;
+  opacity: 0.75;
 }
 
-@keyframes cl-slide-in {
-  from { transform: translateX(-100%); }
-  to   { transform: translateX(0); }
+/* Horizontal rule between Admin and Manager sections */
+.al-nav__divider {
+  height: 1px;
+  margin: 8px 14px 6px;
+  background: rgba(159,38,38,0.35);
+}
+
+/* Manager nav links — slightly inset to visually nest under section */
+.al-nav__link--manager {
+  padding-left: 20px;
+  opacity: 0.88;
+}
+.al-nav__link--manager:hover {
+  opacity: 1;
+}
+.al-nav__link--manager.al-nav__link--active {
+  opacity: 1;
+}
+
+/* Compact (tablet) divider between admin icons and manager icons */
+.al-compact__divider {
+  width: 28px;
+  height: 1px;
+  background: rgba(159,38,38,0.45);
+  margin: 4px 0;
+  flex-shrink: 0;
+}
+
+/* Manager icons in compact strip — subtle amber tint when inactive */
+.al-compact__link--manager {
+  color: rgba(217,119,6,0.55);
+}
+.al-compact__link--manager:hover {
+  color: var(--al-sidebar-fg-active);
+  background: var(--al-sidebar-bg-hover);
+}
+.al-compact__link--manager.al-compact__link--active {
+  color: var(--al-sidebar-active-bar);
+  background: var(--al-sidebar-active-bg);
+  border-color: rgba(127,29,29,0.35);
 }

@@ -3,7 +3,7 @@ const db = require('../../config/db');
 
 const BCRYPT_ROUNDS = 12;
 
-const VALID_ROLES = ['cashier', 'kitchen_staff', 'staff', 'owner', 'admin'];
+const VALID_ROLES = ['cashier', 'kitchen_staff'];
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,16 +91,15 @@ exports.createStaffAccount = async (req, res) => {
     if (!full_name || !email || !password || !role) {
       return res.status(400).json({ message: 'full_name, email, password, and role are required.' });
     }
+    // Hard block — admin accounts can never be created via this endpoint, no exceptions
+    if (role === 'admin') {
+      return res.status(403).json({ message: 'Admin accounts cannot be created through this interface.' });
+    }
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({ message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}.` });
     }
     if (password.length < 8) {
       return res.status(400).json({ message: 'Password must be at least 8 characters.' });
-    }
-
-    // Admin cannot create another admin through self-service UI
-    if (role === 'admin') {
-      return res.status(403).json({ message: 'Admin accounts cannot be created through this interface.' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();

@@ -3,12 +3,10 @@ import { adminAPI } from '../../services/api';
 import '../../styles/AdminPage.css';
 
 // ── constants ─────────────────────────────────────────────────────────────────
-const ROLES = ['cashier', 'kitchen_staff', 'staff', 'owner'];
+const ROLES = ['cashier', 'kitchen_staff'];
 const ROLE_LABELS = {
   cashier:       'Cashier',
   kitchen_staff: 'Kitchen Staff',
-  staff:         'Staff',
-  owner:         'Owner / Manager',
 };
 
 // ── tiny helpers ──────────────────────────────────────────────────────────────

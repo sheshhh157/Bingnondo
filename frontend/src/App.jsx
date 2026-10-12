@@ -155,13 +155,20 @@ export default function App() {
                 <Route path="settings"     element={<SystemSettings />} />
                 <Route path="audit"        element={<AuditLog />} />
                 <Route path="restrictions" element={<CustomerRestrictions />} />
+                {/* Manager-view pages embedded inside Admin (no redirect to /manager) */}
+                <Route path="dashboard"            element={<DashboardPage />} />
+                <Route path="sales"                element={<SalesReportPage />} />
+                <Route path="oversight/kitchen"    element={<OversightKitchen />} />
+                <Route path="oversight/stocks"     element={<OversightStocks />} />
+                <Route path="oversight/menu"       element={<OversightMenu />} />
+                <Route path="oversight/delivery"   element={<OversightDelivery />} />
               </Route>
 
-              {/* ── Manager/Owner ── */}
+              {/* ── Manager/Owner — admin can also view (read-only, no backend changes) ── */}
               <Route
                 path="/manager"
                 element={
-                  <ProtectedRoute allowedRoles={['manager', 'owner']}>
+                  <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
                     <ManagerLayout />
                   </ProtectedRoute>
                 }
