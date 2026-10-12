@@ -300,7 +300,7 @@ function OverrideModal({ open, onClose, customer, onSuccess, toast }) {
           </div>
         )}
 
-        <p style={{ fontSize: '0.6875rem', color: 'rgba(232,224,212,0.28)', lineHeight: 1.6 }}>
+        <p style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', lineHeight: 1.6 }}>
           All admin overrides are permanently logged to the audit trail with your account ID attached.
           Overrides cannot be silently reversed.
         </p>
@@ -322,7 +322,6 @@ function OverrideModal({ open, onClose, customer, onSuccess, toast }) {
 
 // ── Customer restriction row ────────────────────────────────────────
 function CustomerRow({ customer, onViewViolations, onOverride }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const violCount = customer.violation_count || 0;
 
   return (
@@ -355,41 +354,52 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
       <td><RestrictionBadge level={customer.restriction_level || 'none'} /></td>
 
       {/* Updated */}
-      <td style={{ fontSize: '0.75rem', color: 'rgba(232,224,212,0.4)', whiteSpace: 'nowrap' }}>
+      <td style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)', whiteSpace: 'nowrap' }}>
         {customer.updated_at
           ? new Date(customer.updated_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
-          : <span style={{ color: 'rgba(232,224,212,0.2)' }}>Auto</span>
+          : <span style={{ color: 'var(--color-muted-foreground)' }}>Auto</span>
         }
       </td>
 
       {/* Updated by */}
-      <td style={{ fontSize: '0.75rem', color: 'rgba(232,224,212,0.4)' }}>
+      <td style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)' }}>
         {customer.updated_by_name
           ? customer.updated_by_name
-          : <span style={{ color: 'rgba(232,224,212,0.2)' }}>System</span>
+          : <span style={{ color: 'var(--color-muted-foreground)' }}>System</span>
         }
       </td>
 
       {/* Actions */}
       <td className="ap-table__th--right">
-        <div className="ap-menu-wrap">
-          <Btn variant="ghost" size="icon" onClick={() => setMenuOpen(o => !o)} aria-label="Actions">
-            <span style={{ letterSpacing: '0.1em', fontSize: '1rem' }}>···</span>
-          </Btn>
-          {menuOpen && (
-            <>
-              <div className="ap-menu__backdrop" onClick={() => setMenuOpen(false)} />
-              <div className="ap-menu">
-                <button className="ap-menu__item" onClick={() => { setMenuOpen(false); onViewViolations(customer); }}>
-                  View violations
-                </button>
-                <div className="ap-menu__divider" />
-                <button className="ap-menu__item" onClick={() => { setMenuOpen(false); onOverride(customer); }}>
-                  Override restriction
-                </button>
-              </div>
-            </>
-          )}
+        <div className="cr-action-btns">
+          {/* View violations */}
+          <button
+            className="cr-action-btn cr-action-btn--history"
+            onClick={() => onViewViolations(customer)}
+            aria-label="View violation history"
+            title="View violation history"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </button>
+          {/* Override restriction */}
+          <button
+            className="cr-action-btn cr-action-btn--override"
+            onClick={() => onOverride(customer)}
+            aria-label="Override restriction"
+            title="Override restriction"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </button>
         </div>
       </td>
     </tr>
@@ -512,7 +522,7 @@ export default function CustomerRestrictions() {
             <div className="ap-loading"><Spinner size={24} /></div>
           ) : customers.length === 0 ? (
             <div className="ap-empty">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(232,224,212,0.15)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginBottom: 8 }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-border)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginBottom: 8 }}>
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
                 <polyline points="20 6 9 17 4 12" />

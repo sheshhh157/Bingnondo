@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { staffMenuAPI, inventoryAPI } from '../../services/api';
+import { staffMenuAPI, inventoryAPI, uploadAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import '../../styles/StaffMenuPage.css';
 
@@ -38,16 +38,29 @@ function Toggle({ checked, onChange, disabled, label, title }) {
 function ImageUpload({ value, onChange }) {
   const inputRef = useRef(null);
   const [preview, setPreview] = useState(value || null);
-  const [drag, setDrag] = useState(false);
+  const [drag, setDrag]       = useState(false);
+  const [fileErr, setFileErr] = useState('');
+
+  // Sync preview when value prop changes (e.g. editing existing item)
+  useEffect(() => { setPreview(value || null); }, [value]);
 
   const process = (file) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    if (file.size > 5 * 1024 * 1024) return;
+    setFileErr('');
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setFileErr('Only image files are allowed (JPG, PNG, WEBP).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setFileErr('Image is too large. Maximum size is 5MB.');
+      return;
+    }
     setPreview(URL.createObjectURL(file));
     onChange(file);
   };
 
   return (
+    <>
     <div
       className={`mn-upload${drag ? ' mn-upload--drag' : ''}`}
       onClick={() => inputRef.current.click()}
@@ -79,8 +92,10 @@ function ImageUpload({ value, onChange }) {
             <p className="mn-upload__hint">JPG, PNG · max 5MB</p>
           </div>
       }
-      <input ref={inputRef} type="file" accept="image/*" className="mn-upload__input" onChange={(e) => process(e.target.files[0])} />
+      <input ref={inputRef} type="file" accept="image/*" className="mn-upload__input" onChange={(e) => { process(e.target.files[0]); e.target.value = ''; }} />
     </div>
+    {fileErr && <p className="mn-upload__error" role="alert">{fileErr}</p>}
+    </>
   );
 }
 
@@ -313,10 +328,11 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
     category_id: item?.category_id || categories[0]?.id || '',
     is_available: item?.is_available ?? true,
   });
-  const [photoFile, setPhotoFile] = useState(null);
-  const [linked, setLinked] = useState(item?.ingredients || []);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [photoFile, setPhotoFile]       = useState(null);
+  const [uploadStatus, setUploadStatus] = useState('');
+  const [linked, setLinked]             = useState(item?.ingredients || []);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState('');
 
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -333,10 +349,30 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
     if (!form.price || Number(form.price) <= 0) { setError('Enter a valid price.'); return; }
     setLoading(true); setError('');
     try {
-      const image_url = photoFile ? `https://placehold.co/400x300?text=${encodeURIComponent(form.name)}` : (item?.image_url || null);
-      await onSave({ ...form, price: Number(form.price), image_url, ingredients: linked }, isEdit ? item.id : null);
+      let image_url    = item?.image_url || null;
+      let old_public_id = item?.image_public_id || null;
+
+      // Upload new photo to Cloudinary if the user picked one
+      if (photoFile) {
+        setUploadStatus('Uploading photo…');
+        const { data } = await uploadAPI.uploadMenuImage(photoFile);
+        image_url = data.url;
+
+        // Delete the old Cloudinary image to avoid dead storage
+        if (old_public_id) {
+          uploadAPI.deleteMenuImage(old_public_id).catch(() => {/* non-critical */});
+        }
+        old_public_id = data.public_id;
+        setUploadStatus('');
+      }
+
+      await onSave(
+        { ...form, price: Number(form.price), image_url, image_public_id: old_public_id, ingredients: linked },
+        isEdit ? item.id : null
+      );
       onClose();
     } catch (err) {
+      setUploadStatus('');
       setError(err.response?.data?.message || 'Failed to save item.');
     } finally { setLoading(false); }
   };
@@ -419,6 +455,12 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
         </form>
 
         <div className="mn-modal__footer">
+          {uploadStatus && (
+            <span className="mn-upload__status" aria-live="polite">
+              <span className="mn-spinner mn-spinner--sm" aria-hidden="true" />
+              {uploadStatus}
+            </span>
+          )}
           <button type="button" className="mn-btn mn-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
           <button type="submit" form="mn-form" className="mn-btn mn-btn--primary" disabled={loading} aria-busy={loading}>
             {loading ? <span className="mn-spinner" aria-label="Saving…" /> : isEdit ? 'Save changes' : 'Add item'}

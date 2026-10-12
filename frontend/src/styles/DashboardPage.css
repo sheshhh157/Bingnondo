@@ -133,7 +133,7 @@
   border-radius: 99px;
   padding: 2px 8px;
 }
-.dash-feed__tag--info { background: #E8EFFB; color: #1D4ED8; }
+.dash-feed__tag--info { background: color-mix(in srgb, var(--color-primary) 10%, white); color: var(--color-primary); }
 .dash-feed__tag--success { background: #E8F3EA; color: #1A7F37; }
 .dash-feed__tag--muted { background: var(--color-surface); color: var(--color-muted-foreground); }
 .dash-feed__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-muted-foreground); }

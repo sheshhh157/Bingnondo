@@ -12,6 +12,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding-top: 48px; /* compensate for fixed .c-header height */
 }
 
 /* ─── Workspace (Order view) ─────────────────────────────────────────── */
@@ -67,7 +68,7 @@
 
 .cashier-search:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(185,28,28,0.08);
+  box-shadow: 0 0 0 3px rgba(127,29,29,0.12);
 }
 
 /* Category tabs */

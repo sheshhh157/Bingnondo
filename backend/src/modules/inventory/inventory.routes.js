@@ -5,7 +5,8 @@ const ctrl = require('./inventory.controller');
 
 // All inventory routes are staff-only
 const staffAccess = [authenticateToken, requireStaff];
-const staffWrite  = [authenticateToken, requireStaff, requireRoles('staff', 'owner', 'admin')];
+// 'cashier' added — cashier can now restock/adjust inventory via the Staff Portal tab
+const staffWrite  = [authenticateToken, requireStaff, requireRoles('cashier', 'staff', 'owner', 'admin')];
 
 // POST /api/inventory/:id/out-of-stock  — force to 0 + cascade menu unavailability
 router.post('/:id/out-of-stock', ...staffWrite, ctrl.outOfStock);

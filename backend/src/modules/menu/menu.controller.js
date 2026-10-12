@@ -20,6 +20,7 @@ async function _getEnrichedItem(id) {
          mi.description,
          mi.price,
          mi.image_url,
+         mi.image_public_id,
          mi.is_available,
          mi.created_at,
          mi.updated_at
@@ -106,6 +107,7 @@ async function getStaffMenu(req, res, next) {
           mi.description,
           mi.price,
           mi.image_url,
+          mi.image_public_id,
           mi.is_available,
           mi.created_at,
           mi.updated_at
@@ -174,24 +176,25 @@ async function createMenuItem(req, res, next) {
     const {
       name,
       price,
-      description = null,
+      description    = null,
       category_id,
-      is_available = true,
-      image_url = null,
-      ingredients = [],
+      is_available   = true,
+      image_url      = null,
+      image_public_id = null,
+      ingredients    = [],
     } = req.body;
 
-    if (!name?.trim())            return res.status(400).json({ message: 'Item name is required.' });
+    if (!name?.trim())                return res.status(400).json({ message: 'Item name is required.' });
     if (!price || Number(price) <= 0) return res.status(400).json({ message: 'A valid price is required.' });
-    if (!category_id)             return res.status(400).json({ message: 'Category is required.' });
+    if (!category_id)                 return res.status(400).json({ message: 'Category is required.' });
 
     await client.query('BEGIN');
 
     const itemRes = await client.query(
-      `INSERT INTO menu_items (category_id, name, description, price, image_url, is_available)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO menu_items (category_id, name, description, price, image_url, image_public_id, is_available)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-      [category_id, name.trim(), description, Number(price), image_url, is_available]
+      [category_id, name.trim(), description, Number(price), image_url, image_public_id, is_available]
     );
     const newId = itemRes.rows[0].id;
 
@@ -227,7 +230,7 @@ async function updateMenuItem(req, res, next) {
   const client = await db.getClient();
   try {
     const { id } = req.params;
-    const { name, price, description, category_id, is_available, image_url, ingredients } = req.body;
+    const { name, price, description, category_id, is_available, image_url, image_public_id, ingredients } = req.body;
 
     const existing = await db.query('SELECT id FROM menu_items WHERE id = $1', [id]);
     if (existing.rows.length === 0) return res.status(404).json({ message: 'Menu item not found.' });
@@ -241,12 +244,13 @@ async function updateMenuItem(req, res, next) {
     const sets = [];
     const params = [];
     let n = 1;
-    if (name        !== undefined) { sets.push(`name = $${n++}`);         params.push(name.trim()); }
-    if (price       !== undefined) { sets.push(`price = $${n++}`);        params.push(Number(price)); }
-    if (description !== undefined) { sets.push(`description = $${n++}`);  params.push(description); }
-    if (category_id !== undefined) { sets.push(`category_id = $${n++}`);  params.push(category_id); }
-    if (is_available!== undefined) { sets.push(`is_available = $${n++}`); params.push(is_available); }
-    if (image_url   !== undefined) { sets.push(`image_url = $${n++}`);    params.push(image_url); }
+    if (name            !== undefined) { sets.push(`name = $${n++}`);             params.push(name.trim()); }
+    if (price           !== undefined) { sets.push(`price = $${n++}`);            params.push(Number(price)); }
+    if (description     !== undefined) { sets.push(`description = $${n++}`);      params.push(description); }
+    if (category_id     !== undefined) { sets.push(`category_id = $${n++}`);      params.push(category_id); }
+    if (is_available    !== undefined) { sets.push(`is_available = $${n++}`);     params.push(is_available); }
+    if (image_url       !== undefined) { sets.push(`image_url = $${n++}`);        params.push(image_url); }
+    if (image_public_id !== undefined) { sets.push(`image_public_id = $${n++}`);  params.push(image_public_id); }
 
     if (sets.length > 0) {
       sets.push(`updated_at = NOW()`);
@@ -338,19 +342,28 @@ async function deleteMenuItem(req, res, next) {
   try {
     const result = await db.query(
       `UPDATE menu_items
-       SET is_deleted  = TRUE,
+       SET is_deleted   = TRUE,
            is_available = FALSE,
-           deleted_at  = NOW()
+           deleted_at   = NOW()
        WHERE id = $1 AND is_deleted = FALSE
-       RETURNING id, name`,
+       RETURNING id, name, image_public_id`,
       [req.params.id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Menu item not found.' });
     }
 
+    // Clean up Cloudinary image (non-blocking — deletion failure shouldn't break the response)
+    const { image_public_id } = result.rows[0];
+    if (image_public_id) {
+      const { cloudinary } = require('../../config/cloudinary');
+      cloudinary.uploader.destroy(image_public_id).catch((err) => {
+        console.error('[cloudinary] Failed to delete image on item delete:', err.message);
+      });
+    }
+
     if (_io) _io.emit('menu_item_deleted', { id: result.rows[0].id });
-    res.json({ message: 'Menu item removed.', deleted: result.rows[0] });
+    res.json({ message: 'Menu item removed.', deleted: { id: result.rows[0].id, name: result.rows[0].name } });
   } catch (err) {
     next(err);
   }

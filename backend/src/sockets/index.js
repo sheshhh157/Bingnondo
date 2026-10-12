@@ -213,6 +213,51 @@ function emitDeliveryUpdate(delivery) {
   _io.to('staff').to('manager').emit('delivery:update', delivery);
 }
 
+// ─── §4.0 Payment Verification Events ────────────────────────────────────────
+
+/**
+ * emitPaymentPending
+ * Customer uploaded a GCash receipt → staff payment queue updates in real time.
+ * @param {{ orderId, orderNumber, customerId, customerName, totalAmount }} payload
+ */
+function emitPaymentPending(payload) {
+  if (!_io) return;
+  _io.to('staff').to('manager').emit('payment:pending', payload);
+  console.log(`[socket] → payment:pending: ${payload.orderNumber}`);
+}
+
+/**
+ * emitPaymentVerified
+ * Staff verified receipt → customer app notified (order is now confirmed).
+ * @param {{ orderId, orderNumber, customerId }} payload
+ */
+function emitPaymentVerified(payload) {
+  if (!_io) return;
+  // Staff & manager: remove the row from their queue
+  _io.to('staff').to('manager').emit('payment:verified', payload);
+  // Customer: their order is now confirmed (mobile app listens for this)
+  if (payload.customerId) {
+    _io.to(`customer:${payload.customerId}`).emit('payment:verified', payload);
+  }
+  console.log(`[socket] → payment:verified: ${payload.orderNumber}`);
+}
+
+/**
+ * emitPaymentRejected
+ * Staff rejected receipt → customer notified to re-upload.
+ * @param {{ orderId, customerId, reason }} payload
+ */
+function emitPaymentRejected(payload) {
+  if (!_io) return;
+  // Staff & manager: update row status in the queue in real time
+  _io.to('staff').to('manager').emit('payment:rejected', payload);
+  // Customer: prompt re-upload on mobile app
+  if (payload.customerId) {
+    _io.to(`customer:${payload.customerId}`).emit('payment:rejected', payload);
+  }
+  console.log(`[socket] → payment:rejected: order ${payload.orderId}`);
+}
+
 module.exports = {
   setIO,
   emitNewOrder,
@@ -223,4 +268,7 @@ module.exports = {
   emitKitchenAlert,
   emitKitchenAlertAck,
   emitDeliveryUpdate,
+  emitPaymentPending,
+  emitPaymentVerified,
+  emitPaymentRejected,
 };

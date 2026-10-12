@@ -45,13 +45,31 @@ function timeAgo(iso) {
 }
 
 // ─── Assign Modal ─────────────────────────────────────────────────────────────
+// Supports two modes:
+//   1. Registered rider — select from dropdown (rider_id sent to backend)
+//   2. Ad-hoc — enter name + contact manually (rider_id stays NULL)
 function AssignModal({ delivery, onClose, onAssign }) {
-  const isLalamove = delivery.delivery_preference === 'lalamove';
+  const [mode,          setMode]         = useState('registered'); // 'registered' | 'adhoc'
+  const [riders,        setRiders]       = useState([]);
+  const [ridersLoading, setRidersLoading] = useState(true);
+  const [selectedId,    setSelectedId]   = useState('');
+  const [riderName,     setRiderName]    = useState('');
+  const [riderContact,  setRiderContact] = useState('');
+  const [loading,       setLoading]      = useState(false);
+  const [error,         setError]        = useState('');
 
-  const [riderName,    setRiderName]    = useState('');
-  const [riderContact, setRiderContact] = useState('');
-  const [loading,      setLoading]      = useState(false);
-  const [error,        setError]        = useState('');
+  // Load available riders on mount
+  useEffect(() => {
+    deliveryAPI.getAvailableRiders()
+      .then((data) => {
+        const list = data?.riders || data?.data?.riders || [];
+        setRiders(list);
+        // If no registered riders available, default to ad-hoc
+        if (list.length === 0) setMode('adhoc');
+      })
+      .catch(() => setMode('adhoc'))
+      .finally(() => setRidersLoading(false));
+  }, []);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -62,22 +80,34 @@ function AssignModal({ delivery, onClose, onAssign }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!isLalamove) {
+    setError('');
+
+    if (mode === 'registered') {
+      if (!selectedId) { setError('Please select a rider.'); return; }
+    } else {
       if (!riderName.trim())    { setError('Rider name is required.');    return; }
       if (!riderContact.trim()) { setError('Rider contact is required.'); return; }
     }
-    setLoading(true); setError('');
+
+    setLoading(true);
     try {
-      await onAssign(delivery.id, {
-        delivery_preference: delivery.delivery_preference,
-        rider_name:    isLalamove ? null : riderName.trim(),
-        rider_contact: isLalamove ? null : riderContact.trim(),
-      });
+      const payload = mode === 'registered'
+        ? { rider_id: parseInt(selectedId, 10) }
+        : { rider_name: riderName.trim(), rider_contact: riderContact.trim() };
+
+      await onAssign(delivery.id, payload);
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Assignment failed. Try again.');
+      setError(err.response?.data?.message || err.message || 'Assignment failed. Try again.');
     } finally { setLoading(false); }
   };
+
+  // Order summary values
+  const orderNum     = delivery.order_number || delivery.order?.order_number || `#${delivery.order_id}`;
+  const customerName = delivery.customer_name || delivery.order?.customer_name || 'Customer';
+  const address      = delivery.customer_address || delivery.order?.customer_address || 'No address on file';
+  const items        = (delivery.order_items || delivery.order?.order_items || [])
+    .map((i) => `${i.quantity}× ${i.menu_item?.name || i.name}`).join(', ');
 
   return (
     <div className="dl-overlay" onClick={onClose}>
@@ -95,24 +125,61 @@ function AssignModal({ delivery, onClose, onAssign }) {
           {/* Order summary */}
           <div className="dl-modal__order-card">
             <div className="dl-modal__order-row">
-              <span className="dl-modal__order-num">{delivery.order?.order_number}</span>
-              <PrefBadge pref={delivery.delivery_preference} />
+              <span className="dl-modal__order-num">{orderNum}</span>
             </div>
-            <p className="dl-modal__order-customer">
-              {delivery.order?.customer_name || 'Customer'} · {delivery.order?.customer_address || 'No address on file'}
-            </p>
-            <p className="dl-modal__order-items">
-              {delivery.order?.order_items?.map((i) => `${i.quantity}× ${i.menu_item.name}`).join(', ')}
-            </p>
+            <p className="dl-modal__order-customer">{customerName} · {address}</p>
+            {items && <p className="dl-modal__order-items">{items}</p>}
+          </div>
+
+          {/* Mode toggle */}
+          <div className="dl-mode-toggle" role="group" aria-label="Assignment method">
+            <button
+              type="button"
+              className={`dl-mode-btn${mode === 'registered' ? ' dl-mode-btn--active' : ''}`}
+              onClick={() => { setMode('registered'); setError(''); }}
+            >
+              Registered rider
+            </button>
+            <button
+              type="button"
+              className={`dl-mode-btn${mode === 'adhoc' ? ' dl-mode-btn--active' : ''}`}
+              onClick={() => { setMode('adhoc'); setError(''); }}
+            >
+              Ad-hoc (manual)
+            </button>
           </div>
 
           <form id="assign-form" onSubmit={handleSubmit} noValidate>
-            {isLalamove ? (
-              <div className="dl-info-box">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                <p>This will trigger a Lalamove booking. A tracking ID will be saved automatically once confirmed.</p>
+            {mode === 'registered' ? (
+              <div className="dl-fields">
+                <div className="dl-field">
+                  <label htmlFor="rider-select" className="dl-field__label">Select rider *</label>
+                  {ridersLoading ? (
+                    <div className="dl-field__loading">Loading available riders…</div>
+                  ) : riders.length === 0 ? (
+                    <div className="dl-info-box">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                      <p>No available riders right now. Use ad-hoc assignment instead.</p>
+                    </div>
+                  ) : (
+                    <select
+                      id="rider-select"
+                      className="dl-field__input dl-field__select"
+                      value={selectedId}
+                      onChange={(e) => { setSelectedId(e.target.value); setError(''); }}
+                      autoFocus
+                    >
+                      <option value="">— Choose a rider —</option>
+                      {riders.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.full_name}{r.plate_number ? ` · ${r.plate_number}` : ''} ({r.mobile_number})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="dl-fields">
@@ -157,11 +224,8 @@ function AssignModal({ delivery, onClose, onAssign }) {
 
         <div className="dl-modal__footer">
           <button className="dl-btn dl-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
-          <button className="dl-btn dl-btn--primary" form="assign-form" type="submit" disabled={loading} aria-busy={loading}>
-            {loading
-              ? <span className="dl-spinner" aria-label="Saving…" />
-              : isLalamove ? 'Book Lalamove' : 'Assign rider'
-            }
+          <button className="dl-btn dl-btn--primary" form="assign-form" type="submit" disabled={loading || (mode === 'registered' && ridersLoading)} aria-busy={loading}>
+            {loading ? <span className="dl-spinner" aria-label="Saving…" /> : 'Assign rider'}
           </button>
         </div>
       </div>
@@ -371,20 +435,40 @@ const TABS = [
   { key: 'all',                label: 'All' },
 ];
 
+// Backend returns flat rows — normalize into the nested shape the UI expects:
+//   delivery.order.order_number, delivery.order.customer_name, etc.
+function normalizeDelivery(d) {
+  return {
+    ...d,
+    order: {
+      order_number:     d.order_number,
+      order_status:     d.order_status,
+      total_amount:     d.total_amount,
+      created_at:       d.created_at,
+      special_request:  d.special_request,
+      customer_name:    d.customer_name,
+      customer_contact: d.customer_contact,
+      customer_address: d.customer_address,
+      order_items:      d.order_items || [],
+    },
+  };
+}
+
 export default function DeliveryPage() {
   const [deliveries, setDeliveries]   = useState([]);
   const [loading,    setLoading]      = useState(true);
   const [error,      setError]        = useState('');
   const [activeTab,  setActiveTab]    = useState('pending_assignment');
   const [assignModal,   setAssignModal]   = useState(null);
-  const [statusModal,   setStatusModal]   = useState(null); // { delivery, nextStatus }
+  const [statusModal,   setStatusModal]   = useState(null);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchAll = useCallback(async () => {
     try {
       setError('');
-      const { data } = await deliveryAPI.getAll();
-      setDeliveries(data.deliveries || data);
+      const data = await deliveryAPI.getAll();
+      const raw = data?.deliveries || data?.data?.deliveries || [];
+      setDeliveries(raw.map(normalizeDelivery));
     } catch {
       setError('Failed to load deliveries. Please try again.');
     } finally { setLoading(false); }
@@ -402,7 +486,7 @@ export default function DeliveryPage() {
 
     const onDeliveryUpdate = (updated) => {
       setDeliveries((prev) =>
-        prev.map((d) => d.id === updated.id ? { ...d, ...updated } : d)
+        prev.map((d) => d.id === updated.id ? normalizeDelivery({ ...d, ...updated }) : d)
       );
     };
 
@@ -416,7 +500,7 @@ export default function DeliveryPage() {
 
   const handleAssign = useCallback(async (id, payload) => {
     await deliveryAPI.assign(id, payload);
-    showToast(payload.delivery_preference === 'lalamove' ? 'Lalamove booked.' : 'Rider assigned.');
+    showToast('Rider assigned.');
     await fetchAll();
   }, [fetchAll, showToast]);
 

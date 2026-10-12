@@ -13,20 +13,21 @@
  * index.css); these --al-* vars stay private to the admin shell.
  * ─────────────────────────────────────────────────────────────────── */
 .al-root {
-  --al-sidebar-bg:        var(--color-card);
-  --al-sidebar-surface:   var(--color-surface);
-  --al-sidebar-hover:     var(--color-muted);
-  --al-sidebar-border:    #2A271E;
-  --al-sidebar-border-hi: var(--color-gold);
-  --al-sidebar-active-bg: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  --al-sidebar-active-bar: var(--color-primary);
-  --al-sidebar-gold:      var(--color-gold);
-  --al-sidebar-fg:        var(--color-muted-foreground);
-  --al-sidebar-fg-active: var(--color-foreground);
-  --al-content-bg:        var(--color-background);
-  --al-card-bg:           var(--color-card);
-  --al-card-border:       var(--color-border);
-  --al-card-border-hi:    #3A3628;
+  /* Dark maroon sidebar — matches Cashier/Manager pattern */
+  --al-sidebar-bg:         #5C0A14;
+  --al-sidebar-bg-hover:   #7F1D1D;
+  --al-sidebar-surface:    rgba(127,29,29,0.25);
+  --al-sidebar-border:     rgba(159,38,38,0.6);
+  --al-sidebar-border-hi:  rgba(217,119,6,0.5);
+  --al-sidebar-active-bg:  rgba(217,119,6,0.18);
+  --al-sidebar-active-bar: #F59E0B;
+  --al-sidebar-gold:       #D97706;
+  --al-sidebar-fg:         rgba(255,251,235,0.55);
+  --al-sidebar-fg-active:  #FFFbeb;
+  --al-content-bg:         var(--color-background);
+  --al-card-bg:            var(--color-card);
+  --al-card-border:        var(--color-border);
+  --al-card-border-hi:     var(--color-border-strong);
 }
 
 /* ─── Desktop Sidebar (≥1024px) ────────────────────────────────────── */
@@ -129,7 +130,7 @@
 .al-brand__station {
   font-size: 0.625rem;
   font-weight: 500;
-  color: rgba(232,224,212,0.35);
+  color: rgba(255,251,235,0.38);
   letter-spacing: 0.12em;
   line-height: 1;
 }
@@ -155,7 +156,7 @@
   position: relative;
 }
 .al-nav__link:hover {
-  background: var(--al-sidebar-hover);
+  background: var(--al-sidebar-bg-hover);
   color: var(--al-sidebar-fg-active);
 }
 .al-nav__link--active {
@@ -190,11 +191,11 @@
 }
 .al-nav__sub {
   font-size: 0.6875rem;
-  color: rgba(232,224,212,0.3);
+  color: rgba(255,251,235,0.35);
   line-height: 1.2;
 }
 .al-nav__link--active .al-nav__sub {
-  color: rgba(232,224,212,0.5);
+  color: rgba(255,251,235,0.55);
 }
 .al-nav__pip {
   position: absolute;
@@ -221,22 +222,22 @@
   align-items: center;
   gap: 9px;
   padding: 8px 10px;
-  background: rgba(192,57,43,0.08);
-  border: 1px solid rgba(192,57,43,0.18);
+  background: rgba(127,29,29,0.10);
+  border: 1px solid rgba(127,29,29,0.22);
   border-radius: 2px;
 }
 .al-user__avatar {
   width: 28px;
   height: 28px;
   border-radius: 2px;
-  background: rgba(192,57,43,0.18);
-  border: 1px solid rgba(192,57,43,0.3);
+  background: rgba(127,29,29,0.22);
+  border: 1px solid rgba(127,29,29,0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.75rem;
   font-weight: 600;
-  color: rgba(232,224,212,0.8);
+  color: rgba(255,251,235,0.85);
   flex-shrink: 0;
 }
 .al-user__info {
@@ -265,18 +266,18 @@
   width: 100%;
   padding: 7px 10px;
   background: none;
-  border: 1px solid rgba(232,224,212,0.08);
+  border: 1px solid rgba(255,251,235,0.08);
   border-radius: 2px;
-  color: rgba(232,224,212,0.35);
+  color: rgba(255,251,235,0.38);
   font-family: var(--font-body);
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 120ms ease;
 }
 .al-user__logout:hover {
-  background: rgba(192,57,43,0.10);
-  border-color: rgba(192,57,43,0.25);
-  color: rgba(232,224,212,0.6);
+  background: rgba(127,29,29,0.12);
+  border-color: rgba(127,29,29,0.30);
+  color: rgba(255,251,235,0.65);
 }
 
 /* ─── Compact (tablet) nav ───────────────────────────────────────────── */
@@ -311,12 +312,12 @@
   transition: all 120ms ease;
 }
 .al-compact__link:hover {
-  background: var(--al-sidebar-hover);
+  background: var(--al-sidebar-bg-hover);
   color: var(--al-sidebar-fg-active);
 }
 .al-compact__link--active {
   background: var(--al-sidebar-active-bg);
-  border-color: rgba(192,57,43,0.3);
+  border-color: rgba(127,29,29,0.35);
   color: var(--al-sidebar-active-bar);
 }
 .al-compact__logout {
@@ -350,7 +351,7 @@
 .al-topbar__menu {
   background: none;
   border: none;
-  color: rgba(232,224,212,0.55);
+  color: rgba(255,251,235,0.6);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -361,7 +362,7 @@
 .al-drawer-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.72);
+  background: rgba(92,10,20,0.55);
   z-index: 200;
   display: flex;
 }
@@ -381,7 +382,7 @@
   right: 12px;
   background: none;
   border: none;
-  color: rgba(232,224,212,0.4);
+  color: rgba(255,251,235,0.45);
   cursor: pointer;
   padding: 4px;
   display: flex;

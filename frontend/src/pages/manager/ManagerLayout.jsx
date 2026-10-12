@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocketContext, useSocketEvent } from '../../context/SocketContext';
 import { useToast } from '../../context/ToastContext';
-import DashboardSwitcher from '../../components/DashboardSwitcher';
 import useLiveData from '../../hooks/useLiveData';
 import { timeStamp } from '../../utils/format';
 import { OPERATIONAL_INITIAL, fetchOperationalSnapshot, OPERATIONAL_EVENTS, stockCounts, queueTone, useNow } from './managerData';
@@ -113,6 +112,18 @@ export default function ManagerLayout() {
         <div className="ml-compact__brand">
           <img src={logo} alt="Bingnondo logo" width="28" height="28" />
         </div>
+        {user?.role === 'admin' && (
+          <Link
+            to="/admin/accounts"
+            className="ml-compact__back-admin"
+            title="Back to Admin Console"
+            aria-label="Back to Admin Console"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+            </svg>
+          </Link>
+        )}
         <nav className="ml-compact__nav">
           {SECTIONS.flatMap((s) => s.links).map(({ to, label, icon }) => (
             <NavLink
@@ -150,8 +161,6 @@ export default function ManagerLayout() {
           <span className="ml-topbar__name">Bingnondo</span>
         </div>
         <ConnPill connected={connected} />
-        {/* Dashboard switcher in mobile topbar */}
-        <DashboardSwitcher variant="light" context="header" />
         <button
           className="ml-topbar__menu"
           onClick={() => setDrawerOpen(true)}
@@ -218,11 +227,6 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
         </div>
       </div>
 
-      {/* Dashboard switcher — below brand, above nav */}
-      <div style={{ padding: '4px 0 8px' }}>
-        <DashboardSwitcher variant="light" context="sidebar" />
-      </div>
-
       <nav className="ml-nav" aria-label="Manager navigation">
         {SECTIONS.map((section) => (
           <div key={section.label} className="ml-section">
@@ -265,17 +269,23 @@ function SidebarInner({ user, badges, onLogout, onNav }) {
 
       {/* User + dashboard switcher + logout */}
       <div className="ml-user">
+        {/* Back to Admin — only visible when an admin is viewing manager pages */}
+        {user?.role === 'admin' && (
+          <Link to="/admin/accounts" className="ml-user__back-to-admin" aria-label="Back to Admin Console">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+            </svg>
+            Back to Admin Console
+          </Link>
+        )}
+
         <div className="ml-user__card">
           <div className="ml-user__avatar" aria-hidden="true">
             {user?.full_name?.[0]?.toUpperCase() || 'M'}
           </div>
           <div className="ml-user__info">
             <span className="ml-user__name">{user?.full_name || 'Manager'}</span>
-            <span className="ml-user__role">
-              {user?.home_role && user.home_role !== user.role
-                ? `Manager (switched)`
-                : user?.role || 'manager'}
-            </span>
+            <span className="ml-user__role">{user?.role || 'manager'}</span>
           </div>
         </div>
 

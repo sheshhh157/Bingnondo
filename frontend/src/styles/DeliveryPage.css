@@ -291,3 +291,11 @@
 @media (prefers-reduced-motion: reduce) {
   .dl-root, .dl-card, .dl-modal, .dl-overlay, .dl-confirm, .dl-toast { animation: none; }
 }
+/* ─── Assign Modal: mode toggle ──────────────────────────────────────── */
+.dl-mode-toggle { display: flex; gap: 0; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 16px; }
+.dl-mode-btn { flex: 1; padding: 8px 12px; font-family: var(--font-body); font-size: 0.8125rem; font-weight: 500; background: transparent; border: none; cursor: pointer; color: var(--color-muted-foreground); transition: background 0.15s, color 0.15s; }
+.dl-mode-btn + .dl-mode-btn { border-left: 1px solid var(--color-border); }
+.dl-mode-btn--active { background: var(--color-primary); color: var(--color-primary-foreground); }
+.dl-mode-btn:hover:not(.dl-mode-btn--active) { background: var(--color-muted); }
+.dl-field__select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; }
+.dl-field__loading { font-family: var(--font-body); font-size: 0.875rem; color: var(--color-muted-foreground); padding: 10px 0; }

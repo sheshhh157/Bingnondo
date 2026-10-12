@@ -1,5 +1,6 @@
 /* ─── Google Fonts ───────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display+SC:wght@400;700;900&family=Karla:wght@300;400;500;600;700&display=swap');
 @import './styles/components.css';
 
 /* ─── Design Tokens — Bingnondo Chinese Heritage ─────────────────────── */
@@ -161,29 +162,64 @@ button, input, textarea, select { font-family: var(--font-body); }
  * Border:   Iron Hairline    #262218
  * ─────────────────────────────────────────────────────────────────────── */
 .al-root {
-  --color-primary:          #C0392B;
-  --color-on-primary:       #F5EAE4;
-  --color-secondary:        #D94A3C;
-  --color-on-secondary:     #F5EAE4;
-  --color-accent:           #C9963C;
-  --color-on-accent:        #1A1410;
-  --color-gold:             #C9963C;
-  --color-gold-light:       #E8B84B;
-  --color-background:       #0D0D0D;
-  --color-foreground:       #E8E0D4;
-  --color-card:             #181510;
-  --color-card-foreground:  #E8E0D4;
-  --color-muted:            #211F18;
-  --color-muted-foreground: rgba(232,224,212,0.45);
-  --color-border:           #262218;
-  --color-border-strong:    #2E2B22;
-  --color-destructive:      #E06050;
-  --color-on-destructive:   #1A0A00;
-  --color-ring:             #C9963C;
-  --color-surface:          #1A1710;
+  /* ── Bingnondo Admin — Deep Maroon / Lantern Gold / Warm Ivory ──────
+   * Brand:   Deep Maroon  #7F1D1D / #5C0A14 / #9F2626
+   * Gold:    Amber Gold   #D97706 / #F59E0B / #FDE68A  — lantern glow
+   * Surface: Warm Ivory   #FDF6E3 (bg) / #FFFFFF (cards) / #FEF3C7
+   * Text:    Dark maroon-brown hierarchy
+   * Status:  green #15803D / red #DC2626 / warning = gold #D97706
+   * ──────────────────────────────────────────────────────────────────── */
+  --color-primary:          #7F1D1D;
+  --color-primary-mid:      #5C0A14;
+  --color-primary-bright:   #9F2626;
+  --color-on-primary:       #FFFbeb;
+  --color-secondary:        #78350F;
+  --color-on-secondary:     #FFFbeb;
+  --color-accent:           #D97706;
+  --color-on-accent:        #3B0A0A;
+  --color-gold:             #D97706;
+  --color-gold-mid:         #F59E0B;
+  --color-gold-light:       #FDE68A;
+  --color-background:       #FDF6E3;
+  --color-foreground:       #3B0A0A;
+  --color-card:             #FFFFFF;
+  --color-card-foreground:  #3B0A0A;
+  --color-muted:            #FEF3C7;
+  --color-muted-foreground: #7C4A2A;
+  --color-border:           #E9C998;
+  --color-border-strong:    #C9A262;
+  --color-destructive:      #DC2626;
+  --color-on-destructive:   #FFFbeb;
+  --color-success:          #15803D;
+  --color-ring:             #D97706;
+  --color-surface:          #FEF3C7;
 
-  /* Shadows — re-inked in night ink */
-  --shadow-sm:  0 1px 4px rgba(0,0,0,0.45);
-  --shadow-md:  0 4px 16px rgba(0,0,0,0.50);
-  --shadow-lg:  0 12px 40px rgba(0,0,0,0.60);
+  --font-heading: 'Playfair Display SC', Georgia, 'Times New Roman', serif;
+  --font-body:    'Karla', system-ui, sans-serif;
+
+  /* Shadows — warm maroon-tinted */
+  --shadow-sm:  0 1px 4px rgba(63,5,5,0.08);
+  --shadow-md:  0 4px 16px rgba(63,5,5,0.12);
+  --shadow-lg:  0 12px 40px rgba(63,5,5,0.16);
+}
+/* ─── Manager Theme — Bingnondo Deep Maroon / Lantern Gold ─────────────
+ * Scoped to .ml-root (ManagerLayout).
+ *
+ * Brand (Primary): Deep Maroon  #7F1D1D / #5C0A14 / #9F2626
+ * Gold (Accent):   Amber Gold   #D97706 / #F59E0B / #FDE68A  — lantern glow
+ * Surface:         Warm Ivory   #FDF6E3 (bg) / #FFFFFF (cards) / #FEF3C7
+ * Text:            Dark Maroon-Brown hierarchy
+ * Status:          green #15803D / red #DC2626 / warning = gold #D97706
+ * Typography:      Playfair Display SC (headings) + Karla (body)
+ * ─────────────────────────────────────────────────────────────────────── */
+.ml-root {
+  --font-heading: 'Playfair Display SC', Georgia, 'Times New Roman', serif;
+  --font-body:    'Karla', system-ui, sans-serif;
+
+  /* Shadows — warm maroon-tinted */
+  --shadow-sm:  0 1px 4px rgba(63,5,5,0.08);
+  --shadow-md:  0 4px 16px rgba(63,5,5,0.12);
+  --shadow-lg:  0 12px 40px rgba(63,5,5,0.16);
+
+  font-family: var(--font-body);
 }

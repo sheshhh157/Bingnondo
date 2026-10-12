@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { DashboardIcon, SalesIcon, KitchenIcon, StocksIcon, DeliveryIcon, MenuIcon } from '../manager/managerIcons';
 import logo from '../../assets/logo.png';
 import '../../styles/AdminLayout.css';
 
@@ -15,6 +16,20 @@ const NAV = [
         <circle cx="9" cy="7" r="4"/>
         <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
         <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/riders',
+    label: 'Riders',
+    sub: 'Manage rider accounts',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v4l3 3"/>
+        <path d="M5 3 2 6l3 3"/>
+        <path d="m19 3 3 3-3 3"/>
+        <path d="M2 6h20"/>
       </svg>
     ),
   },
@@ -56,6 +71,15 @@ const NAV = [
   },
 ];
 
+const MANAGER_NAV = [
+  { to: '/admin/dashboard',          label: 'Dashboard',     sub: 'Analytics at a glance',   icon: <DashboardIcon /> },
+  { to: '/admin/sales',              label: 'Sales Reports', sub: 'Revenue & transactions',   icon: <SalesIcon /> },
+  { to: '/admin/oversight/kitchen',  label: 'Kitchen',       sub: 'Counter & online queues',  icon: <KitchenIcon /> },
+  { to: '/admin/oversight/stocks',   label: 'Stocks',        sub: 'Reorder alerts',           icon: <StocksIcon /> },
+  { to: '/admin/oversight/menu',     label: 'Menu',          sub: 'Item availability',        icon: <MenuIcon /> },
+  { to: '/admin/oversight/delivery', label: 'Delivery',      sub: 'Track progress',           icon: <DeliveryIcon /> },
+];
+
 export default function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -77,8 +101,9 @@ export default function AdminLayout() {
         </div>
       </div>
 
-      {/* Nav */}
+      {/* Admin Nav */}
       <nav className="al-nav" aria-label="Admin navigation">
+        <span className="al-nav__section-label">Admin Controls</span>
         {NAV.map(({ to, label, sub, icon }) => (
           <NavLink
             key={to}
@@ -86,6 +111,37 @@ export default function AdminLayout() {
             onClick={onNav}
             className={({ isActive }) =>
               `al-nav__link${isActive ? ' al-nav__link--active' : ''}`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span className={`al-nav__icon${isActive ? ' al-nav__icon--active' : ''}`}>{icon}</span>
+                <span className="al-nav__labels">
+                  <span className="al-nav__label">{label}</span>
+                  <span className="al-nav__sub">{sub}</span>
+                </span>
+                {isActive && <span className="al-nav__pip" aria-hidden="true" />}
+              </>
+            )}
+          </NavLink>
+        ))}
+
+        {/* Manager View divider */}
+        <div className="al-nav__divider" aria-hidden="true" />
+        <span className="al-nav__section-label al-nav__section-label--manager">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          Manager View
+        </span>
+        {MANAGER_NAV.map(({ to, label, sub, icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={onNav}
+            className={({ isActive }) =>
+              `al-nav__link al-nav__link--manager${isActive ? ' al-nav__link--active' : ''}`
             }
           >
             {({ isActive }) => (
@@ -147,6 +203,20 @@ export default function AdminLayout() {
                 `al-compact__link${isActive ? ' al-compact__link--active' : ''}`
               }
               aria-label={label}
+            >
+              {icon}
+            </NavLink>
+          ))}
+          <div className="al-compact__divider" aria-hidden="true" />
+          {MANAGER_NAV.map(({ to, label, icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              title={`[Manager] ${label}`}
+              className={({ isActive }) =>
+                `al-compact__link al-compact__link--manager${isActive ? ' al-compact__link--active' : ''}`
+              }
+              aria-label={`Manager: ${label}`}
             >
               {icon}
             </NavLink>

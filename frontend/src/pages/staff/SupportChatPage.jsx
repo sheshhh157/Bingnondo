@@ -41,6 +41,19 @@ function relativeTime(iso) {
   return formatDate(iso);
 }
 
+// ─── Normalize thread from backend shape → component shape ───────────────────
+// Backend returns: { chat_id, first_name, last_name, last_message, last_message_at,
+//                    unread_count, status, active_orders, customer_id }
+// Component expects: { id, customer_name, last_message, last_message_at, status, active_orders }
+function normalizeThread(t) {
+  return {
+    ...t,
+    id:            t.chat_id ?? t.id,
+    customer_name: (t.customer_name ?? `${t.first_name ?? ''} ${t.last_name ?? ''}`.trim()) || 'Unknown',
+    last_message:  t.last_message ?? t.last_message_text ?? '',
+  };
+}
+
 // ─── Status badge for chat thread ─────────────────────────────────────────────
 function ThreadStatusBadge({ status }) {
   return status === 'locked'
@@ -76,7 +89,7 @@ function MessageBubble({ message, isStaff }) {
             {message.related_order_number}
           </span>
         )}
-        <p className="sc-bubble__text">{message.message_text}</p>
+        <p className="sc-bubble__text">{message.content}</p>
         <span className="sc-bubble__time">{formatTime(message.sent_at)}</span>
       </div>
       {isStaff && (
@@ -115,16 +128,16 @@ function ThreadItem({ thread, isActive, onClick, unread }) {
           <span className="sc-thread__time">{relativeTime(thread.last_message_at)}</span>
         </div>
         <p className="sc-thread__preview">
-          {thread.last_message_text || 'No messages yet'}
+          {thread.last_message || 'No messages yet'}
         </p>
         <div className="sc-thread__meta">
           <ThreadStatusBadge status={thread.status} />
-          {thread.active_order_number && (
+          {thread.active_orders?.[0] && (
             <span className="sc-thread__order">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
               </svg>
-              {thread.active_order_number}
+              {`ORD-${String(thread.active_orders[0].id).padStart(4,"0")}`}
             </span>
           )}
         </div>
@@ -303,7 +316,8 @@ export default function SupportChatPage() {
     try {
       setError('');
       const { data } = await supportChatAPI.getThreads();
-      setThreads(data.threads || data);
+      const raw = data.data || data.threads || data;
+      setThreads(Array.isArray(raw) ? raw.map(normalizeThread) : []);
     } catch {
       setError('Failed to load conversations.');
     } finally {
@@ -319,7 +333,8 @@ export default function SupportChatPage() {
     setMessagesLoading(true);
     try {
       const { data } = await supportChatAPI.getMessages(chatId);
-      setMessages(data.messages || data);
+      const msgs = data.data?.messages ?? data.messages ?? data;
+      setMessages(Array.isArray(msgs) ? msgs : []);
       // Mark as read
       setUnreadIds((prev) => { const n = new Set(prev); n.delete(chatId); return n; });
     } catch {
@@ -346,19 +361,20 @@ export default function SupportChatPage() {
     const socket = getSocket();
 
     const onNewMessage = (message) => {
+      const chatId = message.chatId ?? message.chat_id;
       // If this chat is active — add to messages
-      if (message.chat_id === activeThread?.id) {
+      if (chatId === activeThread?.id) {
         setMessages((prev) => [...prev, message]);
       } else {
         // Mark thread as unread
-        setUnreadIds((prev) => new Set([...prev, message.chat_id]));
+        setUnreadIds((prev) => new Set([...prev, chatId]));
       }
 
       // Update thread preview
       setThreads((prev) =>
         prev.map((t) =>
-          t.id === message.chat_id
-            ? { ...t, last_message_text: message.message_text, last_message_at: message.sent_at }
+          t.id === chatId
+            ? { ...t, last_message: message.content, last_message_at: message.sentAt ?? message.sent_at }
             : t
         )
       );
@@ -370,11 +386,11 @@ export default function SupportChatPage() {
       );
     };
 
-    socket.on('new_support_message', onNewMessage);
-    socket.on('chat_thread_locked',  onThreadLocked);
+    socket.on('support_chat:message', onNewMessage);
+    socket.on('chat_thread_locked',   onThreadLocked);
     return () => {
-      socket.off('new_support_message', onNewMessage);
-      socket.off('chat_thread_locked',  onThreadLocked);
+      socket.off('support_chat:message', onNewMessage);
+      socket.off('chat_thread_locked',   onThreadLocked);
     };
   }, [activeThread]);
 
@@ -388,10 +404,10 @@ export default function SupportChatPage() {
       const { data } = await supportChatAPI.sendMessage({
         chat_id:          activeThread.id,
         message_text:     text,
-        sender_type:      'staff',
         related_order_id: null,
       });
-      setMessages((prev) => [...prev, data.message || data]);
+      const newMsg = data.data || data.message || data;
+      setMessages((prev) => [...prev, newMsg]);
       setReplyText('');
       textareaRef.current?.focus();
     } catch {
@@ -418,7 +434,7 @@ export default function SupportChatPage() {
   const filteredThreads = threads
     .filter((t) => {
       const q = searchQuery.toLowerCase();
-      const matchQ = !q || t.customer_name?.toLowerCase().includes(q) || t.last_message_text?.toLowerCase().includes(q);
+      const matchQ = !q || t.customer_name?.toLowerCase().includes(q) || t.last_message?.toLowerCase().includes(q);
       const matchF = filterStatus === 'all' || t.status === filterStatus;
       return matchQ && matchF;
     })
@@ -571,8 +587,6 @@ export default function SupportChatPage() {
                   <div>
                     <p className="sc-chat-header__name">{activeThread.customer_name}</p>
                     <p className="sc-chat-header__meta">
-                      {activeThread.customer_email}
-                      <span className="sc-chat-header__dot" aria-hidden="true" />
                       <ThreadStatusBadge status={activeThread.status} />
                     </p>
                   </div>

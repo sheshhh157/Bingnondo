@@ -1,11 +1,21 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import DashboardSwitcher from '../../components/DashboardSwitcher';
 import '../../styles/StaffLayout.css';
 import logo from '../../assets/logo.png';
 
 const NAV = [
+  {
+    to: '/staff/payments',
+    label: 'Payments',
+    sub: 'Verify GCash receipts',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+        <line x1="1" y1="10" x2="23" y2="10"/>
+      </svg>
+    ),
+  },
   {
     to: '/staff/inventory',
     label: 'Inventory',
@@ -28,19 +38,6 @@ const NAV = [
         <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/>
         <path d="M7 2v20"/>
         <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/staff/delivery',
-    label: 'Delivery',
-    sub: 'Assign & track',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3"/>
-        <rect width="13" height="8" x="9" y="11" rx="1"/>
-        <circle cx="11" cy="19" r="2"/>
-        <circle cx="19" cy="19" r="2"/>
       </svg>
     ),
   },
@@ -77,11 +74,6 @@ export default function StaffLayout() {
         </div>
       </div>
 
-      {/* Dashboard switcher — below brand, above nav */}
-      <div style={{ padding: '4px 8px 8px' }}>
-        <DashboardSwitcher variant="dark" context="sidebar" />
-      </div>
-
       {/* Nav */}
       <nav className="sl-nav" aria-label="Staff navigation">
         {NAV.map(({ to, label, sub, icon }) => (
@@ -115,11 +107,7 @@ export default function StaffLayout() {
           </div>
           <div className="sl-user__info">
             <span className="sl-user__name">{user?.full_name || 'Staff'}</span>
-            <span className="sl-user__role">
-              {user?.home_role && user.home_role !== user.role
-                ? `Staff (switched)`
-                : 'Staff'}
-            </span>
+            <span className="sl-user__role">Staff</span>
           </div>
         </div>
 
@@ -177,8 +165,6 @@ export default function StaffLayout() {
           <img src={logo} alt="Bingnondo logo" width="26" height="26" />
           <span className="sl-topbar__name">Bingnondo</span>
         </div>
-        {/* Show switcher in mobile topbar too */}
-        <DashboardSwitcher variant="dark" context="sidebar" />
         <button
           className="sl-topbar__menu"
           onClick={() => setDrawerOpen(true)}
