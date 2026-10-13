@@ -516,7 +516,7 @@ function PvPagination({ page, total, count, pageSize, onSelect }) {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function PaymentVerificationPage() {
+export default function PaymentVerificationPage({ onSetHeaderActions }) {
   const [orders, setOrders]           = useState([]);
   const [loading, setLoading]         = useState(true);
   const [filter, setFilter]           = useState('all');     // 'all' | 'awaiting' | 'rejected'
@@ -658,51 +658,45 @@ export default function PaymentVerificationPage() {
   // Reset to page 1 when filter/search/pageSize changes
   useEffect(() => { setPage(1); }, [filter, search, pageSize]);
 
+  // ── Push queue status chips + live badge into the shared layout header ────
+  useEffect(() => {
+    if (!onSetHeaderActions) return;
+    onSetHeaderActions(
+      <div className="pv-header__counts" aria-label="Queue summary">
+        {liveIndicator && (
+          <span className="pv-live" aria-live="polite" aria-label="New receipt received">
+            <span className="pv-live__dot" aria-hidden="true" />
+            New receipt
+          </span>
+        )}
+        {counts.awaiting > 0 && (
+          <span className="pv-count pv-count--awaiting">
+            <span className="pv-count__dot" aria-hidden="true" />
+            {counts.awaiting} awaiting
+          </span>
+        )}
+        {counts.rejected > 0 && (
+          <span className="pv-count pv-count--rejected">
+            {counts.rejected} rejected
+          </span>
+        )}
+        {counts.awaiting === 0 && counts.rejected === 0 && (
+          <span className="pv-count pv-count--clear">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Queue clear
+          </span>
+        )}
+      </div>
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [counts.awaiting, counts.rejected, liveIndicator, onSetHeaderActions]);
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="pv-page">
       <ToastStack toasts={toasts} />
-
-      {/* ── Header ── */}
-      <header className="pv-header">
-        <div className="pv-header__left">
-          <div className="pv-header__title-row">
-            <h1 className="pv-header__title">Payment Verification</h1>
-            {liveIndicator && (
-              <span className="pv-live" aria-live="polite" aria-label="New receipt received">
-                <span className="pv-live__dot" aria-hidden="true" />
-                New receipt
-              </span>
-            )}
-          </div>
-          <p className="pv-header__sub">
-            Review GCash receipts before orders reach the kitchen
-          </p>
-        </div>
-
-        {/* Count summary chips */}
-        <div className="pv-header__counts" aria-label="Queue summary">
-          {counts.awaiting > 0 && (
-            <span className="pv-count pv-count--awaiting">
-              <span className="pv-count__dot" aria-hidden="true" />
-              {counts.awaiting} awaiting
-            </span>
-          )}
-          {counts.rejected > 0 && (
-            <span className="pv-count pv-count--rejected">
-              {counts.rejected} rejected
-            </span>
-          )}
-          {counts.awaiting === 0 && counts.rejected === 0 && (
-            <span className="pv-count pv-count--clear">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              Queue clear
-            </span>
-          )}
-        </div>
-      </header>
 
       {/* ── Toolbar ── */}
       <div className="pv-toolbar">

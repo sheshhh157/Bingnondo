@@ -413,7 +413,7 @@ function AddIngredientModal({ onClose, onSubmit }) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function InventoryPage() {
+export default function InventoryPage({ onSetHeaderActions }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -510,6 +510,30 @@ export default function InventoryPage() {
   // Reset to page 1 when filters/search/perPage change
   useEffect(() => { setPage(1); }, [search, filterStatus, sortBy, perPage]);
 
+  // ── Push Add Ingredient + Refresh buttons into the shared layout header ───
+  useEffect(() => {
+    if (!onSetHeaderActions) return;
+    onSetHeaderActions(
+      <>
+        <button className="inv-btn inv-btn--primary" onClick={() => setShowAddModal(true)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Ingredient
+        </button>
+        <button className="inv-btn inv-btn--ghost inv-btn--icon" onClick={fetchItems} aria-label="Refresh">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+            <path d="M8 16H3v5"/>
+          </svg>
+          Refresh
+        </button>
+      </>
+    );
+  }, [onSetHeaderActions, fetchItems]);
+
   // Paginated slices — single perPage for both table and cards
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage   = Math.min(page, totalPages);
@@ -541,30 +565,7 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="inv-page-header">
-        <div>
-          <h1 className="inv-page-title">Inventory</h1>
-          <p className="inv-page-sub">Track ingredient stock and reorder thresholds</p>
-        </div>
-        <div className="inv-header-actions">
-          <button className="inv-btn inv-btn--primary" onClick={() => setShowAddModal(true)}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add Ingredient
-          </button>
-          <button className="inv-btn inv-btn--ghost inv-btn--icon" onClick={fetchItems} aria-label="Refresh">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-              <path d="M21 3v5h-5"/>
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-              <path d="M8 16H3v5"/>
-            </svg>
-            Refresh
-          </button>
-        </div>
-      </div>
+
 
       {/* Stats */}
       <div className="inv-stats">

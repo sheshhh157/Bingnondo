@@ -97,36 +97,38 @@ function ChevronIcon({ open }) {
 }
 
 // ─── Staff page content ───────────────────────────────────────────────────────
-function StaffPageContent({ pageId }) {
+function StaffPageContent({ pageId, onSetHeaderActions }) {
   switch (pageId) {
-    case 'payments':  return <PaymentVerificationPage />;
-    case 'inventory': return <InventoryPage />;
-    case 'menu':      return <MenuPage />;
-    case 'chat':      return <SupportChatPage />;
+    case 'payments':  return <PaymentVerificationPage onSetHeaderActions={onSetHeaderActions} />;
+    case 'inventory': return <InventoryPage onSetHeaderActions={onSetHeaderActions} />;
+    case 'menu':      return <MenuPage onSetHeaderActions={onSetHeaderActions} />;
+    case 'chat':      return <SupportChatPage onSetHeaderActions={onSetHeaderActions} />;
     default:          return null;
   }
 }
 
 // ─── Page title map for the staff sub-header bar ──────────────────────────────
 const PAGE_META = {
-  payments:  { title: 'Payment Verification', sub: 'Review GCash receipts' },
-  inventory: { title: 'Inventory',            sub: 'Track stock & reorder thresholds' },
-  menu:      { title: 'Menu Management',      sub: 'Items, categories & availability' },
+  payments:  { title: 'Payment Verification', sub: 'Review GCash receipts before orders reach the kitchen' },
+  inventory: { title: 'Inventory',            sub: 'Track ingredient stock and reorder thresholds' },
+  menu:      { title: 'Menu Management',      sub: 'Add, edit, and manage item availability in real time' },
   chat:      { title: 'Support Chat',         sub: 'Customer conversations' },
 };
 
 // ─── Main layout ──────────────────────────────────────────────────────────────
 export default function CashierLayout() {
   const { user, logout } = useAuth();
-  const [activePage,   setActivePage]   = useState('cashier');
-  const [sidebarOpen,  setSidebarOpen]  = useState(true);   // desktop collapse state
-  const [drawerOpen,   setDrawerOpen]   = useState(false);  // mobile drawer
+  const [activePage,     setActivePage]     = useState('cashier');
+  const [sidebarOpen,    setSidebarOpen]    = useState(true);
+  const [drawerOpen,     setDrawerOpen]     = useState(false);
+  const [headerActions,  setHeaderActions]  = useState(null);
 
   const allNav = [...CASHIER_NAV, ...STAFF_NAV];
 
   const handleNav = useCallback((id) => {
     setActivePage(id);
     setDrawerOpen(false);
+    setHeaderActions(null); // clear actions when switching pages
   }, []);
 
   const toggleSidebar = useCallback(() => setSidebarOpen(v => !v), []);
@@ -236,6 +238,12 @@ export default function CashierLayout() {
           <h1 className="cl-staff-header__title">{meta.title}</h1>
           <span className="cl-staff-header__sub">{meta.sub}</span>
         </div>
+        {/* Actions injected by each page */}
+        {headerActions && (
+          <div className="cl-staff-header__actions">
+            {headerActions}
+          </div>
+        )}
       </header>
     );
   };
@@ -317,7 +325,7 @@ export default function CashierLayout() {
             {/* Injected header with hamburger for all staff pages */}
             <StaffHeader pageId={activePage} />
             <div className="cl-staff-body">
-              <StaffPageContent pageId={activePage} />
+              <StaffPageContent pageId={activePage} onSetHeaderActions={setHeaderActions} />
             </div>
           </div>
         )}

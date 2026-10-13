@@ -83,19 +83,19 @@
   .al-sidebar         { display: flex; }
   .al-sidebar-compact { display: none; }
   .al-topbar          { display: none; }
-  .al-main            { margin-left: 0; padding-top: 0; }
+  .al-main            { margin-left: 0; padding-top: 28px; }
 }
 @media (min-width: 768px) and (max-width: 1023px) {
   .al-sidebar         { display: none; }
   .al-sidebar-compact { display: flex; }
   .al-topbar          { display: none; }
-  .al-main            { margin-left: 0; padding-top: 0; }
+  .al-main            { margin-left: 0; padding: 20px; }
 }
 @media (max-width: 767px) {
   .al-sidebar         { display: none; }
   .al-sidebar-compact { display: none; }
   .al-topbar          { display: flex; }
-  .al-main            { padding-top: 52px; }
+  .al-main            { padding: 16px; padding-top: calc(52px + 16px); }
 }
 
 /* ─── Brand ─────────────────────────────────────────────────────────── */
@@ -396,4 +396,6 @@
   background: var(--al-content-bg);
   display: flex;
   flex-direction: column;
+  padding: 28px;
+  max-width: 1560px;
 }

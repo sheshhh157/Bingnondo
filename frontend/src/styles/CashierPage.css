@@ -12,7 +12,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding-top: 48px; /* compensate for fixed .c-header height */
+  /* padding-top handled by cl-main in CashierLayout.css */
 }
 
 /* ─── Workspace (Order view) ─────────────────────────────────────────── */

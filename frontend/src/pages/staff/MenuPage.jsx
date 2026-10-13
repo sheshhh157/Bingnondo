@@ -710,7 +710,7 @@ function Pagination({ page, totalPages, total, from, to, onPage }) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function MenuPage() {
+export default function MenuPage({ onSetHeaderActions }) {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
@@ -768,6 +768,29 @@ export default function MenuPage() {
 
   // Reset to page 1 when filters/search/viewMode/perPage change
   useEffect(() => { setPage(1); }, [search, filterCat, filterAvail, viewMode, perPage]);
+
+  // ── Push Add Item + Refresh buttons into the shared layout header ─────────
+  useEffect(() => {
+    if (!onSetHeaderActions) return;
+    onSetHeaderActions(
+      <>
+        <button className="mn-btn mn-btn--ghost mn-btn--icon" onClick={fetchAll} aria-label="Refresh">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+            <path d="M8 16H3v5"/>
+          </svg>
+        </button>
+        <button className="mn-btn mn-btn--primary" onClick={() => setModal({ mode: 'add' })}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Item
+        </button>
+      </>
+    );
+  }, [onSetHeaderActions, fetchAll]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage   = Math.min(page, totalPages);
@@ -830,29 +853,7 @@ export default function MenuPage() {
     <div className="mn-root">
       {toastMsg && <div className={`mn-toast mn-toast--${toastType}`} role="status" aria-live="polite">{toastMsg}</div>}
 
-      {/* Header */}
-      <div className="mn-page-header">
-        <div>
-          <h1 className="mn-page-title">Menu Management</h1>
-          <p className="mn-page-sub">Add, edit, and manage item availability in real time</p>
-        </div>
-        <div className="mn-page-header__actions">
-          <button className="mn-btn mn-btn--ghost mn-btn--icon" onClick={fetchAll} aria-label="Refresh">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-              <path d="M21 3v5h-5"/>
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-              <path d="M8 16H3v5"/>
-            </svg>
-          </button>
-          <button className="mn-btn mn-btn--primary" onClick={() => setModal({ mode: 'add' })}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add Item
-          </button>
-        </div>
-      </div>
+
 
       {/* Stats */}
       <div className="mn-stats">
