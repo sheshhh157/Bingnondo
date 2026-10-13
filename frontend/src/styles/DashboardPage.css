@@ -222,5 +222,5 @@
 @media (max-width: 640px) {
   .dash-grid { grid-template-columns: 1fr; }
   .ui-card--wide { grid-column: span 1; }
-  .dash-kpis { grid-template-columns: 1fr; }
+  .dash-kpis { grid-template-columns: repeat(2, 1fr); }
 }

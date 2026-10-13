@@ -4,8 +4,9 @@ const { authenticateToken, requireRoles, requireStaff } = require('../../middlew
 const ctrl = require('./menu.controller');
 
 // Reusable guard: authenticated staff with write access
-// 'cashier' added — cashier can now manage menu via the Staff Portal tab in the Cashier layout
-const staffWrite = [authenticateToken, requireStaff, requireRoles('cashier', 'staff', 'owner', 'admin')];
+// Menu management (items, ingredient links, categories, availability) lives on
+// the admin side only — cashier/staff/owner are blocked from writes.
+const staffWrite = [authenticateToken, requireStaff, requireRoles('admin')];
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 // GET /api/menu  — customers + cashier read-only

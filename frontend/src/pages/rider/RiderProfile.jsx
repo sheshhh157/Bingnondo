@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getRiderProfile, updateRiderProfile } from '../../services/riderApi';
 import { useAuth } from '../../context/AuthContext';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/RiderProfile.css';
 
 function IconEdit() {
@@ -33,6 +34,7 @@ const VEHICLE_TYPES = ['Motorcycle', 'Bicycle', 'E-bike', 'Car', 'Other'];
 
 export default function RiderProfile() {
   const { logout } = useAuth();
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [profile, setProfile]   = useState(null);
   const [loading, setLoading]   = useState(true);
   const [editing, setEditing]   = useState(false);
@@ -243,7 +245,7 @@ export default function RiderProfile() {
       </div>
 
       {/* ── Sign out ── */}
-      <button className="rp-btn rp-btn--danger rp-btn--full" onClick={logout}>
+      <button className="rp-btn rp-btn--danger rp-btn--full" onClick={() => setLogoutOpen(true)}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
           <polyline points="16 17 21 12 16 7"/>
@@ -251,6 +253,17 @@ export default function RiderProfile() {
         </svg>
         Sign Out
       </button>
+
+      <ConfirmDialog
+        open={logoutOpen}
+        title="Sign out?"
+        message="You'll be returned to the login screen. Any unsaved changes will be lost."
+        confirmLabel="Sign out"
+        cancelLabel="Stay"
+        tone="danger"
+        onConfirm={logout}
+        onCancel={() => setLogoutOpen(false)}
+      />
     </div>
   );
 }

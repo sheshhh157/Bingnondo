@@ -214,20 +214,35 @@ const kitchenSet = (id, status) => call('PATCH', `/api/kitchen/orders/${id}/stat
  * then delete it. `order_items`, `order_status_history`, `payments` and
  * `kitchen_alerts` all cascade on `orders.id`, and the sequence is advanced by
  * the test, so the table is left exactly as found.
+ *
+ * The order is built on a throwaway menu item with no ingredient links.
+ * Reaching 'preparing' now records ingredient usage (Flowchart 2), and a
+ * seeded item's ingredients would be deducted for real — quietly draining the
+ * demo stock and, once depleted, disabling seeded menu items. A link-free item
+ * makes those tests inert w.r.t. inventory. The order is also deleted after any
+ * `inventory_transactions` rows: the `reference_order_id` FK has no ON DELETE
+ * clause.
  */
-const withTestOrder = async ({ status, payment = 'pending', items = 1 }, fn) => {
+let statusTestSeq = 0;
+const withTestOrder = async ({ status, payment = 'pending', items = 1, orderType = 'counter' }, fn) => {
+  const channel = orderType === 'online' ? 'mobile_app' : 'web_counter';
   const created = await db.query(
     `INSERT INTO orders (order_type, status, order_channel, total_amount)
-     VALUES ('counter', $1, 'web_counter', 100) RETURNING id`,
-    [status]);
+     VALUES ($1, $2, $3, 100) RETURNING id`,
+    [orderType, status, channel]);
   const id = created.rows[0].id;
 
-  const menuItem = await db.query(`SELECT id, price FROM menu_items ORDER BY id LIMIT 1`);
+  const menuItem = await db.query(
+    `INSERT INTO menu_items (category_id, name, price)
+     VALUES ((SELECT id FROM menu_categories ORDER BY id LIMIT 1), $1, 10)
+     RETURNING id, price`,
+    [`__status_test_${Date.now()}_${statusTestSeq++}`]);
+  const menuItemId = menuItem.rows[0].id;
   for (let i = 0; i < items; i++) {
     await db.query(
       `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price)
        VALUES ($1, $2, 1, $3)`,
-      [id, menuItem.rows[0].id, menuItem.rows[0].price]);
+      [id, menuItemId, menuItem.rows[0].price]);
   }
   // One payment row per order — the unique index from migration 003 enforces it.
   await db.query(
@@ -238,7 +253,9 @@ const withTestOrder = async ({ status, payment = 'pending', items = 1 }, fn) => 
   try {
     return await fn(id);
   } finally {
+    await db.query(`DELETE FROM inventory_transactions WHERE reference_order_id = $1`, [id]);
     await db.query(`DELETE FROM orders WHERE id = $1`, [id]);
+    await db.query(`DELETE FROM menu_items WHERE id = $1`, [menuItemId]);
   }
 };
 
@@ -336,10 +353,12 @@ test('PATCH /status refuses to move out of a terminal state', async (t) => {
 // with console.error, so a transition that started failing here would present
 // as a frozen button rather than an error message.
 
-test('kitchen still allows confirmed -> preparing -> ready', async (t) => {
+test('kitchen still allows confirmed -> preparing -> ready (online)', async (t) => {
   if (!(await canQuery())) return t.skip('no database reachable');
 
-  await withTestOrder({ status: 'confirmed' }, async (id) => {
+  // Online orders keep the historical chain: they stop at 'ready' so a
+  // delivery can be dispatched / a pickup handled by staff.
+  await withTestOrder({ status: 'confirmed', orderType: 'online' }, async (id) => {
     const first = await kitchenSet(id, 'preparing');
     assert.equal(first.status, 200, 'confirmed -> preparing must still work');
     assert.equal(await statusOf(id), 'preparing');
@@ -350,6 +369,27 @@ test('kitchen still allows confirmed -> preparing -> ready', async (t) => {
 
     // Both real transitions should be on the record.
     assert.equal(await historyCount(id), 2);
+  });
+});
+
+test('kitchen finalises a counter order to completed on Mark Ready', async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+
+  // A counter order is served at the counter, so the kitchen's "Mark Ready"
+  // is its final step: the order is auto-completed in one call and records
+  // both hops (ready, completed) in the audit trail.
+  await withTestOrder({ status: 'confirmed' }, async (id) => {
+    const first = await kitchenSet(id, 'preparing');
+    assert.equal(first.status, 200, 'confirmed -> preparing must work');
+    assert.equal(await statusOf(id), 'preparing');
+
+    const second = await kitchenSet(id, 'ready');
+    assert.equal(second.status, 200, 'preparing -> ready must work');
+    assert.equal(second.body.status, 'completed', 'the response reports the final status');
+    assert.equal(await statusOf(id), 'completed', 'a counter order is completed when the kitchen is done');
+
+    // preparing + ready + completed.
+    assert.equal(await historyCount(id), 3);
   });
 });
 

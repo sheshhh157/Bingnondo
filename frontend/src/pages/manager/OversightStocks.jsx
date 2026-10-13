@@ -9,7 +9,9 @@ import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
 import StatCard from '../../components/StatCard';
 import PageHeader from '../../components/PageHeader';
+import Pagination from '../../components/Pagination';
 import ErrorBanner from '../../components/ErrorBanner';
+import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/OversightStocks.css';
 
 function Bar({ current, reorder }) {
@@ -31,6 +33,8 @@ const TX_LABEL = { restock: 'Restock', deduction: 'Deduction', adjustment: 'Adju
 const STATUS_TEXT = { ok: 'In stock', low: 'Low stock', out: 'Out of stock' };
 
 const STOCK_CSV_HEADERS = ['Ingredient', 'Unit', 'Current stock', 'Reorder level', 'Status'];
+
+const PAGE_SIZE = 15;
 
 function buildStockCsv(rows) {
   return toCsv(STOCK_CSV_HEADERS, rows, (i) => {
@@ -97,6 +101,8 @@ export default function OversightStocks() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [openId, setOpenId] = useState(null);
+  const [page, setPage] = useState(1);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const { data: items, loading, error, lastUpdated, refresh, refreshing } = useLiveData({
     fetchFn: async () => {
@@ -112,7 +118,7 @@ export default function OversightStocks() {
   const filtered = useMemo(() => {
     let r = items;
     if (search.trim()) {
-      const q = search.toLowerCase();
+      const q = search.trim().toLowerCase();
       r = r.filter((i) => i.name.toLowerCase().includes(q) || i.unit.toLowerCase().includes(q));
     }
     if (filterStatus !== 'all') {
@@ -126,12 +132,36 @@ export default function OversightStocks() {
     });
   }, [items, search, filterStatus, sortBy]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * PAGE_SIZE;
+  const pageRows = filtered.slice(start, start + PAGE_SIZE);
+  const rangeFrom = filtered.length === 0 ? 0 : start + 1;
+  const rangeTo = Math.min(start + PAGE_SIZE, filtered.length);
+
   const handleExport = useCallback(() => {
     downloadCsv(
       buildStockCsv(filtered),
       `inventory-status-${new Date().toISOString().slice(0, 10)}.csv`,
     );
   }, [filtered]);
+
+  const hasFilters = filterStatus !== 'all' || sortBy !== 'name';
+  const filterFields = (
+    <>
+      <select className="osk-select" value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }} aria-label="Filter by status">
+        <option value="all">All items</option>
+        <option value="ok">In stock</option>
+        <option value="low">Low stock</option>
+        <option value="out">Out of stock</option>
+      </select>
+      <select className="osk-select" value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }} aria-label="Sort by">
+        <option value="name">Sort: Name</option>
+        <option value="stock_asc">Stock: Low first</option>
+        <option value="stock_desc">Stock: High first</option>
+      </select>
+    </>
+  );
 
   return (
     <div className="osk-root">
@@ -167,19 +197,10 @@ export default function OversightStocks() {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ingredients…" className="osk-search__input" aria-label="Search ingredients" />
+          <input type="search" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search ingredients…" className="osk-search__input" aria-label="Search ingredients" />
         </div>
-        <select className="osk-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Filter by status">
-          <option value="all">All items</option>
-          <option value="ok">In stock</option>
-          <option value="low">Low stock</option>
-          <option value="out">Out of stock</option>
-        </select>
-        <select className="osk-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
-          <option value="name">Sort: Name</option>
-          <option value="stock_asc">Stock: Low first</option>
-          <option value="stock_desc">Stock: High first</option>
-        </select>
+        <FilterTrigger open={filterOpen} onClick={() => setFilterOpen(true)} active={hasFilters} label="Filter stock levels" />
+        <FilterInline>{filterFields}</FilterInline>
         <button
           type="button"
           className="osk-export"
@@ -197,6 +218,7 @@ export default function OversightStocks() {
       </div>
 
       <div className="osk-table-wrap">
+        <div className="osk-table-scroll">
         <table className="osk-table" aria-label="Inventory levels">
           <thead>
             <tr>
@@ -217,7 +239,7 @@ export default function OversightStocks() {
                 ))
               : filtered.length === 0
                 ? <tr><td colSpan={6}><EmptyState message="No items match your filter." icon="search" /></td></tr>
-                : filtered.map((item) => {
+                : pageRows.map((item) => {
                     const status = stockStatus(item.current_stock, item.reorder_level);
                     const open = openId === item.id;
                     return (
@@ -258,7 +280,23 @@ export default function OversightStocks() {
                   })}
           </tbody>
         </table>
+        </div>
+        {!loading && (
+          <Pagination
+            page={safePage}
+            totalPages={totalPages}
+            total={filtered.length}
+            from={rangeFrom}
+            to={rangeTo}
+            onPage={setPage}
+            label="Stock levels pagination"
+          />
+        )}
       </div>
+
+      <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter stock levels">
+        {filterFields}
+      </FilterModal>
     </div>
   );
 }

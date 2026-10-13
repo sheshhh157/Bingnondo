@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import logo1 from '../../../assets/logo2.png';
 
 export default function KitchenHeader({ counterCount, onlineCount }) {
   const { user, logout } = useAuth();
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
   const dateStr = now.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -57,7 +60,7 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
           </span>
           <button
             className="kp-header__logout"
-            onClick={logout}
+            onClick={() => setLogoutOpen(true)}
             aria-label="Sign out"
             title="Sign out"
           >
@@ -68,6 +71,17 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={logoutOpen}
+        title="Sign out?"
+        message="You'll be returned to the login screen."
+        confirmLabel="Sign out"
+        cancelLabel="Stay"
+        tone="danger"
+        onConfirm={logout}
+        onCancel={() => setLogoutOpen(false)}
+      />
     </header>
   );
 }

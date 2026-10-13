@@ -1,20 +1,23 @@
 /* ─── Grid ───────────────────────────────────────────────────────────── */
-.menu-grid {
+.cdm-grid {
   flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 0.75rem;
   padding: 1rem 1.25rem;
   overflow-y: auto;
   align-content: start;
+  grid-auto-rows: max-content;
 }
 
 /* ─── Card ───────────────────────────────────────────────────────────── */
-.menu-card {
+.cdm-card {
   background: var(--color-card);
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
@@ -22,38 +25,40 @@
   position: relative;
 }
 
-.menu-card:hover:not(.menu-card--unavailable):not(.menu-card--skeleton) {
+.cdm-card:hover:not(.cdm-card--unavailable):not(.cdm-card--skeleton) {
   border-color: var(--color-border-strong);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
 }
 
-.menu-card--in-cart {
+.cdm-card--in-cart {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px rgba(185,28,28,0.12);
 }
 
-.menu-card--unavailable {
+.cdm-card--unavailable {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
 /* ─── Image ──────────────────────────────────────────────────────────── */
-.menu-card__img-wrap {
+.cdm-card__img-wrap {
   position: relative;
-  aspect-ratio: 4/3;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  flex-shrink: 0;
   background: var(--color-muted);
   overflow: hidden;
 }
 
-.menu-card__img {
+.cdm-card__img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.menu-card__img-placeholder {
+.cdm-card__img-placeholder {
   width: 100%;
   height: 100%;
   display: flex;
@@ -63,7 +68,7 @@
   opacity: 0.5;
 }
 
-.menu-card__unavail-overlay {
+.cdm-card__unavail-overlay {
   position: absolute;
   inset: 0;
   background: rgba(26,10,0,0.5);
@@ -72,7 +77,7 @@
   justify-content: center;
 }
 
-.menu-card__unavail-overlay span {
+.cdm-card__unavail-overlay span {
   padding: 0.2rem 0.5rem;
   background: rgba(26,10,0,0.65);
   color: var(--color-background);
@@ -84,7 +89,7 @@
   letter-spacing: 0.06em;
 }
 
-.menu-card__qty-badge {
+.cdm-card__qty-badge {
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
@@ -104,7 +109,7 @@
 }
 
 /* ─── Body ───────────────────────────────────────────────────────────── */
-.menu-card__body {
+.cdm-card__body {
   padding: 0.625rem 0.75rem 0.6875rem;
   display: flex;
   flex-direction: column;
@@ -112,7 +117,7 @@
   flex: 1;
 }
 
-.menu-card__name {
+.cdm-card__name {
   font-family: var(--font-body);
   font-size: 0.8125rem;
   font-weight: 600;
@@ -125,19 +130,7 @@
   overflow: hidden;
 }
 
-.menu-card__desc {
-  font-family: var(--font-body);
-  font-size: 0.6875rem;
-  color: var(--color-muted-foreground);
-  margin: 0;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.menu-card__footer {
+.cdm-card__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -145,7 +138,7 @@
   padding-top: 0.4rem;
 }
 
-.menu-card__price {
+.cdm-card__price {
   font-family: var(--font-heading);
   font-size: 0.9375rem;
   font-weight: 700;
@@ -153,39 +146,40 @@
   letter-spacing: -0.01em;
 }
 
-.menu-card__add {
+.cdm-card__add {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-md);
   border: none;
   background: var(--color-primary);
   color: var(--color-on-primary);
   cursor: pointer;
+  touch-action: manipulation;
   transition: background 150ms ease, transform 100ms ease;
   flex-shrink: 0;
 }
 
-.menu-card__add:hover:not(:disabled) {
+.cdm-card__add:hover:not(:disabled) {
   background: #991B1B;
   transform: scale(1.08);
 }
 
-.menu-card__add:disabled {
+.cdm-card__add:disabled {
   background: var(--color-muted);
   color: var(--color-muted-foreground);
   cursor: not-allowed;
 }
 
-.menu-card__add:focus-visible {
+.cdm-card__add:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
 /* ─── States ─────────────────────────────────────────────────────────── */
-.menu-state {
+.cdm-state {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -196,16 +190,16 @@
   color: var(--color-muted-foreground);
 }
 
-.menu-state p {
+.cdm-state p {
   font-family: var(--font-body);
   font-size: 0.875rem;
   margin: 0;
   text-align: center;
 }
 
-.menu-state--error { color: var(--color-primary); }
+.cdm-state--error { color: var(--color-primary); }
 
-.menu-retry-btn {
+.cdm-retry-btn {
   padding: 0.45rem 1rem;
   border: 1.5px solid var(--color-primary);
   border-radius: var(--radius-md);
@@ -218,8 +212,8 @@
   transition: all 150ms ease;
 }
 
-.menu-retry-btn:hover { background: var(--color-primary); color: var(--color-on-primary); }
-.menu-retry-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.cdm-retry-btn:hover { background: var(--color-primary); color: var(--color-on-primary); }
+.cdm-retry-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
 /* ─── Skeleton ───────────────────────────────────────────────────────── */
 @keyframes mg-shimmer {
@@ -240,26 +234,30 @@
 .skeleton-line--md { width: 80%; }
 .skeleton-line--sm { height: 10px; width: 60%; }
 
-/* ─── RESPONSIVE ─────────────────────────────────────────────────────── */
-@media (max-width: 1023px) {
-  .menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
-    gap: 0.625rem;
-    padding: 0.75rem 1rem;
-  }
+/* ─── Responsive ─────────────────────────────────────────────────────── */
+/* Container queries on .cashier-main: the menu must respond to the space it
+   actually has (viewport minus sidebar), not the raw viewport. */
+/* Grid stays auto-fill @150px → 2 cols at 360px, 3 on tablet, 4–5 desktop. */
+@container (max-width: 1023px) {
+  .cdm-grid { gap: 0.625rem; padding: 0.75rem 1rem; }
 }
 
-@media (max-width: 639px) {
-  .menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 0.5rem;
-    padding: 0.625rem 0.875rem;
-  }
-  .menu-card__body { padding: 0.5rem 0.625rem 0.5625rem; }
-  .menu-card__price { font-size: 0.875rem; }
+@container (max-width: 767px) {
+  .cdm-card__add { width: 44px; height: 44px; }
+}
+
+@container (max-width: 639px) {
+  .cdm-grid { gap: 0.5rem; padding: 0.625rem 0.875rem; }
+  .cdm-card__body { padding: 0.5rem 0.625rem 0.5625rem; }
+  .cdm-card__price { font-size: 0.875rem; }
+}
+
+/* Guarantee exactly two columns on small phones (360–479px). */
+@container (max-width: 479px) {
+  .cdm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .menu-card, .menu-card__add { transition: none; }
+  .cdm-card, .cdm-card__add { transition: none; }
   .skeleton-block, .skeleton-line { animation: none; background: var(--color-muted); }
 }

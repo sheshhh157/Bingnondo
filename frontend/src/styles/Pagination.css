@@ -1,0 +1,103 @@
+/* ─── Shared pagination ──────────────────────────────────────────────── */
+/* Prefixed with .cp-pag so it never collides with the per-page .pag styles
+   already used by Inventory / Transaction History. */
+.cp-pag {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.625rem 1rem;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.cp-pag__info {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.cp-pag__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.cp-pag__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 0.5rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  color: var(--color-muted-foreground);
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.cp-pag__btn:hover:not(:disabled) {
+  background: var(--color-muted);
+  border-color: var(--color-border-strong);
+  color: var(--color-foreground);
+}
+
+.cp-pag__btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.cp-pag__btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.cp-pag__btn--num {
+  padding: 0;
+}
+
+.cp-pag__btn--active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: 700;
+}
+
+.cp-pag__btn--active:hover:not(:disabled) {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.cp-pag__ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 2.5rem;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  user-select: none;
+}
+
+@media (max-width: 479px) {
+  .cp-pag { padding: 0.5rem 0.75rem; }
+  .cp-pag__btn { min-width: 36px; height: 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-pag__btn { transition: none; }
+}

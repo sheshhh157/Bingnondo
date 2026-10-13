@@ -80,5 +80,5 @@
 .odl-step__label--done { color: var(--color-primary); font-weight: 600; }
 
 @media (max-width: 480px) {
-  .odl-stats { grid-template-columns: 1fr; }
+  .odl-stats { grid-template-columns: repeat(2, 1fr); }
 }

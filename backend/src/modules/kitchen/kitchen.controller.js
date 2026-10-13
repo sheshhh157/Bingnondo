@@ -4,6 +4,8 @@ const socketHub = require('../../sockets');
 // `confirmed -> preparing -> ready` chain here, which could drift from the
 // rules in the orders module. See orders/status-transitions.js.
 const { canTransition } = require('../orders/status-transitions');
+// Flowchart 2: preparing an order consumes its ingredients. See deduction.js.
+const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
 
 // The kitchen's own live prep queue. 'ready' is deliberately excluded: the
 // kitchen marks an order ready and is then done with it, so a ready ticket
@@ -115,6 +117,12 @@ async function acknowledgeOrder(req, res, next) {
       [req.params.id, nextStatus, req.user.sub]
     );
 
+    // Confirmed -> preparing means cooking has started: deduct ingredients.
+    let usage = null;
+    if (nextStatus === 'preparing') {
+      usage = await applyOrderIngredientUsage(client, req.params.id, req.user.sub);
+    }
+
     await client.query('COMMIT');
 
     const order = rows[0];
@@ -124,6 +132,7 @@ async function acknowledgeOrder(req, res, next) {
       orderNumber: order.order_number,
       status: nextStatus,
     });
+    emitIngredientUsage(usage);
 
     res.json(order);
   } catch (err) {
@@ -136,6 +145,12 @@ async function acknowledgeOrder(req, res, next) {
 
 // ─── PATCH /api/kitchen/orders/:id/status ────────────────────────────────────
 // Kitchen staff can only move: confirmed → preparing → ready.
+//
+// A COUNTER order is served directly to the customer at the counter, so the
+// kitchen's "Mark Ready" is the final step: the order is finalised as
+// 'completed' in the same call. Online orders keep 'ready' — a delivery still
+// needs to be dispatched, and an online pickup is handled from the cashier's
+// online-orders console.
 async function updateKitchenOrderStatus(req, res, next) {
   const client = await db.getClient();
   try {
@@ -151,7 +166,7 @@ async function updateKitchenOrderStatus(req, res, next) {
     await client.query('BEGIN');
 
     const { rows: current } = await client.query(
-      `SELECT id, status FROM orders WHERE id = $1`,
+      `SELECT id, status, order_type FROM orders WHERE id = $1`,
       [req.params.id]
     );
     if (!current[0]) {
@@ -167,19 +182,41 @@ async function updateKitchenOrderStatus(req, res, next) {
       });
     }
 
+    // Counter orders complete on "ready"; online orders stay at "ready".
+    const autoComplete =
+      status === 'ready' && current[0].order_type === 'counter';
+    const finalStatus = autoComplete ? 'completed' : status;
+
     const { rows } = await client.query(
       `UPDATE orders SET status = $1, updated_at = NOW()
        WHERE id = $2
        RETURNING id, status, order_channel,
                  'ORD-' || LPAD(id::text, 4, '0') AS order_number`,
-      [status, req.params.id]
+      [finalStatus, req.params.id]
     );
 
-    await client.query(
-      `INSERT INTO order_status_history (order_id, status, changed_by)
-       VALUES ($1, $2, $3)`,
-      [req.params.id, status, req.user.sub]
-    );
+    // Record the real path. For a counter order the kitchen action ('ready')
+    // and its implicit finalisation ('completed') are both written, so the
+    // audit trail is honest about what one click actually did.
+    if (autoComplete) {
+      await client.query(
+        `INSERT INTO order_status_history (order_id, status, changed_by)
+         VALUES ($1, 'ready', $2), ($1, 'completed', $2)`,
+        [req.params.id, req.user.sub]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO order_status_history (order_id, status, changed_by)
+         VALUES ($1, $2, $3)`,
+        [req.params.id, status, req.user.sub]
+      );
+    }
+
+    // Confirmed -> preparing means cooking has started: deduct ingredients.
+    let usage = null;
+    if (status === 'preparing') {
+      usage = await applyOrderIngredientUsage(client, req.params.id, req.user.sub);
+    }
 
     await client.query('COMMIT');
 
@@ -188,15 +225,18 @@ async function updateKitchenOrderStatus(req, res, next) {
     socketHub.emitOrderStatus({
       orderId: order.id,
       orderNumber: order.order_number,
-      status,
+      status: order.status,
     });
 
-    if (status === 'ready') {
+    // Only a genuinely 'ready' (online) order needs a handoff/dispatch alert.
+    if (order.status === 'ready') {
       socketHub.emitOrderReady({
         orderId: order.id,
         orderNumber: order.order_number,
       });
     }
+
+    emitIngredientUsage(usage);
 
     res.json(order);
   } catch (err) {

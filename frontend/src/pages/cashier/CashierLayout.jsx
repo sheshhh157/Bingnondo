@@ -1,107 +1,23 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import CashierPage from './CashierPage';
-import PaymentVerificationPage from '../staff/PaymentVerificationPage';
 import InventoryPage from '../staff/InventoryPage';
-import MenuPage from '../staff/MenuPage';
 import SupportChatPage from '../staff/SupportChatPage';
 import logo from '../../assets/logo.png';
+import CashierBottomNav from './components/CashierBottomNav';
+import CashierHeader from './components/CashierHeader';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import { NAV_GROUPS } from './cashierNav';
 import '../../styles/CashierLayout.css';
 
-// ─── Nav config ───────────────────────────────────────────────────────────────
-const CASHIER_NAV = [
-  {
-    id: 'cashier',
-    label: 'Cashier',
-    sub: 'Counter orders',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
-        <line x1="3" y1="6" x2="21" y2="6"/>
-        <path d="M16 10a4 4 0 0 1-8 0"/>
-      </svg>
-    ),
-  },
-];
-
-const STAFF_NAV = [
-  {
-    id: 'payments',
-    label: 'Payments',
-    sub: 'Verify GCash receipts',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
-        <line x1="1" y1="10" x2="23" y2="10"/>
-      </svg>
-    ),
-  },
-  {
-    id: 'inventory',
-    label: 'Inventory',
-    sub: 'Stock levels',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"/>
-        <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-        <line x1="12" y1="12" x2="12" y2="17"/>
-        <line x1="9.5" y1="14.5" x2="14.5" y2="14.5"/>
-      </svg>
-    ),
-  },
-  {
-    id: 'menu',
-    label: 'Menu',
-    sub: 'Items & availability',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/>
-        <path d="M7 2v20"/>
-        <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
-      </svg>
-    ),
-  },
-  {
-    id: 'chat',
-    label: 'Support Chat',
-    sub: 'Customer messages',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-    ),
-  },
-];
-
-// ─── Hamburger icon (3 lines) ─────────────────────────────────────────────────
-function HamburgerIcon({ size = 20 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="4" y1="6"  x2="20" y2="6"/>
-      <line x1="4" y1="12" x2="20" y2="12"/>
-      <line x1="4" y1="18" x2="20" y2="18"/>
-    </svg>
-  );
-}
-
-// ─── Chevron left / right for collapse button ─────────────────────────────────
-function ChevronIcon({ open }) {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {open
-        ? <><polyline points="15 18 9 12 15 6"/></>   /* chevron left = close */
-        : <><polyline points="9 18 15 12 9 6"/></>    /* chevron right = open  */
-      }
-    </svg>
-  );
-}
+// Cashier destinations rendered inside CashierPage (shared red header + tabs).
+// Everything else (Inventory, Support Chat) is a staff page rendered here.
+const CASHIER_VIEW_IDS = ['order', 'online'];
 
 // ─── Staff page content ───────────────────────────────────────────────────────
 function StaffPageContent({ pageId }) {
   switch (pageId) {
-    case 'payments':  return <PaymentVerificationPage />;
     case 'inventory': return <InventoryPage />;
-    case 'menu':      return <MenuPage />;
     case 'chat':      return <SupportChatPage />;
     default:          return null;
   }
@@ -109,32 +25,39 @@ function StaffPageContent({ pageId }) {
 
 // ─── Page title map for the staff sub-header bar ──────────────────────────────
 const PAGE_META = {
-  payments:  { title: 'Payment Verification', sub: 'Review GCash receipts' },
-  inventory: { title: 'Inventory',            sub: 'Track stock & reorder thresholds' },
-  menu:      { title: 'Menu Management',      sub: 'Items, categories & availability' },
-  chat:      { title: 'Support Chat',         sub: 'Customer conversations' },
+  inventory: { title: 'Inventory',    sub: 'Track stock & reorder thresholds' },
+  chat:      { title: 'Support Chat', sub: 'Customer conversations' },
 };
 
 // ─── Main layout ──────────────────────────────────────────────────────────────
-export default function CashierLayout() {
-  const { user, logout } = useAuth();
-  const [activePage,   setActivePage]   = useState('cashier');
-  const [sidebarOpen,  setSidebarOpen]  = useState(true);   // desktop collapse state
-  const [drawerOpen,   setDrawerOpen]   = useState(false);  // mobile drawer
+// ─── Sidebar nav list ─────────────────────────────────────────────────────────
+function SidebarNavList({ items, sidebarOpen, view, onNav }) {
+  return items.map(({ id, label, sub, icon }) => (
+    <button
+      key={id}
+      title={!sidebarOpen ? label : undefined}
+      className={`cl-nav__link${view === id ? ' cl-nav__link--active' : ''}${!sidebarOpen ? ' cl-nav__link--collapsed' : ''}`}
+      onClick={() => onNav(id)}
+      aria-current={view === id ? 'page' : undefined}
+      aria-label={!sidebarOpen ? label : undefined}
+    >
+      <span className={`cl-nav__icon${view === id ? ' cl-nav__icon--active' : ''}`}>{icon}</span>
+      {sidebarOpen && (
+        <span className="cl-nav__labels">
+          <span className="cl-nav__label">{label}</span>
+          <span className="cl-nav__sub">{sub}</span>
+        </span>
+      )}
+      {sidebarOpen && view === id && <span className="cl-nav__pip" aria-hidden="true" />}
+    </button>
+  ));
+}
 
-  const allNav = [...CASHIER_NAV, ...STAFF_NAV];
-
-  const handleNav = useCallback((id) => {
-    setActivePage(id);
-    setDrawerOpen(false);
-  }, []);
-
-  const toggleSidebar = useCallback(() => setSidebarOpen(v => !v), []);
-
-  // ── Sidebar content (shared between full sidebar + mobile drawer) ────────
-  const SidebarInner = ({ onNav }) => (
+// ─── Sidebar content (desktop only) ───────────────────────────────────────────
+function SidebarContent({ sidebarOpen, view, onNav, user, onLogout }) {
+  return (
     <>
-      {/* Brand row */}
+      {/* Brand */}
       <div className="cl-brand">
         <img src={logo} alt="Bingnondo logo" className="cl-brand__logo" width="32" height="32" />
         <div className={`cl-brand__text${sidebarOpen ? '' : ' cl-brand__text--hidden'}`}>
@@ -143,49 +66,15 @@ export default function CashierLayout() {
         </div>
       </div>
 
-      {/* Nav groups */}
+      {/*       Nav groups */}
       <nav className="cl-nav" aria-label="Cashier navigation">
-        {sidebarOpen && <span className="cl-nav__group-label">Cashier</span>}
-        {CASHIER_NAV.map(({ id, label, sub, icon }) => (
-          <button
-            key={id}
-            title={!sidebarOpen ? label : undefined}
-            className={`cl-nav__link${activePage === id ? ' cl-nav__link--active' : ''}${!sidebarOpen ? ' cl-nav__link--collapsed' : ''}`}
-            onClick={() => { handleNav(id); onNav?.(); }}
-            aria-current={activePage === id ? 'page' : undefined}
-            aria-label={!sidebarOpen ? label : undefined}
-          >
-            <span className={`cl-nav__icon${activePage === id ? ' cl-nav__icon--active' : ''}`}>{icon}</span>
-            {sidebarOpen && (
-              <span className="cl-nav__labels">
-                <span className="cl-nav__label">{label}</span>
-                <span className="cl-nav__sub">{sub}</span>
-              </span>
-            )}
-            {sidebarOpen && activePage === id && <span className="cl-nav__pip" aria-hidden="true" />}
-          </button>
-        ))}
-
-        {sidebarOpen && <span className="cl-nav__group-label cl-nav__group-label--spaced">Staff Portal</span>}
-        {!sidebarOpen && <div className="cl-nav__divider" aria-hidden="true" />}
-        {STAFF_NAV.map(({ id, label, sub, icon }) => (
-          <button
-            key={id}
-            title={!sidebarOpen ? label : undefined}
-            className={`cl-nav__link${activePage === id ? ' cl-nav__link--active' : ''}${!sidebarOpen ? ' cl-nav__link--collapsed' : ''}`}
-            onClick={() => { handleNav(id); onNav?.(); }}
-            aria-current={activePage === id ? 'page' : undefined}
-            aria-label={!sidebarOpen ? label : undefined}
-          >
-            <span className={`cl-nav__icon${activePage === id ? ' cl-nav__icon--active' : ''}`}>{icon}</span>
-            {sidebarOpen && (
-              <span className="cl-nav__labels">
-                <span className="cl-nav__label">{label}</span>
-                <span className="cl-nav__sub">{sub}</span>
-              </span>
-            )}
-            {sidebarOpen && activePage === id && <span className="cl-nav__pip" aria-hidden="true" />}
-          </button>
+        {NAV_GROUPS.map((group, i) => (
+          <Fragment key={group.label}>
+            {sidebarOpen
+              ? <span className={`cl-nav__group-label${i > 0 ? ' cl-nav__group-label--spaced' : ''}`}>{group.label}</span>
+              : i > 0 && <div className="cl-nav__divider" aria-hidden="true" />}
+            <SidebarNavList items={group.items} sidebarOpen={sidebarOpen} view={view} onNav={onNav} />
+          </Fragment>
         ))}
       </nav>
 
@@ -204,7 +93,7 @@ export default function CashierLayout() {
         </div>
         <button
           className={`cl-user__logout${!sidebarOpen ? ' cl-user__logout--collapsed' : ''}`}
-          onClick={logout}
+          onClick={onLogout}
           aria-label="Sign out"
           title={!sidebarOpen ? 'Sign out' : undefined}
         >
@@ -218,110 +107,170 @@ export default function CashierLayout() {
       </div>
     </>
   );
+}
 
-  // ── Staff sub-header bar (injected above each staff page) ─────────────────
-  const StaffHeader = ({ pageId }) => {
-    const meta = PAGE_META[pageId] || {};
-    return (
-      <header className="cl-staff-header">
-        <button
-          className="cl-staff-header__toggle"
-          onClick={toggleSidebar}
-          aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'}
-          aria-expanded={sidebarOpen}
-        >
-          <HamburgerIcon size={18} />
-        </button>
-        <div className="cl-staff-header__title-group">
-          <h1 className="cl-staff-header__title">{meta.title}</h1>
-          <span className="cl-staff-header__sub">{meta.sub}</span>
-        </div>
-      </header>
-    );
-  };
+export default function CashierLayout() {
+  const { user, logout } = useAuth();
+  const [view,        setView]        = useState('order');  // order | history | online | inventory | chat
+  // Start collapsed on tablets/small laptops so the content area gets the
+  // room it needs; the header toggle can still expand it.
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window === 'undefined' || window.innerWidth >= 1024
+  );
+
+  // Keep the sidebar in sync when the window crosses the desktop breakpoint.
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setSidebarOpen(mq.matches);
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
+  // Mobile nav drawer.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerRef = useRef(null);
+
+  // Sign-out confirmation.
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const confirmLogout = () => { setLogoutOpen(false); logout(); };
+
+  // The drawer is a phone affordance: close it if the viewport grows past 768.
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const close = () => { if (mq.matches) setDrawerOpen(false); };
+    mq.addEventListener('change', close);
+    return () => mq.removeEventListener('change', close);
+  }, []);
+
+  // Drawer dialog behaviour: Escape to close, focus trap while open, restore
+  // focus to the opener on close, and lock page scroll underneath.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const dialog = drawerRef.current;
+    const previouslyFocused = document.activeElement;
+
+    const focusables = () =>
+      dialog
+        ? Array.from(
+            dialog.querySelectorAll(
+              'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            )
+          )
+        : [];
+
+    const first = focusables()[0];
+    if (first) first.focus();
+    else if (dialog) dialog.focus();
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') { setDrawerOpen(false); return; }
+      if (e.key !== 'Tab') return;
+      const f = focusables();
+      if (f.length === 0) { e.preventDefault(); return; }
+      const firstEl = f[0];
+      const lastEl = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+      else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+    };
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      if (previouslyFocused && previouslyFocused.focus) previouslyFocused.focus();
+    };
+  }, [drawerOpen]);
+
+  const isCashierView = CASHIER_VIEW_IDS.includes(view);
+
+  const handleNav = (id) => { setView(id); setDrawerOpen(false); };
+  const toggleSidebar = () => setSidebarOpen((v) => !v);
 
   return (
     <div className={`cl-root${sidebarOpen ? '' : ' cl-root--collapsed'}`}>
-
-      {/* ── Desktop sidebar ─────────────────────────────────────────────── */}
-      <aside
-        className={`cl-sidebar${sidebarOpen ? '' : ' cl-sidebar--collapsed'}`}
-        aria-label="Cashier sidebar"
-      >
-        {/* Collapse/expand toggle — bottom of sidebar, always visible */}
-        <button
-          className="cl-sidebar__toggle"
-          onClick={toggleSidebar}
-          aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          aria-expanded={sidebarOpen}
-        >
-          <ChevronIcon open={sidebarOpen} />
-          {sidebarOpen && <span>Collapse</span>}
-        </button>
-
-        <SidebarInner />
+      {/* ── Desktop sidebar ──────────────────────────────────────────────── */}
+      <aside className={`cl-sidebar${sidebarOpen ? '' : ' cl-sidebar--collapsed'}`}>
+        <SidebarContent
+          sidebarOpen={sidebarOpen}
+          view={view}
+          onNav={handleNav}
+          user={user}
+          onLogout={() => setLogoutOpen(true)}
+        />
       </aside>
 
-      {/* ── Mobile top bar ──────────────────────────────────────────────── */}
-      <header className="cl-topbar" aria-label="Cashier top bar">
-        <div className="cl-topbar__brand">
-          <img src={logo} alt="Bingnondo logo" width="26" height="26" />
-          <span className="cl-topbar__name">Bingnondo</span>
-        </div>
-        <button
-          className="cl-topbar__menu"
-          onClick={() => setDrawerOpen(true)}
-          aria-label="Open navigation menu"
-          aria-expanded={drawerOpen}
-        >
-          <HamburgerIcon size={20} />
-        </button>
-      </header>
+      {/* ── Main content ─────────────────────────────────────────────────── */}
+      <main className="cl-main" id="main-content">
+        {isCashierView ? (
+          <CashierPage
+            view={view}
+            onViewChange={setView}
+            onToggleSidebar={toggleSidebar}
+            sidebarOpen={sidebarOpen}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            drawerOpen={drawerOpen}
+          />
+        ) : (
+          <div className="cl-staff-wrapper">
+            <CashierHeader
+              view={view}
+              title={PAGE_META[view]?.title}
+              onToggleSidebar={toggleSidebar}
+              sidebarOpen={sidebarOpen}
+              onOpenDrawer={() => setDrawerOpen(true)}
+              drawerOpen={drawerOpen}
+            />
+            <div className="cl-staff-body">
+              <StaffPageContent pageId={view} />
+            </div>
+            <CashierBottomNav view={view} onNav={handleNav} />
+          </div>
+        )}
+      </main>
 
-      {/* ── Mobile drawer ───────────────────────────────────────────────── */}
+      {/* ── Mobile nav drawer ────────────────────────────────────────────── */}
       {drawerOpen && (
-        <div
-          className="cl-drawer-overlay"
-          onClick={() => setDrawerOpen(false)}
-          aria-hidden="true"
-        >
+        <div className="cl-drawer-overlay" onClick={() => setDrawerOpen(false)} role="presentation">
           <div
             className="cl-drawer"
-            onClick={(e) => e.stopPropagation()}
+            id="cashier-drawer"
+            ref={drawerRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Navigation menu"
+            onClick={(e) => e.stopPropagation()}
           >
-            <button
-              className="cl-drawer__close"
-              onClick={() => setDrawerOpen(false)}
-              aria-label="Close menu"
-            >
+            <button className="cl-drawer__close" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <line x1="18" y1="6"  x2="6"  y2="18"/>
-                <line x1="6"  y1="6"  x2="18" y2="18"/>
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
-            <SidebarInner onNav={() => setDrawerOpen(false)} />
+            <SidebarContent
+              sidebarOpen
+              view={view}
+              onNav={handleNav}
+              user={user}
+              onLogout={() => setLogoutOpen(true)}
+            />
           </div>
         </div>
       )}
 
-      {/* ── Main content ────────────────────────────────────────────────── */}
-      <main className="cl-main" id="main-content">
-        {activePage === 'cashier' ? (
-          // Cashier page passes toggle down into its own header
-          <CashierPage onToggleSidebar={toggleSidebar} sidebarOpen={sidebarOpen} />
-        ) : (
-          <div className="cl-staff-wrapper">
-            {/* Injected header with hamburger for all staff pages */}
-            <StaffHeader pageId={activePage} />
-            <div className="cl-staff-body">
-              <StaffPageContent pageId={activePage} />
-            </div>
-          </div>
-        )}
-      </main>
+      <ConfirmDialog
+        open={logoutOpen}
+        title="Sign out?"
+        message="You'll be returned to the login screen. Any unsaved changes will be lost."
+        confirmLabel="Sign out"
+        cancelLabel="Stay"
+        tone="danger"
+        onConfirm={confirmLogout}
+        onCancel={() => setLogoutOpen(false)}
+      />
     </div>
   );
 }

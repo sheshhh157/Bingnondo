@@ -187,6 +187,7 @@ export function SocketProvider({ children }) {
       socket.on('order:status', capture('order:status'));
       socket.on('order:ready', capture('order:ready'));
       socket.on('inventory:update', capture('inventory:update'));
+      socket.on('inventory:low_stock', capture('inventory:low_stock'));
       socket.on('delivery:update', capture('delivery:update'));
       socket.on('delivery:new', capture('delivery:new'));
       socket.on('menu_update', capture('menu_update'));

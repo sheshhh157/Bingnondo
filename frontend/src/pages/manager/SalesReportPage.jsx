@@ -11,6 +11,7 @@ import EmptyState from '../../components/EmptyState';
 import StatCard from '../../components/StatCard';
 import CardPanel from '../../components/CardPanel';
 import ErrorBanner from '../../components/ErrorBanner';
+import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/SalesReportPage.css';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line,
@@ -82,6 +83,7 @@ export default function SalesReportPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [page, setPage] = useState(1);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // Stable "now" captured once per mount so the bound memos below don't
   // recompute on every render, and so a period never straddles midnight
@@ -261,6 +263,21 @@ export default function SalesReportPage() {
     );
   };
 
+  const hasFilters = statusFilter !== 'all' || paymentFilter !== 'all';
+  const filterFields = (
+    <>
+      <select className="sales-select" value={statusFilter} onChange={(e) => resetToFirstPage(setStatusFilter)(e.target.value)} aria-label="Filter by status">
+        <option value="all">All statuses</option>
+        {Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+      <select className="sales-select" value={paymentFilter} onChange={(e) => resetToFirstPage(setPaymentFilter)(e.target.value)} aria-label="Filter by payment method">
+        <option value="all">All payments</option>
+        <option value="cash">Cash</option>
+        <option value="gcash">GCash</option>
+      </select>
+    </>
+  );
+
   return (
     <div className="sales-root">
       <div className="ui-pageheader">
@@ -329,15 +346,8 @@ export default function SalesReportPage() {
                 aria-label="Search orders"
               />
             </div>
-            <select className="sales-select" value={statusFilter} onChange={(e) => resetToFirstPage(setStatusFilter)(e.target.value)} aria-label="Filter by status">
-              <option value="all">All statuses</option>
-              {Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-            <select className="sales-select" value={paymentFilter} onChange={(e) => resetToFirstPage(setPaymentFilter)(e.target.value)} aria-label="Filter by payment method">
-              <option value="all">All payments</option>
-              <option value="cash">Cash</option>
-              <option value="gcash">GCash</option>
-            </select>
+            <FilterTrigger open={filterOpen} onClick={() => setFilterOpen(true)} active={hasFilters} label="Filter orders" />
+            <FilterInline>{filterFields}</FilterInline>
           </div>
 
           <div className="sales-summary">
@@ -472,6 +482,10 @@ export default function SalesReportPage() {
           </CardPanel>
         </>
       )}
+
+      <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter orders">
+        {filterFields}
+      </FilterModal>
     </div>
   );
 }

@@ -26,6 +26,10 @@ router.get('/totals', ...staffAuth, ctrl.getOrderTotals);
 // Same ordering requirement as '/totals'.
 router.get('/report', ...staffAuth, ctrl.getOrderReport);
 
+// GET /api/orders/online — online-order console (customer + payment + delivery).
+// Same ordering requirement as '/totals': must precede '/:id'.
+router.get('/online', ...staffAuth, ctrl.getOnlineOrders);
+
 // GET /api/orders/:id — get single order detail
 router.get('/:id', ...staffAuth, ctrl.getOrderById);
 

@@ -5,6 +5,17 @@
   background: var(--color-background);
 }
 
+/* ─── Breakpoint system ─────────────────────────────────────────────
+ * Canonical admin breakpoints — reuse these everywhere in admin CSS:
+ *   1280  wide desktop (multi-column dashboards)
+ *   1024  full sidebar shown; desktop layout begins
+ *    768  top bar + drawer begins (below this)
+ *    640  single-column / full-width sheets
+ *    480  compact phones (stat rows collapse to 1 column)
+ * Pair a `min-width: N` query with a `max-width: N - 1` complement
+ * (e.g. 1024 / 1023, 768 / 767). Prefer min-width (mobile-first).
+ * ─────────────────────────────────────────────────────────────────── */
+
 /* ─── Imperial Ink sidebar palette ──────────────────────────────────
  * Admin uses its own dark ink + vermillion palette — intentionally
  * distinct from every other module (Staff uses warm loam, Kitchen
@@ -22,7 +33,7 @@
   --al-sidebar-active-bg:  rgba(217,119,6,0.18);
   --al-sidebar-active-bar: #F59E0B;
   --al-sidebar-gold:       #D97706;
-  --al-sidebar-fg:         rgba(255,251,235,0.55);
+  --al-sidebar-fg:         rgba(255,251,235,0.8);
   --al-sidebar-fg-active:  #FFFbeb;
   --al-content-bg:         var(--color-background);
   --al-card-bg:            var(--color-card);
@@ -41,7 +52,7 @@
   top: 0;
   background: var(--al-sidebar-bg);
   border-right: 1px solid var(--al-sidebar-border-hi);
-  overflow-y: auto;
+  overflow: hidden;
   z-index: 40;
 }
 
@@ -60,42 +71,44 @@
   z-index: 40;
   padding: 12px 0;
   gap: 4px;
+  overflow: hidden;
 }
 
 /* ─── Mobile Top Bar (<768px) ──────────────────────────────────────── */
-.al-topbar {
+/* In-flow sticky bar inside .al-main, so content below is never
+   overlapped (no padding-top compensation on the scroll area). */
+.al-header {
   display: none;
   align-items: center;
   justify-content: space-between;
-  height: 52px;
+  min-height: 56px;
   padding: 0 16px;
+  padding-top: env(safe-area-inset-top, 0px);
   background: var(--al-sidebar-bg);
   border-bottom: 1px solid var(--al-sidebar-border);
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
   z-index: 50;
+  flex-shrink: 0;
 }
 
 /* ─── Responsive breakpoints ───────────────────────────────────────── */
 @media (min-width: 1024px) {
   .al-sidebar         { display: flex; }
   .al-sidebar-compact { display: none; }
-  .al-topbar          { display: none; }
-  .al-main            { margin-left: 0; padding-top: 0; }
+  .al-header          { display: none; }
+  .al-main            { margin-left: 0; }
 }
 @media (min-width: 768px) and (max-width: 1023px) {
   .al-sidebar         { display: none; }
   .al-sidebar-compact { display: flex; }
-  .al-topbar          { display: none; }
-  .al-main            { margin-left: 0; padding-top: 0; }
+  .al-header          { display: none; }
+  .al-main            { margin-left: 0; }
 }
 @media (max-width: 767px) {
   .al-sidebar         { display: none; }
   .al-sidebar-compact { display: none; }
-  .al-topbar          { display: flex; }
-  .al-main            { padding-top: 52px; }
+  .al-header          { display: flex; }
 }
 
 /* ─── Brand ─────────────────────────────────────────────────────────── */
@@ -140,7 +153,8 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  padding: 10px 0;
+  min-height: 0;
+  padding: 6px 0;
   gap: 2px;
   overflow-y: auto;
 }
@@ -148,6 +162,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 44px;
   padding: 9px 16px;
   border-left: 2px solid transparent;
   color: var(--al-sidebar-fg);
@@ -191,21 +206,42 @@
 }
 .al-nav__sub {
   font-size: 0.6875rem;
-  color: rgba(255,251,235,0.35);
+  color: rgba(255,251,235,0.62);
   line-height: 1.2;
 }
 .al-nav__link--active .al-nav__sub {
-  color: rgba(255,251,235,0.55);
+  color: rgba(255,251,235,0.85);
 }
-.al-nav__pip {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--al-sidebar-active-bar);
+
+/* ─── Section labels & dividers ──────────────────────────────────────── */
+.al-nav__section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,251,235,0.62);
+}
+.al-nav__divider {
+  height: 1px;
+  margin: 8px 16px;
+  background: rgba(255,251,235,0.12);
+  flex-shrink: 0;
+}
+.al-nav__tag {
+  margin-left: auto;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #FBBF24;
+  background: rgba(217,119,6,0.16);
+  border: 1px solid rgba(217,119,6,0.4);
+  border-radius: 99px;
+  padding: 1px 7px;
 }
 
 /* ─── User section ───────────────────────────────────────────────────── */
@@ -256,7 +292,7 @@
 }
 .al-user__role {
   font-size: 0.625rem;
-  color: var(--al-sidebar-gold);
+  color: #FBBF24;
   letter-spacing: 0.06em;
 }
 .al-user__logout {
@@ -268,7 +304,7 @@
   background: none;
   border: 1px solid rgba(255,251,235,0.08);
   border-radius: 2px;
-  color: rgba(255,251,235,0.38);
+  color: rgba(255,251,235,0.62);
   font-family: var(--font-body);
   font-size: 0.75rem;
   cursor: pointer;
@@ -294,17 +330,33 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
   gap: 2px;
   width: 100%;
   align-items: center;
   padding: 4px 0;
+  overflow-y: auto;
+}
+.al-compact__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+.al-compact__divider {
+  width: 26px;
+  height: 1px;
+  margin: 6px auto;
+  background: rgba(255,251,235,0.12);
+  flex-shrink: 0;
 }
 .al-compact__link {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 2px;
   border: 1px solid transparent;
   color: var(--al-sidebar-fg);
@@ -325,37 +377,66 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   background: none;
   border: none;
   color: var(--al-sidebar-fg);
   cursor: pointer;
-  transition: color 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
   padding: 0;
+  border-radius: 2px;
 }
-.al-compact__logout:hover { color: var(--al-sidebar-fg-active); }
+.al-compact__logout:hover { color: var(--al-sidebar-fg-active); background: var(--al-sidebar-bg-hover); }
 
-/* ─── Mobile topbar ──────────────────────────────────────────────────── */
-.al-topbar__brand {
+/* ─── Mobile top bar content ────────────────────────────────────────── */
+.al-header__brand {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
-.al-topbar__name {
+.al-header__logo-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--al-sidebar-gold);
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+.al-header__name {
   font-family: var(--font-heading);
   font-size: 0.9375rem;
-  color: var(--al-sidebar-gold);
+  color: var(--al-sidebar-fg-active);
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.al-topbar__menu {
+.al-header__menu {
   background: none;
   border: none;
-  color: rgba(255,251,235,0.6);
+  color: rgba(255,251,235,0.65);
   cursor: pointer;
   display: flex;
   align-items: center;
-  padding: 4px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 2px;
+  touch-action: manipulation;
+  transition: background 120ms ease, color 120ms ease;
+}
+.al-header__menu:hover {
+  background: var(--al-sidebar-bg-hover);
+  color: var(--al-sidebar-fg-active);
 }
 
 /* ─── Mobile drawer ──────────────────────────────────────────────────── */
@@ -367,33 +448,186 @@
   display: flex;
 }
 .al-drawer {
-  width: 260px;
-  height: 100%;
+  width: min(260px, 85vw);
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top);
   background: var(--al-sidebar-bg);
   border-right: 1px solid var(--al-sidebar-border-hi);
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow-y: auto;
+  overflow: hidden;
 }
 .al-drawer__close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: calc(8px + env(safe-area-inset-top));
+  right: 8px;
   background: none;
   border: none;
-  color: rgba(255,251,235,0.45);
+  color: rgba(255,251,235,0.55);
   cursor: pointer;
-  padding: 4px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
   z-index: 1;
 }
+.al-drawer__close:hover { color: var(--al-sidebar-fg-active); background: var(--al-sidebar-bg-hover); }
 
 /* ─── Main content area ─────────────────────────────────────────────── */
 .al-main {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   background: var(--al-content-bg);
   display: flex;
   flex-direction: column;
+}
+
+/* Scroll lock while the mobile drawer is open. */
+.al-main--locked { overflow: hidden; }
+
+/* Content gutter — mirrors the Manager shell (.ml-main) so embedded
+   manager pages and admin pages share the same edge rhythm. */
+.al-content {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 28px 28px 40px;
+}
+
+@media (max-width: 1023px) {
+  .al-content { padding: 20px; }
+}
+
+@media (max-width: 767px) {
+  .al-content { padding: 16px; }
+}
+
+/* Admin pages (.ap-page) carry their own padding — the shell gutter now
+   supplies it, so drop the nested padding to avoid doubling. */
+.al-content .ap-page { padding: 0; }
+
+/* ─── Skip to content ───────────────────────────────────────────────── */
+.al-skip {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 9999;
+  padding: 8px 12px;
+  background: #FFFbeb;
+  color: #5C0A14;
+  border: 1px solid var(--al-card-border-hi, #C9A262);
+  border-radius: 4px;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-220%);
+  transition: transform 150ms ease;
+}
+.al-skip:focus {
+  transform: translateY(0);
+}
+
+/* ─── Focus visibility ──────────────────────────────────────────────── */
+.al-nav__link:focus-visible,
+.al-compact__link:focus-visible,
+.al-compact__logout:focus-visible,
+.al-user__logout:focus-visible,
+.al-header__menu:focus-visible,
+.al-drawer__close:focus-visible {
+  outline: 2px solid #FBBF24;
+  outline-offset: 2px;
+}
+
+/* ─── Reduced motion ────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .al-header__menu { transition: none; }
+}
+
+/* ─── Short screens: collapse nav sub-labels to save vertical space ─── */
+@media (max-height: 819px) {
+  .al-nav__sub { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Manager pages embedded in the admin console.
+   manager/* pages (Dashboard, Sales, Oversight ×4, Menu) render inside
+   .al-content. Every rule here is scoped to .al-content so the standalone
+   /manager/* routes remain pixel-identical.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Embedded manager roots must be free to shrink inside the shell grid. */
+.al-content .dash-root,
+.al-content .sales-root,
+.al-content .ok-root,
+.al-content .osk-root,
+.al-content .menu-root,
+.al-content .odl-root {
+  min-width: 0;
+}
+
+/* Search fields: full width + 16px input on phones (no iOS zoom). */
+@media (max-width: 767px) {
+  .al-content .sales-search,
+  .al-content .osk-search,
+  .al-content .menu-search,
+  .al-content .sales-select,
+  .al-content .osk-select {
+    width: 100%;
+    min-width: 0;
+  }
+  .al-content .sales-search__input,
+  .al-content .osk-search__input,
+  .al-content .menu-search__input,
+  .al-content .sales-select,
+  .al-content .osk-select {
+    font-size: 16px;
+  }
+}
+
+/* Sales summary cards overflow at 3 across on narrow admin content widths. */
+@media (max-width: 900px) {
+  .al-content .sales-summary { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .al-content .sales-summary { grid-template-columns: 1fr; }
+}
+
+/* Transactions table: scroll instead of squashing, with a pinned order column. */
+.al-content .sales-table { min-width: 640px; }
+.al-content .sales-table-wrap { -webkit-overflow-scrolling: touch; }
+.al-content .sales-table th:first-child,
+.al-content .sales-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--color-card);
+  box-shadow: inset -1px 0 0 var(--color-border);
+}
+.al-content .sales-table thead th:first-child { z-index: 3; }
+
+/* Manager menu oversight: stack the toolbar instead of wrapping unevenly. */
+@media (max-width: 639px) {
+  .al-content .menu-toolbar { flex-direction: column; align-items: stretch; }
+  .al-content .menu-toolbar .menu-search { flex: initial; width: 100%; }
+  .al-content .menu-toggle { justify-content: center; }
+}
+
+/* Embedded manager cards/toggles: comfortable tap targets. */
+.al-content .dash-scope__btn,
+.al-content .sales-period__btn,
+.al-content .menu-toggle,
+.al-content .osk-export {
+  min-height: 40px;
+}
+
+@media (max-width: 479px) {
+  .al-content .osk-stats { grid-template-columns: repeat(2, 1fr); }
 }

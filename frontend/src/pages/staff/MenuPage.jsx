@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { staffMenuAPI, inventoryAPI, uploadAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
+import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/StaffMenuPage.css';
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -725,6 +726,7 @@ export default function MenuPage() {
   const [toggling, setToggling] = useState(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(12);
+  const [filterOpen, setFilterOpen] = useState(false);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchAll = useCallback(async () => {
@@ -757,7 +759,7 @@ export default function MenuPage() {
   const filtered = useMemo(() => {
     let r = items;
     if (search.trim()) {
-      const q = search.toLowerCase();
+      const q = search.trim().toLowerCase();
       r = r.filter((i) => i.name.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q));
     }
     if (filterCat !== 'all') r = r.filter((i) => String(i.category_id) === filterCat);
@@ -826,6 +828,44 @@ export default function MenuPage() {
     </div>
   );
 
+  const filterFields = (
+    <div className="mn-filters__selects">
+      <select className="mn-select" value={filterCat} onChange={(e) => setFilterCat(e.target.value)} aria-label="Filter by category">
+        <option value="all">All categories</option>
+        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <select className="mn-select" value={filterAvail} onChange={(e) => setFilterAvail(e.target.value)} aria-label="Filter by availability">
+        <option value="all">All status</option>
+        <option value="available">Available</option>
+        <option value="unavailable">Unavailable</option>
+      </select>
+      <div className="mn-view-toggle" role="group" aria-label="View mode">
+        {['grid', 'table'].map((mode) => (
+          <button key={mode} onClick={() => setViewMode(mode)} className={`mn-view-toggle__btn${viewMode === mode ? ' mn-view-toggle__btn--active' : ''}`} aria-pressed={viewMode === mode} aria-label={`${mode} view`}>
+            {mode === 'grid'
+              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            }
+            <span className="mn-view-toggle__label">{mode}</span>
+          </button>
+        ))}
+      </div>
+
+      <label className="pag__limit-label">
+        Show
+        <select
+          className="pag__limit-select"
+          value={perPage}
+          onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
+          aria-label="Items per page"
+        >
+          {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        per page
+      </label>
+    </div>
+  );
+
   return (
     <div className="mn-root">
       {toastMsg && <div className={`mn-toast mn-toast--${toastType}`} role="status" aria-live="polite">{toastMsg}</div>}
@@ -877,42 +917,8 @@ export default function MenuPage() {
           </svg>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu items…" className="mn-search__input" aria-label="Search menu items" />
         </div>
-        <div className="mn-filters__selects">
-          <select className="mn-select" value={filterCat} onChange={(e) => setFilterCat(e.target.value)} aria-label="Filter by category">
-            <option value="all">All categories</option>
-            {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
-          </select>
-          <select className="mn-select" value={filterAvail} onChange={(e) => setFilterAvail(e.target.value)} aria-label="Filter by availability">
-            <option value="all">All status</option>
-            <option value="available">Available</option>
-            <option value="unavailable">Unavailable</option>
-          </select>
-          <div className="mn-view-toggle" role="group" aria-label="View mode">
-            {['grid', 'table'].map((mode) => (
-              <button key={mode} onClick={() => setViewMode(mode)} className={`mn-view-toggle__btn${viewMode === mode ? ' mn-view-toggle__btn--active' : ''}`} aria-pressed={viewMode === mode} aria-label={`${mode} view`}>
-                {mode === 'grid'
-                  ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                }
-                <span className="mn-view-toggle__label">{mode}</span>
-              </button>
-            ))}
-          </div>
-
-          <label className="pag__limit-label" htmlFor="mn-per-page">
-            Show
-            <select
-              id="mn-per-page"
-              className="pag__limit-select"
-              value={perPage}
-              onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
-              aria-label="Items per page"
-            >
-              {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            per page
-          </label>
-        </div>
+        <FilterTrigger open={filterOpen} onClick={() => setFilterOpen(true)} active={filterCat !== 'all' || filterAvail !== 'all'} label="Filter menu" />
+        <FilterInline>{filterFields}</FilterInline>
       </div>
 
       {/* Content */}
@@ -948,11 +954,11 @@ export default function MenuPage() {
           <table className="mn-table" aria-label="Menu items">
             <thead>
               <tr>
-                <th className="mn-table__th">Item</th>
-                <th className="mn-table__th">Category</th>
-                <th className="mn-table__th">Price</th>
-                <th className="mn-table__th">Availability</th>
-                <th className="mn-table__th mn-table__th--right">Actions</th>
+                <th scope="col" className="mn-table__th">Item</th>
+                <th scope="col" className="mn-table__th">Category</th>
+                <th scope="col" className="mn-table__th">Price</th>
+                <th scope="col" className="mn-table__th">Availability</th>
+                <th scope="col" className="mn-table__th mn-table__th--right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -973,6 +979,10 @@ export default function MenuPage() {
       {deleteTarget && (
         <ConfirmDialog item={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} />
       )}
+
+      <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter menu">
+        {filterFields}
+      </FilterModal>
     </div>
   );
 }
