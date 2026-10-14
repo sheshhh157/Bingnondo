@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { inventoryAPI } from '../../services/api';
+import { inventoryAPI, categoriesAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
 import '../../styles/InventoryPage.css';
@@ -112,8 +112,8 @@ function Pagination({ page, totalPages, total, from, to, onPage }) {
   );
 }
 
-// ─── Transaction Modal ────────────────────────────────────────────────────────
-function TransactionModal({ item, type, onClose, onSubmit }) {
+// ─── Restock Modal ────────────────────────────────────────────────────────────
+function RestockModal({ item, onClose, onSubmit }) {
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
@@ -131,15 +131,13 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
     };
   }, [onClose]);
 
-  const isRestock = type === 'restock';
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     const qty = Number(quantity);
     if (!qty || qty <= 0) { setError('Enter a valid quantity.'); return; }
     setLoading(true); setError('');
     try {
-      await onSubmit(item.id, { change_type: type, quantity: qty, note });
+      await onSubmit(item.id, { change_type: 'restock', quantity: qty, note });
       onClose();
     } catch (err) {
       setError(err.response?.data?.message || 'Transaction failed.');
@@ -157,7 +155,7 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
       >
         <div className="inv-modal__header">
           <h2 id="inv-modal-title" className="inv-modal__title">
-            {isRestock ? 'Restock Ingredient' : 'Adjust Stock'}
+            Restock Ingredient
           </h2>
           <button className="inv-modal__close" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -178,21 +176,21 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
           <form id="txn-form" onSubmit={handleSubmit} noValidate>
             <div className="inv-field">
               <label htmlFor="txn-qty" className="inv-field__label">
-                {isRestock ? `Add quantity (${item.unit})` : `Set new stock (${item.unit})`}
+                Add quantity ({item.unit})
               </label>
               <input
                 id="txn-qty"
                 ref={inputRef}
                 type="number"
-                min={isRestock ? 1 : 0}
+                min={1}
                 step="0.01"
                 value={quantity}
                 onChange={(e) => { setQuantity(e.target.value); setError(''); }}
                 className="inv-field__input"
-                placeholder={isRestock ? 'e.g. 50' : 'Corrected stock level'}
+                placeholder="e.g. 50"
                 required
               />
-              {isRestock && quantity && (
+              {quantity && (
                 <p className="inv-field__hint">
                   New total: <strong>{item.current_stock + Number(quantity)} {item.unit}</strong>
                 </p>
@@ -209,7 +207,7 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 className="inv-field__input"
-                placeholder={isRestock ? 'e.g. Delivery from supplier' : 'e.g. Manual recount'}
+                placeholder="e.g. Delivery from supplier"
               />
             </div>
 
@@ -227,7 +225,7 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
         <div className="inv-modal__footer">
           <button className="inv-btn inv-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
           <button className="inv-btn inv-btn--primary" form="txn-form" type="submit" disabled={loading} aria-busy={loading}>
-            {loading ? <span className="inv-spinner" aria-label="Saving…" /> : isRestock ? 'Restock' : 'Adjust'}
+            {loading ? <span className="inv-spinner" aria-label="Saving…" /> : 'Restock'}
           </button>
         </div>
       </div>
@@ -236,10 +234,8 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
 }
 
 // ─── Mobile card ──────────────────────────────────────────────────────────────
-function InventoryCard({ item, onRestock, onAdjust, onOutOfStock }) {
+function InventoryCard({ item, isAdmin, onRestock, onOutOfStock, onEdit }) {
   const s = stockStatus(item.current_stock, item.reorder_level);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const closeMore = () => setMoreOpen(false);
   const cap = Math.max(item.current_stock * 1.5, item.reorder_level * 3, 10);
   const pct = Math.min(100, (item.current_stock / cap) * 100);
   return (
@@ -248,6 +244,13 @@ function InventoryCard({ item, onRestock, onAdjust, onOutOfStock }) {
         <div className="inv-card__ident">
           <h3 className="inv-card__name" title={item.name}>{item.name}</h3>
           <span className="inv-card__unit">per {item.unit}</span>
+          {(item.categories || []).length > 0 && (
+            <span className="inv-card__cats">
+              {item.categories.map((c) => (
+                <span key={c.id} className="inv-cat-chip">{c.name}</span>
+              ))}
+            </span>
+          )}
         </div>
         <StockBadge current={item.current_stock} reorder={item.reorder_level} />
       </div>
@@ -266,44 +269,116 @@ function InventoryCard({ item, onRestock, onAdjust, onOutOfStock }) {
 
       <div className="inv-card__actions">
         <button className="inv-btn inv-btn--primary inv-btn--sm" onClick={() => onRestock(item)}>+ Restock</button>
-        <button className="inv-btn inv-btn--quiet inv-btn--sm inv-card__inline" onClick={() => onAdjust(item)}>Adjust</button>
-        {item.current_stock > 0 && (
-          <button className="inv-btn inv-btn--quiet inv-btn--quiet-danger inv-btn--sm inv-card__inline" onClick={() => onOutOfStock(item)}>Out of stock</button>
+        {isAdmin && (
+          <button className="inv-btn inv-btn--quiet inv-btn--sm" onClick={() => onEdit(item)}>Edit</button>
         )}
-        <div className="inv-card__more">
-          <button
-            type="button"
-            className="inv-btn inv-btn--sm inv-card__more-btn"
-            aria-haspopup="menu"
-            aria-expanded={moreOpen}
-            aria-label={`More actions for ${item.name}`}
-            onClick={() => setMoreOpen((o) => !o)}
-          >⋯</button>
-          {moreOpen && (
-            <>
-              <div className="inv-menu-backdrop" onClick={closeMore} role="presentation" />
-              <div className="inv-menu" role="menu">
-                <button type="button" role="menuitem" className="inv-menu__item" onClick={() => { closeMore(); onAdjust(item); }}>Adjust stock</button>
-                {item.current_stock > 0 && (
-                  <button type="button" role="menuitem" className="inv-menu__item inv-menu__item--danger" onClick={() => { closeMore(); onOutOfStock(item); }}>Out of stock</button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+        {item.current_stock > 0 && (
+          <button className="inv-btn inv-btn--quiet inv-btn--quiet-danger inv-btn--sm" onClick={() => onOutOfStock(item)}>Out of stock</button>
+        )}
       </div>
     </article>
   );
 }
 
-// ─── Add Ingredient Modal ─────────────────────────────────────────────────────
-function AddIngredientModal({ onClose, onSubmit }) {
-  const [name, setName]               = useState('');
-  const [unit, setUnit]               = useState('');
-  const [currentStock, setCurrentStock] = useState('');
-  const [reorderLevel, setReorderLevel] = useState('');
-  const [loading, setLoading]         = useState(false);
-  const [error, setError]             = useState('');
+// ─── Category multi-select (dropdown with checkbox list) ──────────────────────
+function CategoryMultiSelect({ id, categories, value, onChange }) {
+  const [open, setOpen]           = useState(false);
+  const [panelStyle, setPanelStyle] = useState(null);
+  const rootRef = useRef(null);
+
+  const positionPanel = useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openUp = spaceBelow < 260 && r.top > spaceBelow;
+    setPanelStyle(openUp
+      ? { bottom: window.innerHeight - r.top + 4, left: r.left, width: r.width }
+      : { top: r.bottom + 4, left: r.left, width: r.width });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('resize', positionPanel);
+    window.addEventListener('scroll', positionPanel, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('resize', positionPanel);
+      window.removeEventListener('scroll', positionPanel, true);
+    };
+  }, [open, positionPanel]);
+
+  const toggleOpen = () => {
+    setOpen((prev) => {
+      if (!prev) positionPanel();
+      return !prev;
+    });
+  };
+
+  const toggle = (catId) => {
+    onChange(value.includes(catId) ? value.filter((x) => x !== catId) : [...value, catId]);
+  };
+
+  const selectedNames = categories.filter((c) => value.includes(c.id)).map((c) => c.name);
+  const summary = selectedNames.length === 0
+    ? 'No categories selected'
+    : selectedNames.length <= 2
+      ? selectedNames.join(', ')
+      : `${selectedNames.length} categories selected`;
+
+  return (
+    <div
+      className="inv-multiselect"
+      ref={rootRef}
+      onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}
+    >
+      <button
+        type="button"
+        id={id}
+        className="inv-multiselect__trigger"
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={toggleOpen}
+      >
+        <span className={`inv-multiselect__value${selectedNames.length === 0 ? ' inv-multiselect__value--empty' : ''}`}>
+          {summary}
+        </span>
+        <svg className={`inv-multiselect__chevron${open ? ' inv-multiselect__chevron--open' : ''}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div className="inv-multiselect__panel" style={panelStyle || undefined} role="group" aria-labelledby={id}>
+          {categories.length === 0
+            ? <p className="inv-multiselect__empty">No categories yet — add them in Menu Management.</p>
+            : categories.map((c) => {
+                const checked = value.includes(c.id);
+                return (
+                  <label key={c.id} className="inv-multiselect__option">
+                    <input type="checkbox" checked={checked} onChange={() => toggle(c.id)} />
+                    <span>{c.name}</span>
+                  </label>
+                );
+              })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Add / Edit ingredient modal ──────────────────────────────────────────────
+function ItemModal({ mode, item, categories, onClose, onSubmit }) {
+  const isEdit = mode === 'edit';
+  const [name, setName]                 = useState(item?.name || '');
+  const [unit, setUnit]                 = useState(item?.unit || '');
+  const [currentStock, setCurrentStock] = useState(item?.current_stock != null ? String(item.current_stock) : '');
+  const [reorderLevel, setReorderLevel] = useState(item?.reorder_level != null ? String(item.reorder_level) : '');
+  const [categoryIds, setCategoryIds]   = useState(() => (item?.categories || []).map((c) => c.id));
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState('');
   const nameRef = useRef(null);
 
   useEffect(() => {
@@ -328,10 +403,11 @@ function AddIngredientModal({ onClose, onSubmit }) {
         unit:          unit.trim(),
         current_stock: Number(currentStock) || 0,
         reorder_level: Number(reorderLevel) || 0,
+        category_ids:  categoryIds,
       });
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add ingredient.');
+      setError(err.response?.data?.message || 'Failed to save ingredient.');
     } finally { setLoading(false); }
   };
 
@@ -342,10 +418,10 @@ function AddIngredientModal({ onClose, onSubmit }) {
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="add-ing-title"
+        aria-labelledby="item-title"
       >
         <div className="inv-modal__header">
-          <h2 id="add-ing-title" className="inv-modal__title">Add Ingredient</h2>
+          <h2 id="item-title" className="inv-modal__title">{isEdit ? 'Edit Ingredient' : 'Add Ingredient'}</h2>
           <button className="inv-modal__close" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -354,7 +430,7 @@ function AddIngredientModal({ onClose, onSubmit }) {
         </div>
 
         <div className="inv-modal__body">
-          <form id="add-ing-form" onSubmit={handleSubmit} noValidate>
+          <form id="inv-item-form" onSubmit={handleSubmit} noValidate>
             <div className="inv-field">
               <label htmlFor="ing-name" className="inv-field__label">Ingredient name <span className="inv-field__required">*</span></label>
               <input
@@ -385,10 +461,22 @@ function AddIngredientModal({ onClose, onSubmit }) {
               </select>
             </div>
 
+            <div className="inv-field">
+              <span className="inv-field__label">
+                Categories <span className="inv-field__optional">(optional)</span>
+              </span>
+              <CategoryMultiSelect
+                id="ing-category"
+                categories={categories}
+                value={categoryIds}
+                onChange={setCategoryIds}
+              />
+            </div>
+
             <div className="inv-field-row">
               <div className="inv-field">
                 <label htmlFor="ing-stock" className="inv-field__label">
-                  Starting stock <span className="inv-field__optional">(optional)</span>
+                  {isEdit ? 'Current stock' : 'Starting stock'} <span className="inv-field__optional">(optional)</span>
                 </label>
                 <input
                   id="ing-stock"
@@ -432,8 +520,8 @@ function AddIngredientModal({ onClose, onSubmit }) {
 
         <div className="inv-modal__footer">
           <button className="inv-btn inv-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
-          <button className="inv-btn inv-btn--primary" form="add-ing-form" type="submit" disabled={loading} aria-busy={loading}>
-            {loading ? <span className="inv-spinner" aria-label="Saving…" /> : 'Add Ingredient'}
+          <button className="inv-btn inv-btn--primary" form="inv-item-form" type="submit" disabled={loading} aria-busy={loading}>
+            {loading ? <span className="inv-spinner" aria-label="Saving…" /> : isEdit ? 'Save changes' : 'Add Ingredient'}
           </button>
         </div>
       </div>
@@ -447,13 +535,15 @@ export default function InventoryPage() {
   // Creating new ingredients is admin-only; cashiers keep restock/adjust/out-of-stock.
   const isAdmin = user?.role === 'admin';
   const [items, setItems] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [modal, setModal] = useState(null);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [itemModal, setItemModal] = useState(null);
   const [confirmItem, setConfirmItem] = useState(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -463,8 +553,13 @@ export default function InventoryPage() {
   const fetchItems = useCallback(async () => {
     try {
       setError('');
-      const { data } = await inventoryAPI.getAll();
-      setItems(data.items || data);
+      // Categories come from Menu Management (shared menu_categories table).
+      const [itemsRes, catsRes] = await Promise.all([
+        inventoryAPI.getAll(),
+        categoriesAPI.getAll(),
+      ]);
+      setItems(itemsRes.data.items || itemsRes.data);
+      setCategories(catsRes.data.categories || []);
     } catch {
       setError('Failed to load inventory. Please try again.');
     } finally { setLoading(false); }
@@ -497,14 +592,19 @@ export default function InventoryPage() {
         'success'
       );
     } else {
-      showToast(payload.change_type === 'restock' ? 'Restocked successfully.' : 'Stock adjusted.');
+      showToast('Restocked successfully.');
     }
     await fetchItems();
   };
 
-  const handleAddIngredient = async (payload) => {
-    await inventoryAPI.create(payload);
-    showToast(`"${payload.name}" added to inventory.`);
+  const handleItemSubmit = async (payload) => {
+    if (itemModal?.mode === 'edit') {
+      await inventoryAPI.update(itemModal.item.id, payload);
+      showToast(`"${payload.name}" updated.`);
+    } else {
+      await inventoryAPI.create(payload);
+      showToast(`"${payload.name}" added to inventory.`);
+    }
     await fetchItems();
   };
 
@@ -539,16 +639,18 @@ export default function InventoryPage() {
     if (filterStatus === 'out') r = r.filter((i) => i.current_stock <= 0);
     else if (filterStatus === 'low') r = r.filter((i) => i.current_stock > 0 && i.current_stock <= i.reorder_level);
     else if (filterStatus === 'ok') r = r.filter((i) => i.current_stock > i.reorder_level);
+    if (filterCategory === 'none') r = r.filter((i) => !i.categories || i.categories.length === 0);
+    else if (filterCategory !== 'all') r = r.filter((i) => (i.categories || []).some((c) => String(c.id) === filterCategory));
     return [...r].sort((a, b) => {
       if (sortBy === 'name') return a.name.localeCompare(b.name);
       if (sortBy === 'stock_asc') return a.current_stock - b.current_stock;
       if (sortBy === 'stock_desc') return b.current_stock - a.current_stock;
       return 0;
     });
-  }, [items, search, filterStatus, sortBy]);
+  }, [items, search, filterStatus, filterCategory, sortBy]);
 
   // Reset to page 1 when filters/search/perPage change
-  useEffect(() => { setPage(1); }, [search, filterStatus, sortBy, perPage]);
+  useEffect(() => { setPage(1); }, [search, filterStatus, filterCategory, sortBy, perPage]);
 
   // Paginated slices — single perPage for both table and cards
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
@@ -556,7 +658,10 @@ export default function InventoryPage() {
   const start      = (safePage - 1) * perPage;
 
   // Number of non-default filters, surfaced on the mobile Filter button.
-  const activeFilterCount = (filterStatus !== 'all' ? 1 : 0) + (sortBy !== 'name' ? 1 : 0);
+  const activeFilterCount =
+    (filterStatus !== 'all' ? 1 : 0) +
+    (filterCategory !== 'all' ? 1 : 0) +
+    (sortBy !== 'name' ? 1 : 0);
 
   const pagedTable = useMemo(() => filtered.slice(start, start + perPage), [filtered, start, perPage]);
 
@@ -591,7 +696,7 @@ export default function InventoryPage() {
         </div>
         {isAdmin && (
           <div className="inv-header-actions">
-            <button className="inv-btn inv-btn--primary" onClick={() => setShowAddModal(true)}>
+            <button className="inv-btn inv-btn--primary" onClick={() => setItemModal({ mode: 'add' })}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
@@ -670,6 +775,11 @@ export default function InventoryPage() {
             <option value="low">Low stock</option>
             <option value="out">Out of stock</option>
           </select>
+          <select className="inv-select" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label="Filter by category">
+            <option value="all">All categories</option>
+            {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+            <option value="none">Uncategorized</option>
+          </select>
           <select className="inv-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
             <option value="name">Sort: Name</option>
             <option value="stock_asc">Stock: Low first</option>
@@ -707,9 +817,10 @@ export default function InventoryPage() {
                 <InventoryCard
                   key={item.id}
                   item={item}
-                  onRestock={(i) => setModal({ item: i, type: 'restock' })}
-                  onAdjust={(i) => setModal({ item: i, type: 'adjustment' })}
+                  isAdmin={isAdmin}
+                  onRestock={(i) => setModal({ item: i })}
                   onOutOfStock={(i) => setConfirmItem(i)}
+                  onEdit={(i) => setItemModal({ mode: 'edit', item: i })}
                 />
               ))
         }
@@ -736,6 +847,7 @@ export default function InventoryPage() {
             <tr>
               <th scope="col" className="inv-table__th">Ingredient</th>
               <th scope="col" className="inv-table__th">Unit</th>
+              <th scope="col" className="inv-table__th">Category</th>
               <th scope="col" className="inv-table__th">Stock level</th>
               <th scope="col" className="inv-table__th">Reorder at</th>
               <th scope="col" className="inv-table__th">Status</th>
@@ -746,7 +858,7 @@ export default function InventoryPage() {
             {loading
               ? Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i} aria-hidden="true">
-                    {Array.from({ length: 6 }).map((__, j) => (
+                    {Array.from({ length: 7 }).map((__, j) => (
                       <td key={j} className="inv-table__td">
                         <div className="inv-skeleton-row" style={{ width: `${55 + Math.random() * 35}%` }} />
                       </td>
@@ -754,7 +866,7 @@ export default function InventoryPage() {
                   </tr>
                 ))
               : filtered.length === 0
-                ? <tr><td colSpan={6}>
+                ? <tr><td colSpan={7}>
                     <div className="inv-empty">
                       <p>{search ? 'No items match your search.' : 'Inventory is empty.'}</p>
                     </div>
@@ -765,6 +877,17 @@ export default function InventoryPage() {
                         <span className="inv-table__name">{item.name}</span>
                       </td>
                       <td className="inv-table__td inv-table__td--muted">{item.unit}</td>
+                      <td className="inv-table__td inv-table__td--muted">
+                        {(item.categories || []).length > 0
+                          ? (
+                            <span className="inv-cat-list-inline">
+                              {item.categories.map((c) => (
+                                <span key={c.id} className="inv-cat-chip">{c.name}</span>
+                              ))}
+                            </span>
+                          )
+                          : <span className="inv-table__muted">—</span>}
+                      </td>
                       <td className="inv-table__td">
                         <StockBar current={item.current_stock} reorder={item.reorder_level} />
                       </td>
@@ -774,8 +897,10 @@ export default function InventoryPage() {
                       </td>
                       <td className="inv-table__td inv-table__td--right">
                         <div className="inv-table__actions">
-                          <button className="inv-btn inv-btn--primary inv-btn--xs" onClick={() => setModal({ item, type: 'restock' })}>+ Restock</button>
-                          <button className="inv-btn inv-btn--quiet inv-btn--xs" onClick={() => setModal({ item, type: 'adjustment' })}>Adjust</button>
+                          <button className="inv-btn inv-btn--primary inv-btn--xs" onClick={() => setModal({ item })}>+ Restock</button>
+                          {isAdmin && (
+                            <button className="inv-btn inv-btn--quiet inv-btn--xs" onClick={() => setItemModal({ mode: 'edit', item })}>Edit</button>
+                          )}
                           {item.current_stock > 0 && (
                             <button className="inv-btn inv-btn--quiet inv-btn--quiet-danger inv-btn--xs" onClick={() => setConfirmItem(item)}>Out of stock</button>
                           )}
@@ -801,21 +926,23 @@ export default function InventoryPage() {
         )}
       </div>
 
-      {/* Transaction modal (restock / adjust) */}
+      {/* Restock modal */}
       {modal && (
-        <TransactionModal
+        <RestockModal
           item={modal.item}
-          type={modal.type}
           onClose={() => setModal(null)}
           onSubmit={handleTransaction}
         />
       )}
 
-      {/* Add ingredient modal — admin only */}
-      {isAdmin && showAddModal && (
-        <AddIngredientModal
-          onClose={() => setShowAddModal(false)}
-          onSubmit={handleAddIngredient}
+      {/* Add / edit ingredient modal — admin only */}
+      {isAdmin && itemModal && (
+        <ItemModal
+          mode={itemModal.mode}
+          item={itemModal.item}
+          categories={categories}
+          onClose={() => setItemModal(null)}
+          onSubmit={handleItemSubmit}
         />
       )}
 
@@ -846,6 +973,14 @@ export default function InventoryPage() {
                 </select>
               </label>
               <label className="inv-field">
+                <span className="inv-field__label">Category</span>
+                <select className="inv-select inv-select--block" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+                  <option value="all">All categories</option>
+                  {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                  <option value="none">Uncategorized</option>
+                </select>
+              </label>
+              <label className="inv-field">
                 <span className="inv-field__label">Sort by</span>
                 <select className="inv-select inv-select--block" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                   <option value="name">Name</option>
@@ -863,7 +998,7 @@ export default function InventoryPage() {
             <div className="inv-modal__footer">
               <button
                 className="inv-btn inv-btn--ghost"
-                onClick={() => { setFilterStatus('all'); setSortBy('name'); setPerPage(10); setPage(1); }}
+                onClick={() => { setFilterStatus('all'); setFilterCategory('all'); setSortBy('name'); setPerPage(10); setPage(1); }}
               >
                 Reset
               </button>
@@ -890,7 +1025,14 @@ export default function InventoryPage() {
               </button>
             </div>
             <div className="inv-modal__body">
-              <p className="inv-modal__item-meta">
+              <div className="inv-modal__item-card">
+                <span className="inv-modal__item-name">{confirmItem.name}</span>
+                <div className="inv-modal__item-meta">
+                  <span>Current: <strong>{confirmItem.current_stock} {confirmItem.unit}</strong></span>
+                  <StockBadge current={confirmItem.current_stock} reorder={confirmItem.reorder_level} />
+                </div>
+              </div>
+              <p className="inv-modal__text">
                 This sets <strong>{confirmItem.name}</strong> to 0 {confirmItem.unit}. Any menu items that use it will be marked unavailable until it is restocked.
               </p>
             </div>

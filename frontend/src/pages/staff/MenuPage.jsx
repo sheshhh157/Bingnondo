@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { staffMenuAPI, inventoryAPI, uploadAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
+import useMediaQuery from '../../hooks/useMediaQuery';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/StaffMenuPage.css';
 
@@ -36,14 +37,23 @@ function Toggle({ checked, onChange, disabled, label, title }) {
 }
 
 // ─── Image upload ─────────────────────────────────────────────────────────────
-function ImageUpload({ value, onChange }) {
+function ImageUpload({ value, onChange, onRemove }) {
   const inputRef = useRef(null);
   const [preview, setPreview] = useState(value || null);
   const [drag, setDrag]       = useState(false);
   const [fileErr, setFileErr] = useState('');
+  const [confirming, setConfirming] = useState(false);
 
   // Sync preview when value prop changes (e.g. editing existing item)
   useEffect(() => { setPreview(value || null); }, [value]);
+
+  // Escape cancels the remove-photo confirmation
+  useEffect(() => {
+    if (!confirming) return;
+    const onKey = (e) => { if (e.key === 'Escape') setConfirming(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [confirming]);
 
   const process = (file) => {
     setFileErr('');
@@ -60,18 +70,27 @@ function ImageUpload({ value, onChange }) {
     onChange(file);
   };
 
+  const handleRemove = (e) => {
+    e.stopPropagation();
+    setConfirming(false);
+    setPreview(null);
+    setFileErr('');
+    if (inputRef.current) inputRef.current.value = '';
+    if (onRemove) onRemove();
+  };
+
   return (
     <>
     <div
       className={`mn-upload${drag ? ' mn-upload--drag' : ''}`}
-      onClick={() => inputRef.current.click()}
-      onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+      onClick={() => { if (!confirming) inputRef.current.click(); }}
+      onDragOver={(e) => { e.preventDefault(); if (!confirming) setDrag(true); }}
       onDragLeave={() => setDrag(false)}
-      onDrop={(e) => { e.preventDefault(); setDrag(false); process(e.dataTransfer.files[0]); }}
+      onDrop={(e) => { e.preventDefault(); setDrag(false); if (!confirming) process(e.dataTransfer.files[0]); }}
       role="button"
       tabIndex={0}
       aria-label="Upload photo"
-      onKeyDown={(e) => e.key === 'Enter' && inputRef.current.click()}
+      onKeyDown={(e) => { if (!confirming && e.key === 'Enter') inputRef.current.click(); }}
     >
       {preview
         ? <>
@@ -83,6 +102,45 @@ function ImageUpload({ value, onChange }) {
               </svg>
               <span>Change photo</span>
             </div>
+            <button
+              type="button"
+              className="mn-upload__remove"
+              onClick={(e) => { e.stopPropagation(); setConfirming(true); }}
+              onKeyDown={(e) => e.stopPropagation()}
+              aria-label="Remove photo"
+              title="Remove photo"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 6h18"/>
+                <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+              </svg>
+            </button>
+            {confirming && (
+              <div
+                className="mn-upload__confirm"
+                role="alertdialog"
+                aria-label="Remove photo?"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <p className="mn-upload__confirm-text">Remove this photo?</p>
+                <div className="mn-upload__confirm-actions">
+                  <button
+                    type="button"
+                    className="mn-btn mn-btn--secondary mn-btn--xs"
+                    autoFocus
+                    onClick={(e) => { e.stopPropagation(); setConfirming(false); }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="button" className="mn-btn mn-btn--danger mn-btn--xs" onClick={handleRemove}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         : <div className="mn-upload__placeholder">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -121,22 +179,63 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   // editing: index of the linked item whose qty is being edited inline
   const [editingIdx, setEditingIdx] = useState(null);
   const [editQty, setEditQty]       = useState('');
-  const selectRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCat, setFilterCat]     = useState('all');
+  const searchRef = useRef(null);
 
   // IDs from DB are numbers; compare as numbers throughout
-  const available = inventoryItems.filter(
-    (inv) => !linked.find((l) => l.inventory_item_id === inv.id)
+  const available = useMemo(
+    () => inventoryItems.filter((inv) => !linked.find((l) => l.inventory_item_id === inv.id)),
+    [inventoryItems, linked]
+  );
+
+  // Categories actually present among the linkable ingredients.
+  const availableCats = useMemo(() => {
+    const map = new Map();
+    let hasUncategorized = false;
+    for (const inv of available) {
+      const cats = inv.categories || [];
+      if (cats.length === 0) hasUncategorized = true;
+      for (const c of cats) map.set(c.id, c.name);
+    }
+    const list = [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { list, hasUncategorized };
+  }, [available]);
+
+  // Search + category filtered ingredients.
+  const matchesFilters = (inv, q, cat) => {
+    if (q && !inv.name.toLowerCase().includes(q)) return false;
+    if (cat === 'all') return true;
+    const cats = inv.categories || [];
+    if (cat === 'none') return cats.length === 0;
+    return cats.some((c) => String(c.id) === cat);
+  };
+
+  const results = useMemo(
+    () => available.filter((inv) => matchesFilters(inv, searchQuery.trim().toLowerCase(), filterCat)),
+    [available, searchQuery, filterCat]
   );
 
   const selectedInv = inventoryItems.find((i) => i.id === Number(selId));
+
+  // Clear the selection if a filter change pushes it out of the results.
+  const dropStaleSelection = (nextQuery, nextCat) => {
+    if (!selId) return;
+    const inv = inventoryItems.find((i) => i.id === Number(selId));
+    if (inv && !matchesFilters(inv, nextQuery.trim().toLowerCase(), nextCat)) setSelId('');
+  };
 
   const openAdding = () => {
     setAdding(true);
     setSelId('');
     setQty('');
     setAddError('');
+    setSearchQuery('');
+    setFilterCat('all');
     setEditingIdx(null);
-    setTimeout(() => selectRef.current?.focus(), 50);
+    setTimeout(() => searchRef.current?.focus(), 50);
   };
 
   const handleAdd = () => {
@@ -247,22 +346,70 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
       {/* Add row */}
       {adding ? (
         <div className="mn-linker__add-panel">
-          <div className="mn-linker__add-fields">
-            <div className="mn-linker__add-field">
-              <label className="mn-linker__add-label" htmlFor="linker-select">Ingredient</label>
-              <select
-                id="linker-select"
-                ref={selectRef}
-                value={selId}
-                onChange={(e) => { setSelId(e.target.value); setAddError(''); }}
+          <div className="mn-linker__filters">
+            <div className="mn-linker__search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                ref={searchRef}
+                type="search"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); dropStaleSelection(e.target.value, filterCat); }}
                 className="mn-field__input"
-              >
-                <option value="">Select ingredient…</option>
-                {available.map((i) => (
-                  <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
-                ))}
-              </select>
+                placeholder="Search ingredients…"
+                aria-label="Search ingredients"
+              />
             </div>
+            {availableCats.list.length > 0 && (
+              <select
+                value={filterCat}
+                onChange={(e) => { setFilterCat(e.target.value); dropStaleSelection(searchQuery, e.target.value); }}
+                className="mn-field__input mn-linker__cat-filter"
+                aria-label="Filter ingredients by category"
+              >
+                <option value="all">All categories</option>
+                {availableCats.list.map((c) => (
+                  <option key={c.id} value={String(c.id)}>{c.name}</option>
+                ))}
+                {availableCats.hasUncategorized && <option value="none">Uncategorized</option>}
+              </select>
+            )}
+          </div>
+
+          <div className="mn-linker__results" role="listbox" aria-label="Ingredients">
+            {results.length === 0 ? (
+              <p className="mn-linker__no-results">No ingredients match your search.</p>
+            ) : (
+              results.map((inv) => {
+                const isSel = String(inv.id) === String(selId);
+                return (
+                  <button
+                    key={inv.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isSel}
+                    className={`mn-linker__result${isSel ? ' mn-linker__result--selected' : ''}`}
+                    onClick={() => { setSelId(String(inv.id)); setAddError(''); }}
+                  >
+                    <span className="mn-linker__result-main">
+                      <span className="mn-linker__result-name">{inv.name}</span>
+                      <span className="mn-linker__result-meta">
+                        {inv.unit}
+                        {(inv.categories || []).length > 0 && ` · ${inv.categories.map((c) => c.name).join(', ')}`}
+                        {typeof inv.current_stock === 'number' && ` · ${inv.current_stock} in stock`}
+                      </span>
+                    </span>
+                    {isSel && (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <div className="mn-linker__add-fields">
             <div className="mn-linker__add-field mn-linker__add-field--qty">
               <label className="mn-linker__add-label" htmlFor="linker-qty">
                 Qty {selectedInv ? `(${selectedInv.unit})` : ''} <span style={{ fontWeight: 400, opacity: 0.6 }}>optional</span>
@@ -322,6 +469,10 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
 function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
   const isEdit = !!item;
   const [tab, setTab] = useState('details');
+  // Add mode is a strict two-step wizard: Details → Ingredients.
+  const [step, setStep] = useState('details');
+  const activeView = isEdit ? tab : step;
+  const goTo = (view) => (isEdit ? setTab(view) : setStep(view));
   const [form, setForm] = useState({
     name: item?.name || '',
     price: item?.price || '',
@@ -330,6 +481,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
     is_available: item?.is_available ?? true,
   });
   const [photoFile, setPhotoFile]       = useState(null);
+  const [photoRemoved, setPhotoRemoved] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
   const [linked, setLinked]             = useState(item?.ingredients || []);
   const [loading, setLoading]           = useState(false);
@@ -344,10 +496,24 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Shared details validation, used by the wizard's Next button and final save.
+  const validateDetails = () => {
+    if (!form.name.trim()) { setError('Item name is required.'); return false; }
+    if (!form.price || Number(form.price) <= 0) { setError('Enter a valid price.'); return false; }
+    setError('');
+    return true;
+  };
+
+  const goNext = () => { if (validateDetails()) goTo('ingredients'); };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim()) { setError('Item name is required.'); return; }
-    if (!form.price || Number(form.price) <= 0) { setError('Enter a valid price.'); return; }
+    if (!validateDetails()) { goTo('details'); return; }
+    // Add flow requires at least one linked ingredient.
+    if (!isEdit && linked.length === 0) {
+      setError('Link at least one ingredient before saving.');
+      return;
+    }
     setLoading(true); setError('');
     try {
       let image_url    = item?.image_url || null;
@@ -365,6 +531,11 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
         }
         old_public_id = data.public_id;
         setUploadStatus('');
+      } else if (photoRemoved && old_public_id) {
+        // Remove the existing photo: delete it from Cloudinary and clear the reference
+        uploadAPI.deleteMenuImage(old_public_id).catch(() => {/* non-critical */});
+        image_url = null;
+        old_public_id = null;
       }
 
       await onSave(
@@ -390,19 +561,49 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
           </button>
         </div>
 
-        <div className="mn-modal__tabs">
-          {[{ id: 'details', label: 'Details' }, { id: 'ingredients', label: `Ingredients${linked.length ? ` (${linked.length})` : ''}` }].map(({ id, label }) => (
-            <button key={id} type="button" onClick={() => setTab(id)} className={`mn-modal__tab${tab === id ? ' mn-modal__tab--active' : ''}`}>{label}</button>
-          ))}
-        </div>
+        {isEdit ? (
+          <div className="mn-modal__tabs">
+            {[{ id: 'details', label: 'Details' }, { id: 'ingredients', label: `Ingredients${linked.length ? ` (${linked.length})` : ''}` }].map(({ id, label }) => (
+              <button key={id} type="button" onClick={() => goTo(id)} className={`mn-modal__tab${activeView === id ? ' mn-modal__tab--active' : ''}`}>{label}</button>
+            ))}
+          </div>
+        ) : (
+          <div className="mn-modal__steps" aria-label="Add item progress">
+            {[{ id: 'details', n: 1, label: 'Details' }, { id: 'ingredients', n: 2, label: 'Ingredients' }].map(({ id, n, label }) => (
+              <span
+                key={id}
+                className={`mn-modal__step${activeView === id ? ' mn-modal__step--active' : ''}`}
+                aria-current={activeView === id ? 'step' : undefined}
+              >
+                <span className="mn-modal__step-num">{n}</span>{label}
+              </span>
+            ))}
+          </div>
+        )}
 
-        <form id="mn-form" onSubmit={handleSubmit} noValidate>
+        <form
+          id="mn-form"
+          className="mn-modal__form"
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            // In the Add wizard's Details step, Enter advances instead of submitting.
+            if (!isEdit && activeView === 'details' && e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+              e.preventDefault();
+              goNext();
+            }
+          }}
+          noValidate
+        >
           <div className="mn-modal__body">
-            {tab === 'details' ? (
+            {activeView === 'details' ? (
               <>
                 <div className="mn-field">
                   <label className="mn-field__label">Photo</label>
-                  <ImageUpload value={item?.image_url} onChange={setPhotoFile} />
+                  <ImageUpload
+                    value={item?.image_url}
+                    onChange={(file) => { setPhotoFile(file); setPhotoRemoved(false); }}
+                    onRemove={() => { setPhotoFile(null); setPhotoRemoved(true); }}
+                  />
                 </div>
                 <div className="mn-grid-2">
                   <div className="mn-field mn-grid-2__full">
@@ -463,9 +664,25 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
             </span>
           )}
           <button type="button" className="mn-btn mn-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
-          <button type="submit" form="mn-form" className="mn-btn mn-btn--primary" disabled={loading} aria-busy={loading}>
-            {loading ? <span className="mn-spinner" aria-label="Saving…" /> : isEdit ? 'Save changes' : 'Add item'}
-          </button>
+          {isEdit ? (
+            <button type="submit" form="mn-form" className="mn-btn mn-btn--primary" disabled={loading} aria-busy={loading}>
+              {loading ? <span className="mn-spinner" aria-label="Saving…" /> : 'Save changes'}
+            </button>
+          ) : activeView === 'details' ? (
+            <button type="button" className="mn-btn mn-btn--primary" onClick={goNext}>
+              Next
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+          ) : (
+            <>
+              <button type="button" className="mn-btn mn-btn--ghost" onClick={() => goTo('details')} disabled={loading}>Back</button>
+              <button type="submit" form="mn-form" className="mn-btn mn-btn--primary" disabled={loading} aria-busy={loading}>
+                {loading ? <span className="mn-spinner" aria-label="Saving…" /> : 'Add item'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -491,7 +708,7 @@ function ConfirmDialog({ item, onClose, onConfirm }) {
   }
 
   return (
-    <div className="mn-modal-overlay" onClick={loading ? undefined : onClose}>
+    <div className="mn-modal-overlay mn-modal-overlay--center" onClick={loading ? undefined : onClose}>
       <div className="mn-confirm" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="mn-confirm-title">
         <div className="mn-confirm__icon" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -729,6 +946,10 @@ export default function MenuPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
+  // Phones always show the card grid: the table would scroll sideways.
+  const isMobile = useMediaQuery('(max-width: 639px)');
+  const effectiveView = isMobile ? 'grid' : viewMode;
+
   const fetchAll = useCallback(async () => {
     try {
       setError('');
@@ -877,14 +1098,6 @@ export default function MenuPage() {
           <p className="mn-page-sub">Add, edit, and manage item availability in real time</p>
         </div>
         <div className="mn-page-header__actions">
-          <button className="mn-btn mn-btn--ghost mn-btn--icon" onClick={fetchAll} aria-label="Refresh">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-              <path d="M21 3v5h-5"/>
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-              <path d="M8 16H3v5"/>
-            </svg>
-          </button>
           <button className="mn-btn mn-btn--primary" onClick={() => setModal({ mode: 'add' })}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -940,7 +1153,7 @@ export default function MenuPage() {
             </button>
           )}
         </div>
-      ) : viewMode === 'grid' ? (
+      ) : effectiveView === 'grid' ? (
         <>
           <div className="mn-grid">
             {paged.map((item) => (

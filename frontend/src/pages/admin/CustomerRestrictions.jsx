@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../../services/api';
 import {
-  useAdminToast, Spinner, Btn, Field, TextInput, AppSelect, Modal,
+  Spinner, Btn, Field, TextInput, AppSelect, Modal,
   PageHeader, RowAction, Pagination,
 } from './adminShared';
+import { useAdminToast } from './useAdminToast';
+import { formatDate } from './format';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/AdminPage.css';
 
@@ -40,15 +42,16 @@ function ViolBadge({ type }) {
 // ── Violation history modal ─────────────────────────────────────────
 function ViolationModal({ open, onClose, customer }) {
   const [violations, setViolations] = useState([]);
-  const [loading, setLoading]       = useState(false);
+  const [loading, setLoading]       = useState(true);
 
   useEffect(() => {
     if (!open || !customer) return;
-    setLoading(true);
+    let active = true;
     adminAPI.getCustomerViolations(customer.customer_id)
-      .then(({ data }) => setViolations(data.data || data))
-      .catch(() => setViolations([]))
-      .finally(() => setLoading(false));
+      .then(({ data }) => { if (active) setViolations(data.data || data); })
+      .catch(() => { if (active) setViolations([]); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [open, customer]);
 
   return (
@@ -86,7 +89,7 @@ function ViolationModal({ open, onClose, customer }) {
                 )}
               </div>
               <div className="cr-viol-row__date">
-                {new Date(v.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}
+                {formatDate(v.created_at)}
               </div>
             </div>
           ))}
@@ -128,18 +131,10 @@ const LEVEL_LABELS = {
 };
 
 function OverrideModal({ open, onClose, customer, onSuccess, toast }) {
-  const [level, setLevel]   = useState('');
+  const [level, setLevel]   = useState(customer?.restriction_level || 'none');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState('');
-
-  useEffect(() => {
-    if (open && customer) {
-      setLevel(customer.restriction_level || 'none');
-      setReason('');
-      setError('');
-    }
-  }, [open, customer]);
 
   async function submit() {
     if (!reason.trim()) { setError('A reason is required for audit purposes.'); return; }
@@ -290,7 +285,7 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
       {/* Updated */}
       <td style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)', whiteSpace: 'nowrap' }}>
         {customer.restriction_updated_at
-          ? new Date(customer.restriction_updated_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
+          ? formatDate(customer.restriction_updated_at)
           : <span style={{ color: 'var(--color-muted-foreground)' }}>Auto</span>
         }
       </td>
@@ -381,8 +376,10 @@ export default function CustomerRestrictions() {
       })
       .catch(() => toast.error('Failed to load customer restrictions.'))
       .finally(() => setLoading(false));
-  }, [page, search, filterLevel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, search, filterLevel, toast]);
 
+  // Fetch-on-mount: the sync setLoading inside `load` is intentional.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const hasFilters = Boolean(search || filterLevel);
@@ -495,6 +492,7 @@ export default function CustomerRestrictions() {
 
       {/* Violation history modal */}
       <ViolationModal
+        key={viewViol?.customer_id ?? 'none'}
         open={!!viewViol}
         onClose={() => setViewViol(null)}
         customer={viewViol}
@@ -502,6 +500,7 @@ export default function CustomerRestrictions() {
 
       {/* Override modal */}
       <OverrideModal
+        key={override?.customer_id ?? 'none'}
         open={!!override}
         onClose={() => setOverride(null)}
         customer={override}

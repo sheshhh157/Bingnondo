@@ -114,7 +114,10 @@ function ActivityFeed() {
   );
 }
 
-export default function DashboardPage() {
+export default function DashboardPage({
+  title = 'Dashboard',
+  sub = 'Analytics and operational pulse (auto-refreshes every 15s)',
+}) {
   const { data: summary, loading, error, refresh, lastUpdated, refreshing } = useLiveData({
     fetchFn: async () => {
       // Bounded to a recent window. This used to request the entire order
@@ -312,8 +315,8 @@ export default function DashboardPage() {
   return (
     <div className="dash-root">
       <PageHeader
-        title="Dashboard"
-        sub="Analytics and operational pulse (auto-refreshes every 15s)"
+        title={title}
+        sub={sub}
       />
 
       {error && (

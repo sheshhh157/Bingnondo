@@ -12,7 +12,7 @@
  *   - auth:expired event dispatch so AuthContext can redirect to /login
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const TOKEN_KEY   = 'bingnondo_access_token';
 const REFRESH_KEY = 'bingnondo_refresh_token';

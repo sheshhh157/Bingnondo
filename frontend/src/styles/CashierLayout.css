@@ -14,8 +14,6 @@
   min-height: 100dvh;
   background: var(--color-background);
   --c-header-h: 48px;
-  /* Height of the phone-only bottom nav (safe area added in the nav itself). */
-  --c-bottomnav-h: 56px;
 }
 
 /* ─── Cashier "Deep Maroon" sidebar palette ────────────────────────────

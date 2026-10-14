@@ -1,12 +1,35 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { DashboardIcon, SalesIcon, KitchenIcon, StocksIcon, DeliveryIcon, MenuIcon } from '../manager/managerIcons';
+import { DashboardIcon, SalesIcon, KitchenIcon, StocksIcon, MenuIcon } from '../manager/managerIcons';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import logo from '../../assets/logo.png';
 import '../../styles/AdminLayout.css';
 
 const NAV_GROUPS = [
+  {
+    label: 'Overview',
+    items: [
+      {
+        to: '/admin/overview',
+        label: 'Overview',
+        sub: 'Admin home',
+        icon: <DashboardIcon />,
+      },
+      {
+        to: '/admin/sales',
+        label: 'Sales Reports',
+        sub: 'Revenue & transactions',
+        icon: <SalesIcon />,
+      },
+      {
+        to: '/admin/oversight/kitchen',
+        label: 'Kitchen Queue',
+        sub: 'Counter & online queues',
+        icon: <KitchenIcon />,
+      },
+    ],
+  },
   {
     label: 'People',
     items: [
@@ -96,13 +119,6 @@ const NAV_GROUPS = [
   },
 ];
 
-const MANAGER_NAV = [
-  { to: '/admin/dashboard',          label: 'Dashboard',         sub: 'Analytics at a glance',   icon: <DashboardIcon /> },
-  { to: '/admin/sales',              label: 'Sales Reports',     sub: 'Revenue & transactions',   icon: <SalesIcon /> },
-  { to: '/admin/oversight/kitchen',  label: 'Kitchen Queue',     sub: 'Counter & online queues',  icon: <KitchenIcon /> },
-  { to: '/admin/oversight/delivery', label: 'Delivery Tracking', sub: 'Track progress',           icon: <DeliveryIcon /> },
-];
-
 function NavItem({ item, onNav }) {
   return (
     <NavLink
@@ -161,20 +177,6 @@ function SidebarInner({ user, onLogout, onNav }) {
               <NavItem key={item.to} item={item} onNav={onNav} />
             ))}
           </Fragment>
-        ))}
-
-        {/* Manager View divider */}
-        <div className="al-nav__divider" aria-hidden="true" />
-        <span className="al-nav__section-label al-nav__section-label--manager">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-          Manager View
-          <span className="al-nav__tag">Read-only</span>
-        </span>
-        {MANAGER_NAV.map(item => (
-          <NavItem key={item.to} item={{ ...item, manager: true }} onNav={onNav} />
         ))}
       </nav>
 
@@ -287,12 +289,6 @@ export default function AdminLayout() {
               </div>
             </Fragment>
           ))}
-          <div className="al-compact__divider" aria-hidden="true" />
-          <div className="al-compact__group al-compact__group--manager">
-            {MANAGER_NAV.map(item => (
-              <CompactNavLink key={item.to} item={{ ...item, title: `${item.label} (read-only)`, aria: `${item.label} (read-only)` }} />
-            ))}
-          </div>
         </nav>
         <button className="al-compact__logout" onClick={handleLogout} aria-label="Sign out">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

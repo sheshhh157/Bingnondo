@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminRidersAPI } from '../../services/api';
 import {
-  useAdminToast, Spinner, Btn, Field, TextInput, PasswordInput,
+  Spinner, Btn, Field, TextInput, PasswordInput,
   Modal, ConfirmModal, PageHeader, Pagination,
 } from './adminShared';
+import { useAdminToast } from './useAdminToast';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
+import DeliveriesTab from './DeliveriesTab';
 import '../../styles/AdminPage.css';
 import '../../styles/RidersPage.css';
 
@@ -142,19 +144,12 @@ function StatsBar({ riders }) {
 // ── Rider Form Modal ──────────────────────────────────────────────────────────
 function RiderFormModal({ open, onClose, onSave, initial = null, loading }) {
   const isEdit = Boolean(initial);
-  const blank = { full_name: '', mobile_number: '', email: '', plate_number: '', vehicle_type: 'motorcycle', notes: '', temp_password: '' };
-  const [form, setForm]   = useState(blank);
+  // Initialised from `initial` on mount; the parent remounts this modal via
+  // `key` whenever the open/edit target changes, so no reset effect is needed.
+  const [form, setForm]   = useState(() => initial
+    ? { full_name: initial.full_name || '', mobile_number: initial.mobile_number || '', email: initial.email || '', plate_number: initial.plate_number || '', vehicle_type: initial.vehicle_type || 'motorcycle', notes: initial.notes || '', temp_password: '' }
+    : { full_name: '', mobile_number: '', email: '', plate_number: '', vehicle_type: 'motorcycle', notes: '', temp_password: '' });
   const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (open) {
-      setForm(initial
-        ? { full_name: initial.full_name || '', mobile_number: initial.mobile_number || '', email: initial.email || '', plate_number: initial.plate_number || '', vehicle_type: initial.vehicle_type || 'motorcycle', notes: initial.notes || '', temp_password: '' }
-        : blank
-      );
-      setErrors({});
-    }
-  }, [open, initial]);
 
   const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setErrors(e => ({ ...e, [k]: '' })); };
 
@@ -287,8 +282,6 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
   const [pw, setPw]     = useState('');
   const [err, setErr]   = useState('');
 
-  useEffect(() => { if (open) { setPw(''); setErr(''); } }, [open]);
-
   const handleSave = () => {
     if (!pw) { setErr('Password is required.'); return; }
     if (pw.length < 8) { setErr('Must be at least 8 characters.'); return; }
@@ -326,7 +319,7 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
 }
 
 // ── Rider Detail Drawer ───────────────────────────────────────────────────────
-function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onResetPassword }) {
+function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onResetPassword, readOnly = false }) {
   if (!rider) return null;
 
   const created = rider.created_at
@@ -409,7 +402,7 @@ function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onRes
           </div>
         )}
 
-        <div className="rd-drawer__actions">
+        {!readOnly && (<div className="rd-drawer__actions">
           <Btn
             variant="ghost"
             size="sm"
@@ -446,6 +439,7 @@ function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onRes
             </div>
           )}
         </div>
+        )}
       </aside>
     </>
   );
@@ -492,7 +486,41 @@ function RiderRow({ rider, onSelect, isSelected }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function RidersPage() {
+export default function RidersPage({ readOnly = false }) {
+  const [tab, setTab] = useState(readOnly ? 'deliveries' : 'riders');
+
+  return (
+    <div className="ap-page ap-page--wide rd-page">
+      <div className="rd-tabs" role="tablist" aria-label="Riders and deliveries">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'riders'}
+          className={`rd-tab${tab === 'riders' ? ' rd-tab--active' : ''}`}
+          onClick={() => setTab('riders')}
+        >
+          Riders
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'deliveries'}
+          className={`rd-tab${tab === 'deliveries' ? ' rd-tab--active' : ''}`}
+          onClick={() => setTab('deliveries')}
+        >
+          Deliveries
+        </button>
+      </div>
+
+      {tab === 'riders'
+        ? <RidersTab readOnly={readOnly} />
+        : <DeliveriesTab />}
+    </div>
+  );
+}
+
+// ── Riders Tab ────────────────────────────────────────────────────────────────
+function RidersTab({ readOnly = false }) {
   const { toast } = useAdminToast();
 
   // data
@@ -536,12 +564,11 @@ export default function RidersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusF]);
+  }, [page, search, statusF, toast]);
 
+  // Fetch-on-mount: the sync setLoading inside `fetchRiders` is intentional.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { fetchRiders(); }, [fetchRiders]);
-
-  // reset page on filter change
-  useEffect(() => { setPage(1); }, [search, statusF]);
 
   // ── handlers ──────────────────────────────────────────────────────────────
   const handleSelectRow = (rider) => {
@@ -636,7 +663,7 @@ export default function RidersPage() {
           key={value}
           type="button"
           className={`rd-filter-pill${statusF === value ? ' rd-filter-pill--active' : ''}`}
-          onClick={() => setStatusF(value)}
+          onClick={() => { setStatusF(value); setPage(1); }}
           aria-pressed={statusF === value}
         >
           {label}
@@ -646,14 +673,14 @@ export default function RidersPage() {
   );
 
   return (
-    <div className="ap-page ap-page--wide rd-page">
+    <>
 
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <PageHeader
         title="Rider Management"
         chip={`${total} rider${total === 1 ? '' : 's'}`}
         sub="Register, manage, and monitor delivery riders."
-        action={<Btn variant="primary" onClick={handleAddNew} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}>Add Rider</Btn>}
+        action={readOnly ? null : <Btn variant="primary" onClick={handleAddNew} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}>Add Rider</Btn>}
       />
 
       {/* ── Stats bar ───────────────────────────────────────────────────── */}
@@ -670,7 +697,7 @@ export default function RidersPage() {
               <TextInput
                 placeholder="Search by name, mobile, plate…"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => { setSearch(e.target.value); setPage(1); }}
                 prefix={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>}
                 aria-label="Search riders"
               />
@@ -692,8 +719,8 @@ export default function RidersPage() {
                 <VehicleIcon type="motorcycle" size={32} />
               </div>
               <div className="ap-empty__title">{search || statusF !== 'all' ? 'No riders match your filter.' : 'No riders yet.'}</div>
-              <div className="ap-empty__sub">{!search && statusF === 'all' && 'Add your first rider to get started.'}</div>
-              {!search && statusF === 'all' && (
+              <div className="ap-empty__sub">{!search && statusF === 'all' && (readOnly ? 'No riders have been registered yet.' : 'Add your first rider to get started.')}</div>
+              {!readOnly && !search && statusF === 'all' && (
                 <Btn variant="primary" size="sm" onClick={handleAddNew} style={{ marginTop: 12 }}>
                   Add First Rider
                 </Btn>
@@ -743,10 +770,12 @@ export default function RidersPage() {
         onEdit={handleEdit}
         onToggleStatus={handleToggleStatus}
         onResetPassword={handleResetPassword}
+        readOnly={readOnly}
       />
 
       {/* ── Modals ────────────────────────────────────────────────────────── */}
       <RiderFormModal
+        key={formOpen ? `edit-${editRider?.id ?? 'new'}` : 'form-closed'}
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSave={handleFormSave}
@@ -755,6 +784,7 @@ export default function RidersPage() {
       />
 
       <ResetPasswordModal
+        key={resetOpen ? `reset-${resetRider?.id ?? 'new'}` : 'reset-closed'}
         open={resetOpen}
         onClose={() => setResetOpen(false)}
         onSave={handleResetSave}
@@ -780,6 +810,6 @@ export default function RidersPage() {
       <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter riders">
         {filterFields}
       </FilterModal>
-    </div>
+    </>
   );
 }

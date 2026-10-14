@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 // ─── Role → socket room ───────────────────────────────────────────────────────
 export const SOCKET_ROOM_BY_ROLE = {
@@ -17,7 +17,7 @@ let socket = null;
 export const getSocket = () => {
   if (!socket) {
     const token = localStorage.getItem('bingnondo_access_token');
-    socket = io(BASE_URL, {
+    socket = io(BASE_URL || undefined, {
       auth: { token },
       transports: ['websocket'],
       autoConnect: false,

@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { menuAPI } from '../../services/cashierApi';
 import { connectSocket } from '../../services/socket';
+import { currency } from '../../utils/format';
 import MenuGrid from './components/MenuGrid';
 import OrderDraft from './components/OrderDraft';
 import PaymentModal from './components/PaymentModal';
 import CashierHeader from './components/CashierHeader';
-import CashierBottomNav from './components/CashierBottomNav';
 import TransactionHistory from './components/TransactionHistory';
 import OnlineOrdersPage from './OnlineOrdersPage';
 import Pagination from '../../components/Pagination';
@@ -16,9 +16,8 @@ import '../../styles/CashierPage.css';
 // container is `.cashier-main`). Keep both values in sync.
 const TWO_PANE_MIN_WIDTH = 720;
 const MENU_PAGE_SIZE = 12;
-const peso = (n) => `₱${Number(n).toFixed(2)}`;
 
-export default function CashierPage({ view, onViewChange, onToggleSidebar, sidebarOpen, onOpenDrawer, drawerOpen }) {
+export default function CashierPage({ view, onToggleSidebar, sidebarOpen, onOpenDrawer, drawerOpen }) {
   // ─── State ────────────────────────────────────────────────────────
   const [categories, setCategories]       = useState([]);
   const [menuItems, setMenuItems]         = useState([]);
@@ -55,15 +54,18 @@ export default function CashierPage({ view, onViewChange, onToggleSidebar, sideb
       const items = data.items || (Array.isArray(data) ? data : []);
       setCategories(cats);
       setMenuItems(items);
-      if (cats.length > 0 && !activeCategory) setActiveCategory(cats[0].id);
+      setActiveCategory((prev) => (prev == null && cats.length > 0 ? cats[0].id : prev));
     } catch {
       setMenuError('Failed to load menu. Please refresh.');
     } finally {
       setMenuLoading(false);
     }
-  }, [activeCategory]);
+  }, []);
 
-  useEffect(() => { fetchMenu(); }, []);
+  // Fetch once on mount. fetchMenu is stable (no deps), so it runs a single
+  // time; the synchronous setMenuLoading inside it is intentional.
+  // oxlint-disable-next-line react/set-state-in-effect
+  useEffect(() => { fetchMenu(); }, [fetchMenu]);
 
   // ─── Socket: real-time menu updates ──────────────────────────────
   useEffect(() => {
@@ -92,6 +94,7 @@ export default function CashierPage({ view, onViewChange, onToggleSidebar, sideb
 
   // ─── Cart sheet: close when the layout becomes two-pane or cart empties
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
     if (twoPane || draft.length === 0) setCartOpen(false);
   }, [twoPane, draft.length]);
 
@@ -319,14 +322,14 @@ export default function CashierPage({ view, onViewChange, onToggleSidebar, sideb
                 type="button"
                 className="cashier-cart-bar"
                 onClick={() => setCartOpen(true)}
-                aria-label={`View order, ${draftCount} item(s), ${peso(draftTotal)}`}
+                aria-label={`View order, ${draftCount} item(s), ${currency(draftTotal)}`}
               >
                 <span className="cashier-cart-bar__cta">
                   <span className="cashier-cart-bar__count">{draftCount}</span>
                   View order
                 </span>
                 <span className="cashier-cart-bar__summary">
-                  {draftCount} item{draftCount === 1 ? '' : 's'} • {peso(draftTotal)}
+                  {draftCount} item{draftCount === 1 ? '' : 's'} • {currency(draftTotal)}
                 </span>
               </button>
             )}
@@ -361,8 +364,6 @@ export default function CashierPage({ view, onViewChange, onToggleSidebar, sideb
             <OnlineOrdersPage />
           )}
         </div>
-
-        <CashierBottomNav view={view} onNav={onViewChange} draftCount={draftCount} />
       </main>
 
       {/* Payment Modal */}

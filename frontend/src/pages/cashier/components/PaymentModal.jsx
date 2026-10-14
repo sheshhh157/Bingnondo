@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { ordersAPI } from '../../../services/cashierApi';
+import { currency } from '../../../utils/format';
 import '../../../styles/PaymentModal.css';
 
-const fmt   = (n) => `₱${Number(n).toFixed(2)}`;
 const fmtK  = (d) => d >= 1000 ? `₱${d / 1000}k` : `₱${d}`;
 
 const BILLS = [1000, 500, 200, 100, 50, 20];
@@ -65,7 +65,7 @@ function DenomKeyboard({ counts, total, onChange }) {
             className={`pm-kbd__key${(counts[d] || 0) > 0 ? ' pm-kbd__key--active' : ''}`}
             onClick={() => add(d)}
             disabled={!canAdd(d)}
-            title={!canAdd(d) ? `Only ${fmt(remaining)} left due` : undefined}
+            title={!canAdd(d) ? `Only ${currency(remaining)} left due` : undefined}
             type="button"
             aria-label={`Add ₱${d} bill`}
           >
@@ -84,7 +84,7 @@ function DenomKeyboard({ counts, total, onChange }) {
             className={`pm-kbd__key pm-kbd__key--coin${(counts[d] || 0) > 0 ? ' pm-kbd__key--active' : ''}`}
             onClick={() => add(d)}
             disabled={!canAdd(d)}
-            title={!canAdd(d) ? `Only ${fmt(remaining)} left due` : undefined}
+            title={!canAdd(d) ? `Only ${currency(remaining)} left due` : undefined}
             type="button"
             aria-label={`Add ₱${d} coin`}
           >
@@ -152,7 +152,7 @@ export default function PaymentModal({ items, total, draft, onClose, onSuccess }
   const handlePayment = async () => {
     if (!method) { setError('Please select a payment method.'); return; }
     if (method === 'cash' && cashGiven === 0) { setError('Please tap the bills and coins given by the customer.'); return; }
-    if (method === 'cash' && !cashValid) { setError(`Cash given (${fmt(cashGiven)}) is less than the total (${fmt(total)}).`); return; }
+    if (method === 'cash' && !cashValid) { setError(`Cash given (${currency(cashGiven)}) is less than the total (${currency(total)}).`); return; }
 
     setProcessing(true);
     setError('');
@@ -213,7 +213,7 @@ export default function PaymentModal({ items, total, draft, onClose, onSuccess }
                           {item.name}
                           <span className="pm-summary__qty"> ×{item.qty}</span>
                         </span>
-                        <span className="pm-summary__val">{fmt(item.price * item.qty)}</span>
+                        <span className="pm-summary__val">{currency(item.price * item.qty)}</span>
                       </div>
                     ))}
                   </div>
@@ -222,17 +222,17 @@ export default function PaymentModal({ items, total, draft, onClose, onSuccess }
                   <div className="pm-summary__footer">
                     <div className="pm-summary__foot-row">
                       <span>Total</span>
-                      <span className="pm-summary__foot-total">{fmt(total)}</span>
+                      <span className="pm-summary__foot-total">{currency(total)}</span>
                     </div>
                     {method === 'cash' && cashGiven > 0 && (
                       <>
                         <div className="pm-summary__foot-row">
                           <span>Cash given</span>
-                          <span>{fmt(cashGiven)}</span>
+                          <span>{currency(cashGiven)}</span>
                         </div>
                         <div className={`pm-summary__foot-row pm-summary__foot-row--change${cashValid ? '' : ' pm-summary__foot-row--short'}`}>
                           <span>{cashValid ? 'Change' : 'Short by'}</span>
-                          <span>{fmt(Math.abs(change))}</span>
+                          <span>{currency(Math.abs(change))}</span>
                         </div>
                       </>
                     )}
@@ -369,7 +369,7 @@ function Receipt({ order, orderNumber, draft, total, method, cashGiven, change, 
   const payMethod  = (order?.payment?.method) || method;
   const paidGiven  = cashGiven;
   const paidChange = change;
-  const now        = new Date();
+  const [now]      = useState(() => new Date());
   const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -393,7 +393,7 @@ function Receipt({ order, orderNumber, draft, total, method, cashGiven, change, 
         {items.map((item) => (
           <div key={item.id} className="pm-receipt__line">
             <span>{item.name} <span className="pm-receipt__qty">×{item.quantity ?? item.qty}</span></span>
-            <span>₱{Number((item.unit_price ?? item.price) * (item.quantity ?? item.qty)).toFixed(2)}</span>
+            <span>{currency((item.unit_price ?? item.price) * (item.quantity ?? item.qty))}</span>
           </div>
         ))}
 
@@ -401,18 +401,18 @@ function Receipt({ order, orderNumber, draft, total, method, cashGiven, change, 
 
         <div className="pm-receipt__line pm-receipt__line--bold">
           <span>Total</span>
-          <span>₱{Number(sum).toFixed(2)}</span>
+          <span>{currency(sum)}</span>
         </div>
 
         {payMethod === 'cash' && paidGiven !== null && (
           <>
             <div className="pm-receipt__line">
               <span>Cash given</span>
-              <span>₱{Number(paidGiven).toFixed(2)}</span>
+              <span>{currency(paidGiven)}</span>
             </div>
             <div className="pm-receipt__line pm-receipt__line--accent">
               <span>Change</span>
-              <span>₱{Number(paidChange).toFixed(2)}</span>
+              <span>{currency(paidChange)}</span>
             </div>
           </>
         )}

@@ -40,7 +40,11 @@ export default function Login() {
       };
       navigate(routes[userData.role] || '/', { replace: true });
     } catch (err) {
-      const msg = err.response?.data?.message || 'Invalid credentials. Try again.';
+      if (!err.response) {
+        setError("Can't reach the server. Check your connection and that you're on the same network, then try again.");
+        return;
+      }
+      const msg = err.response.data?.message || 'Invalid credentials. Try again.';
       setError(msg.includes('suspended') ? 'Account suspended. Contact your administrator.' : msg);
     } finally { setLoading(false); }
   };

@@ -1,6 +1,5 @@
-// Single source of truth for the cashier console navigation.
-// The desktop/tablet sidebar and the mobile bottom nav are both rendered
-// from these entries (icons + ids), so destinations never drift apart.
+// Single source of truth for the cashier console navigation. The desktop and
+// tablet sidebar (and the phone drawer) both render from these entries.
 
 export const NAV_GROUPS = [
   {
@@ -61,6 +60,3 @@ export const NAV_GROUPS = [
     ],
   },
 ];
-
-// Flat list used by the bottom nav (all destinations, in group order).
-export const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);

@@ -15,6 +15,7 @@ import KitchenPage from './pages/kitchen/KitchenPage';
 
 // Admin
 import AdminLayout from './pages/admin/AdminLayout';
+import AdminOverview from './pages/admin/AdminOverview';
 import StaffAccounts from './pages/admin/StaffAccounts';
 import SystemSettings from './pages/admin/SystemSettings';
 import AuditLog from './pages/admin/AuditLog';
@@ -30,7 +31,6 @@ import SalesReportPage from './pages/manager/SalesReportPage';
 import OversightKitchen from './pages/manager/OversightKitchen';
 import OversightStocks from './pages/manager/OversightStocks';
 import OversightMenu from './pages/manager/MenuPage';
-import OversightDelivery from './pages/manager/OversightDelivery';
 
 // Rider
 import RiderLayout from './pages/rider/RiderLayout';
@@ -127,7 +127,8 @@ export default function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/admin/accounts" replace />} />
+                <Route index element={<Navigate to="/admin/overview" replace />} />
+                <Route path="overview"     element={<AdminOverview />} />
                 <Route path="accounts"     element={<StaffAccounts />} />
                 <Route path="riders"       element={<RidersPage />} />
                 <Route path="settings"     element={<SystemSettings />} />
@@ -137,12 +138,11 @@ export default function App() {
                 <Route path="inventory"    element={<AdminInventoryPage />} />
                 <Route path="menu"         element={<AdminMenuPage />} />
                 {/* Manager-view pages embedded inside Admin (no redirect to /manager) */}
-                <Route path="dashboard"            element={<DashboardPage />} />
+                <Route path="dashboard"            element={<Navigate to="/admin/overview" replace />} />
                 <Route path="sales"                element={<SalesReportPage />} />
                 <Route path="oversight/kitchen"    element={<OversightKitchen />} />
                 <Route path="oversight/stocks"     element={<OversightStocks />} />
                 <Route path="oversight/menu"       element={<OversightMenu />} />
-                <Route path="oversight/delivery"   element={<OversightDelivery />} />
               </Route>
 
               {/* ── Manager/Owner — admin can also view (read-only, no backend changes) ── */}
@@ -161,7 +161,7 @@ export default function App() {
                 <Route path="oversight/kitchen"  element={<OversightKitchen />} />
                 <Route path="oversight/stocks"   element={<OversightStocks />} />
                 <Route path="oversight/menu"     element={<OversightMenu />} />
-                <Route path="oversight/delivery" element={<OversightDelivery />} />
+                <Route path="oversight/delivery" element={<RidersPage readOnly />} />
               </Route>
 
               {/* ── Rider ── */}

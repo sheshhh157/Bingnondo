@@ -3,11 +3,16 @@
 .sales-root { display: flex; flex-direction: column; gap: 20px; }
 
 .sales-period {
+  position: relative;
   display: inline-flex;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--color-card);
+}
+.sales-period__scroll {
+  display: flex;
+  min-width: 0;
 }
 .sales-period__btn {
   padding: 8px 14px;
@@ -21,6 +26,35 @@
 .sales-period__btn + .sales-period__btn { border-left: 1px solid var(--color-border); }
 .sales-period__btn:not(.sales-period__btn--active):hover { background: var(--color-surface); }
 .sales-period__btn--active { background: var(--color-primary); color: var(--color-on-primary); }
+
+/* Custom scrollbar for the period strip (native one is hidden on narrow
+   screens). Shown only while the strip overflows. */
+.sales-period__scrollbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: color-mix(in srgb, var(--color-border-strong) 60%, transparent);
+}
+.sales-period__scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 16px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  transition: left 0.08s linear;
+}
+
+/* Period buttons + custom dates + export, grouped so they wrap as a unit. */
+.sales-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
 .sales-summary {
   display: grid;
@@ -190,11 +224,31 @@
 
 @media (max-width: 900px) {
   .sales-grid { grid-template-columns: 1fr; }
-  .sales-summary { grid-template-columns: 1fr; }
+  .sales-summary { grid-template-columns: repeat(2, 1fr); }
+  .sales-summary > :first-child { grid-column: 1 / -1; }
+}
+
+/* Controls go full-width under the header; the period strip stays one joined
+   segmented control and scrolls horizontally instead of wrapping (wrapping
+   left a stray divider at the edge of each row). */
+@media (max-width: 640px) {
+  .sales-controls { width: 100%; justify-content: stretch; }
+
+  .sales-period { flex: 1 1 100%; }
+
+  .sales-period__scroll {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .sales-period__scroll::-webkit-scrollbar { display: none; }
+  .sales-period__btn { flex: 0 0 auto; }
+
+  .sales-export { flex: 1 1 100%; justify-content: center; }
 }
 
 @media (max-width: 480px) {
-  .sales-period { flex-wrap: wrap; overflow: visible; }
-  .sales-date-wrap { width: 100%; }
+  .sales-date-wrap { flex: 1 1 100%; }
   .sales-date { flex: 1; min-width: 0; }
 }

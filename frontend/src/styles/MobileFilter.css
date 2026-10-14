@@ -33,6 +33,15 @@
 
 .mf-inline { display: contents; }
 
+/* Desktop: inline filters default to width:100% (sized for the modal), which
+   makes them stretch full-width and wrap below the search in the toolbar. */
+.mf-inline .ap-select,
+.mf-inline .ap-input,
+.mf-inline .ap-input-wrap {
+  width: auto;
+  min-width: 160px;
+}
+
 @media (max-width: 767px) {
   .mf-trigger { display: inline-flex; align-self: center; }
   .mf-inline { display: none; }
@@ -117,6 +126,22 @@
 .mf-modal__body select {
   width: 100%;
 }
+
+.mf-modal__body .mn-filters__selects {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  gap: 12px;
+}
+
+.mf-modal__body .mn-select {
+  width: 100%;
+  flex: none;
+}
+
+.mf-modal__body .mn-view-toggle { width: 100%; }
+.mf-modal__body .pag__limit-label { width: 100%; }
 
 .mf-modal__foot {
   padding: 14px 18px;
