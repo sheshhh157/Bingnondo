@@ -1,19 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useToast } from '../../context/ToastContext';
-
-// ── Toast adapter (single shared stack) ──────────────────────────────────
-// Delegates the admin pages' success/error/info sugar to the app-wide
-// ToastProvider so every toast renders through one global container.
-export function useAdminToast() {
-  const { toast } = useToast();
-  return {
-    toast: {
-      success: m => toast({ title: m }),
-      error: m => toast({ title: m, variant: 'danger' }),
-      info: m => toast({ title: m }),
-    },
-  };
-}
 
 // ── SpinSkeleton / button etc — small primitives ─────────────────────────
 export function Spinner({ size = 16 }) {

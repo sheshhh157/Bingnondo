@@ -12,6 +12,8 @@ router.get   ('/',                    ctrl.listStaffAccounts);     // GET  /api/
 router.get   ('/:id',                 ctrl.getStaffAccount);       // GET  /api/admin/staff-accounts/:id
 router.post  ('/',                    ctrl.createStaffAccount);    // POST /api/admin/staff-accounts
 router.patch ('/:id/status',          ctrl.updateStaffStatus);     // PATCH /api/admin/staff-accounts/:id/status
+router.put   ('/:id',                 ctrl.updateStaffAccount);    // PUT   /api/admin/staff-accounts/:id
+router.delete('/:id',                 ctrl.deleteStaffAccount);    // DELETE /api/admin/staff-accounts/:id
 router.post  ('/:id/reset-password',  ctrl.resetStaffPassword);   // POST /api/admin/staff-accounts/:id/reset-password
 
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ordersAPI, paymentsAPI } from '../../services/cashierApi';
 import { connectSocket } from '../../services/socket';
+import { currency } from '../../utils/format';
 import Pagination from '../../components/Pagination';
 import '../../styles/OnlineOrdersPage.css';
 
@@ -19,10 +20,6 @@ function formatTime(iso) {
   return new Date(iso).toLocaleString('en-PH', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
-}
-
-function formatPeso(amount) {
-  return `₱${Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 }
 
 const METHOD_LABEL = {
@@ -96,7 +93,7 @@ function PaymentBadge({ method, status, amount }) {
       <span className="oo-pay__status">
         {status === 'paid' ? 'Paid' : status === 'rejected' ? 'Rejected' : 'Pending'}
       </span>
-      {amount != null && <span className="oo-pay__amount">{formatPeso(amount)}</span>}
+      {amount != null && <span className="oo-pay__amount">{currency(amount)}</span>}
     </span>
   );
 }
@@ -220,7 +217,7 @@ function RejectModal({ order, onClose, onConfirm }) {
           <span className="oo-modal__sep" aria-hidden="true">·</span>
           <span className="oo-modal__customer">{order.customer_name}</span>
           <span className="oo-modal__sep" aria-hidden="true">·</span>
-          <span className="oo-modal__amount">{formatPeso(order.total_amount)}</span>
+          <span className="oo-modal__amount">{currency(order.total_amount)}</span>
         </div>
 
         <div className="oo-modal__body">
@@ -392,7 +389,7 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
           <PaymentBadge method={order.payment_method} status={order.payment_status} />
         </span>
 
-        <span className="oo-row__amount">{formatPeso(order.total_amount)}</span>
+        <span className="oo-row__amount">{currency(order.total_amount)}</span>
 
         <span className="oo-row__meta">
           <OrderStatusBadge status={order.status} />
@@ -505,7 +502,7 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
                   <li key={i} className="oo-detail__item">
                     <span className="oo-detail__item-qty">{item.quantity}×</span>
                     <span className="oo-detail__item-name">{item.name}</span>
-                    <span className="oo-detail__item-price">{formatPeso(item.unit_price * item.quantity)}</span>
+                    <span className="oo-detail__item-price">{currency(item.unit_price * item.quantity)}</span>
                   </li>
                 ))}
               </ul>
@@ -514,7 +511,7 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
               )}
               <div className="oo-detail__total">
                 <span>Total</span>
-                <span>{formatPeso(order.total_amount)}</span>
+                <span>{currency(order.total_amount)}</span>
               </div>
 
               {/* ── Actions ── */}
@@ -688,6 +685,9 @@ export default function OnlineOrdersPage() {
     }
   }, [showToast]);
 
+  // Fetch once on mount; the setState calls inside fetchOrders happen after the
+  // request resolves, but the rule treats the call as a synchronous update.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   // ── Socket: live updates ───────────────────────────────────────────────────

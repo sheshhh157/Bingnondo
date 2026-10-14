@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ordersAPI } from '../../services/managerApi';
 import useLiveData from '../../hooks/useLiveData';
 import { currency, STATUS_LABEL, periodBounds } from '../../utils/format';
@@ -84,6 +84,11 @@ export default function SalesReportPage() {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
+
+  // Horizontal scroll position of the period strip. `visible` only when the
+  // strip overflows; `ratio` (0..1) and `thumb` (%) drive the scrollbar thumb.
+  const stripRef = useRef(null);
+  const [strip, setStrip] = useState({ visible: false, ratio: 0, thumb: 100 });
 
   // Stable "now" captured once per mount so the bound memos below don't
   // recompute on every render, and so a period never straddles midnight
@@ -190,6 +195,32 @@ export default function SalesReportPage() {
   const loading = reportLoading || tableLoading;
   const error = reportError || tableError;
 
+  // Track the period strip's overflow. The ResizeObserver callback fires once on
+  // observe and again on any resize, so the initial measure never runs
+  // synchronously in the effect body.
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      setStrip({
+        visible: max > 1,
+        ratio: max > 0 ? el.scrollLeft / max : 0,
+        thumb: el.scrollWidth > 0 ? Math.max((el.clientWidth / el.scrollWidth) * 100, 12) : 100,
+      });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const onStripScroll = () => {
+    const el = stripRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setStrip((s) => ({ ...s, ratio: max > 0 ? el.scrollLeft / max : 0 }));
+  };
+
   // Both halves are refetched together: the summary and the table describe the
   // same period, and letting one update a moment before the other would briefly
   // show a total that doesn't match the rows under it.
@@ -284,16 +315,28 @@ export default function SalesReportPage() {
         <div>
           <h1 className="ui-pageheader__title">Sales Reports</h1>
           <p className="ui-pageheader__sub">
-            Revenue trends and transaction details. Revenue counts orders that have been paid
+            Period reports and transaction details. Revenue counts orders that have been paid
             and not cancelled — the status filter below applies to the table only.
           </p>
         </div>
-        <div className="sales-period" role="group" aria-label="Filter by period">
-          {PERIODS.map((p) => (
-            <button key={p.k} className={`sales-period__btn${period === p.k ? ' sales-period__btn--active' : ''}`} onClick={() => resetToFirstPage(setPeriod)(p.k)} aria-pressed={period === p.k}>
-              {p.l}
-            </button>
-          ))}
+        <div className="sales-controls">
+          <div className="sales-period" role="group" aria-label="Filter by period">
+            <div className="sales-period__scroll" ref={stripRef} onScroll={onStripScroll}>
+              {PERIODS.map((p) => (
+                <button key={p.k} className={`sales-period__btn${period === p.k ? ' sales-period__btn--active' : ''}`} onClick={() => resetToFirstPage(setPeriod)(p.k)} aria-pressed={period === p.k}>
+                  {p.l}
+                </button>
+              ))}
+            </div>
+            {strip.visible && (
+              <span className="sales-period__scrollbar" aria-hidden="true">
+                <span
+                  className="sales-period__scrollbar-thumb"
+                  style={{ width: `${strip.thumb}%`, left: `${strip.ratio * (100 - strip.thumb)}%` }}
+                />
+              </span>
+            )}
+          </div>
           {period === 'custom' && (
             <span className="sales-date-wrap">
               <input type="date" value={customStart} onChange={(e) => resetToFirstPage(setCustomStart)(e.target.value)} className="sales-date" aria-label="Start date" />
@@ -302,7 +345,7 @@ export default function SalesReportPage() {
             </span>
           )}
           <button
-            className="ui-btn ui-btn--primary"
+            className="ui-btn ui-btn--primary sales-export"
             onClick={handleExport}
             disabled={pageRows.length === 0}
             title={matchCount > pageRows.length

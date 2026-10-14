@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
-  useAdminToast, Spinner, Badge, Btn, Field, TextInput, PasswordInput,
+  Spinner, Badge, Btn, Field, TextInput, PasswordInput,
   AppSelect, Modal, ConfirmModal, PageHeader, RowAction, Pagination,
 } from './adminShared';
+import { useAdminToast } from './useAdminToast';
+import { formatDate } from './format';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/AdminPage.css';
 
@@ -47,6 +49,24 @@ const CheckIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
     <polyline points="22 4 12 14.01 9 11.01"/>
+  </svg>
+);
+const EditIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+  </svg>
+);
+const TrashIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="3 6 5 6 21 6"/>
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+    <path d="M10 11v6"/><path d="M14 11v6"/>
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+  </svg>
+);
+const KebabIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
   </svg>
 );
 
@@ -115,6 +135,66 @@ function CreateModal({ open, onClose, onCreated, toast }) {
   );
 }
 
+// ── Edit account modal ────────────────────────────────────────────────────────
+function EditModal({ account, onClose, onSaved, toast }) {
+  const [form, setForm] = useState({
+    full_name: account.full_name || '',
+    email:     account.email || '',
+    role:      account.role || 'cashier',
+  });
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })); };
+
+  function validate() {
+    const e = {};
+    if (!form.full_name.trim()) e.full_name = 'Full name is required.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email.';
+    if (!form.role) e.role = 'Select a role.';
+    setErrors(e); return Object.keys(e).length === 0;
+  }
+
+  async function submit() {
+    if (!validate()) return;
+    setLoading(true);
+    try {
+      await adminAPI.updateStaffAccount(account.id, {
+        full_name: form.full_name.trim(),
+        email:     form.email.trim(),
+        role:      form.role,
+      });
+      toast.success(`${form.full_name.trim()} updated.`);
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to update account.');
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Edit staff account">
+      <form onSubmit={e => { e.preventDefault(); submit(); }}>
+        <Field label="Full name" id="sa-edit-name" error={errors.full_name}>
+          <TextInput id="sa-edit-name" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="e.g. Maria Santos" error={errors.full_name} autoFocus />
+        </Field>
+        <Field label="Email address" id="sa-edit-email" error={errors.email}>
+          <TextInput id="sa-edit-email" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="staff@bingnondo.com" error={errors.email} />
+        </Field>
+        <Field label="Role" id="sa-edit-role" error={errors.role} hint={ROLE_DESC[form.role]}>
+          <AppSelect id="sa-edit-role" value={form.role} onChange={e => set('role', e.target.value)}>
+            {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+          </AppSelect>
+        </Field>
+        <div className="ap-modal__footer">
+          <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
+          <Btn variant="primary" type="submit" loading={loading}>Save changes</Btn>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Reset password modal ──────────────────────────────────────────────────────
 function ResetPasswordModal({ open, onClose, account, toast }) {
   const [newPassword, setNewPassword] = useState('');
@@ -153,71 +233,101 @@ function ResetPasswordModal({ open, onClose, account, toast }) {
 }
 
 // ── Staff table row ───────────────────────────────────────────────────────────
-function StaffRow({ account, isSelf, onStatusChange, onReset, actionLoading }) {
+function StaffRow({ account, isSelf, menuOpen, onToggleMenu, onCloseMenu, onEdit, onStatusChange, onReset, onDelete, actionLoading }) {
   const isActive = account.status === 'active';
   const busy = actionLoading === account.id;
   const selfActive = isSelf && isActive;
+  const manageable = ROLES.includes(account.role);
+
+  const actions = [
+    { key: 'edit',  label: 'Edit',           icon: <EditIcon />,  onClick: () => onEdit(account),   disabled: !manageable },
+    { key: 'reset', label: 'Reset password', icon: <ResetIcon />, onClick: () => onReset(account) },
+    isActive
+      ? { key: 'deactivate', label: 'Deactivate', icon: <BanIcon />,   onClick: () => onStatusChange(account), disabled: !manageable || selfActive, variant: 'danger',  tone: 'danger' }
+      : { key: 'reactivate', label: 'Reactivate', icon: <CheckIcon />, onClick: () => onStatusChange(account), disabled: !manageable, variant: 'success', tone: 'success' },
+    { key: 'delete', label: 'Delete', icon: <TrashIcon />, onClick: () => onDelete(account), disabled: !manageable || isSelf, variant: 'danger', tone: 'danger' },
+  ];
 
   return (
-    <tr className={isActive ? undefined : 'ap-row--inactive'}>
-      <td>
-        <div className="ap-member">
-          <div className="ap-avatar">{account.full_name?.slice(0, 2).toUpperCase()}</div>
-          <div className="ap-member__info">
-            <span className="ap-member__name-row">
-              <span className="ap-member__name" title={account.full_name}>{account.full_name}</span>
-              {isSelf && <span className="ap-you-tag">You</span>}
-            </span>
-            <span className="ap-member__email" title={account.email}>{account.email}</span>
-          </div>
-        </div>
-      </td>
-      <td><Badge type={account.role} label={ROLE_LABELS[account.role] || account.role} /></td>
-      <td><Badge type={isActive ? 'active' : 'inactive'} label={isActive ? 'Active' : 'Inactive'} /></td>
-      <td style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)', whiteSpace: 'nowrap' }}>
-        {new Date(account.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}
-        {account.created_by_name && (
-          <div style={{ fontSize: '0.6875rem', marginTop: 2, color: 'var(--color-muted-foreground)' }}>
-            by {account.created_by_name}
-          </div>
-        )}
-      </td>
-      <td className="ap-table__th--right">
-        {busy ? (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 4px' }}>
-            <Spinner size={14} />
-          </div>
-        ) : (
-          <div className="ap-row-actions">
-            <RowAction
-              icon={<ResetIcon />}
-              label="Reset password"
-              srLabel={`Reset password for ${account.full_name}`}
-              onClick={() => onReset(account)}
-            />
-            {selfActive ? (
-              <span title="You can't deactivate your own account">
-                <RowAction
-                  variant="danger"
-                  icon={<BanIcon />}
-                  label="Deactivate"
-                  srLabel={`Deactivate ${account.full_name}`}
-                  disabled
-                />
+    <>
+      <tr className={isActive ? undefined : 'ap-row--inactive'}>
+        <td className="ap-col--member">
+          <div className="ap-member">
+            <div className="ap-member__info">
+              <span className="ap-member__name-row">
+                <span className="ap-member__name" title={account.full_name}>{account.full_name}</span>
+                {isSelf && <span className="ap-you-tag">You</span>}
               </span>
-            ) : (
-              <RowAction
-                variant={isActive ? 'danger' : 'success'}
-                icon={isActive ? <BanIcon /> : <CheckIcon />}
-                label={isActive ? 'Deactivate' : 'Reactivate'}
-                srLabel={`${isActive ? 'Deactivate' : 'Reactivate'} ${account.full_name}`}
-                onClick={() => onStatusChange(account)}
-              />
-            )}
+              <span className="ap-member__email" title={account.email}>{account.email}</span>
+            </div>
           </div>
-        )}
-      </td>
-    </tr>
+        </td>
+        <td className="ap-col--role"><Badge type={account.role} label={ROLE_LABELS[account.role] || account.role} /></td>
+        <td className="ap-col--status"><Badge type={isActive ? 'active' : 'inactive'} label={isActive ? 'Active' : 'Inactive'} /></td>
+        <td className="ap-col--created" style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)', whiteSpace: 'nowrap' }}>
+          {formatDate(account.created_at)}
+          {account.created_by_name && (
+            <div style={{ fontSize: '0.6875rem', marginTop: 2, color: 'var(--color-muted-foreground)' }}>
+              by {account.created_by_name}
+            </div>
+          )}
+        </td>
+        <td className="ap-table__th--right ap-col--actions">
+          {busy ? (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 4px' }}>
+              <Spinner size={14} />
+            </div>
+          ) : (
+            <>
+              <div className="ap-row-actions ap-row-actions--inline">
+                {actions.map(a => (
+                  <RowAction
+                    key={a.key}
+                    variant={a.variant || 'default'}
+                    icon={a.icon}
+                    label={a.label}
+                    srLabel={`${a.label} ${account.full_name}`}
+                    onClick={a.onClick}
+                    disabled={a.disabled}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className="ap-kebab"
+                aria-label={`Actions for ${account.full_name}`}
+                aria-haspopup="true"
+                aria-expanded={menuOpen}
+                onClick={onToggleMenu}
+              >
+                <KebabIcon />
+              </button>
+            </>
+          )}
+        </td>
+      </tr>
+      {menuOpen && (
+        <tr className="ap-row-menu-row">
+          <td colSpan={3} className="ap-row-menu-cell">
+            <div className="ap-row-menu" role="menu">
+              {actions.map(a => (
+                <button
+                  key={a.key}
+                  type="button"
+                  role="menuitem"
+                  className={`ap-menu__item${a.tone === 'danger' ? ' ap-menu__item--danger' : ''}${a.tone === 'success' ? ' ap-menu__item--success' : ''}`}
+                  disabled={a.disabled}
+                  onClick={() => { onCloseMenu(); a.onClick(); }}
+                >
+                  <span className="ap-menu__item-icon">{a.icon}</span>
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -235,10 +345,14 @@ export default function StaffAccounts() {
   const [filterOpen, setFilterOpen] = useState(false);
 
   const [createOpen, setCreateOpen]       = useState(false);
+  const [editTarget, setEditTarget]       = useState(null);
   const [resetTarget, setResetTarget]     = useState(null);
+  const [deleteTarget, setDeleteTarget]   = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [actionRow, setActionRow]         = useState(null);
   const [actionType, setActionType]       = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
+  const [menuId, setMenuId]               = useState(null);
 
   // Backend ignores page/limit/search/role/status — fetch the full list once,
   // filter + paginate on the client.
@@ -249,8 +363,10 @@ export default function StaffAccounts() {
       setAccounts(Array.isArray(payload) ? payload : (payload.data || []));
     } catch { toast.error('Failed to load accounts.'); }
     finally { setLoading(false); }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [toast]);
 
+  // Fetch-on-mount: the sync setLoading inside `load` is intentional.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const filtered = useMemo(() => {
@@ -300,6 +416,18 @@ export default function StaffAccounts() {
     finally { setActionLoading(null); setActionRow(null); setActionType(null); }
   }
 
+  async function handleDelete() {
+    setDeleteLoading(true);
+    try {
+      await adminAPI.deleteStaffAccount(deleteTarget.id);
+      toast.success(`${deleteTarget.full_name} deleted.`);
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to delete account.');
+    } finally { setDeleteLoading(false); }
+  }
+
   return (
     <>
       <div className="ap-page ap-page--wide">
@@ -343,20 +471,31 @@ export default function StaffAccounts() {
               </div>
             )
           ) : (
-            <div className="ap-table-wrap">
-              <table className="ap-table">
+            <div className="ap-table-wrap ap-table-wrap--fit">
+              <table className="ap-table ap-table--fit">
                 <thead>
                   <tr>
-                    {['Staff member', 'Role', 'Status', 'Created', ''].map(h => (
-                      <th key={h} scope="col" className={h === '' ? 'ap-table__th--right' : ''}>{h}</th>
+                    {[
+                      { label: 'Staff member' },
+                      { label: 'Role' },
+                      { label: 'Status',  className: 'ap-col--status' },
+                      { label: 'Created', className: 'ap-col--created' },
+                      { label: '',        className: 'ap-table__th--right ap-col--actions' },
+                    ].map((h, i) => (
+                      <th key={i} scope="col" className={h.className || ''}>{h.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map(a => (
                     <StaffRow key={a.id} account={a} isSelf={a.id === user?.id}
+                      menuOpen={menuId === a.id}
+                      onToggleMenu={() => setMenuId(id => (id === a.id ? null : a.id))}
+                      onCloseMenu={() => setMenuId(null)}
+                      onEdit={r => setEditTarget(r)}
                       onStatusChange={r => { setActionRow(r); setActionType(r.status === 'active' ? 'deactivate' : 'reactivate'); }}
                       onReset={r => setResetTarget(r)}
+                      onDelete={r => setDeleteTarget(r)}
                       actionLoading={actionLoading}
                     />
                   ))}
@@ -381,6 +520,15 @@ export default function StaffAccounts() {
 
       {/* Modals */}
       <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} toast={toast} />
+      {editTarget && (
+        <EditModal
+          key={editTarget.id}
+          account={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={load}
+          toast={toast}
+        />
+      )}
       <ResetPasswordModal open={!!resetTarget} onClose={() => setResetTarget(null)} account={resetTarget} toast={toast} />
 
       <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter accounts">
@@ -407,6 +555,17 @@ export default function StaffAccounts() {
         message={`Restore access for ${actionRow?.full_name}? This action is logged.`}
         confirmLabel="Reactivate"
         variant="gold"
+      />
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        loading={deleteLoading}
+        title="Delete account"
+        message={`Permanently delete ${deleteTarget?.full_name}? This cannot be undone. Accounts with order or audit history can't be deleted — deactivate them instead. This action is logged.`}
+        confirmLabel="Delete"
+        variant="danger"
       />
     </>
   );

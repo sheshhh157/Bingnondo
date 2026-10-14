@@ -54,7 +54,9 @@ function playAlert() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.5);
-  } catch (_) {}
+  } catch {
+    // Web Audio is best-effort: a blocked/unsupported context must not break the queue.
+  }
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -99,7 +101,6 @@ export default function KitchenPage() {
     socket.on('reconnecting',     () => setReconnecting(true));
     socket.on('reconnect_failed', () => setReconnecting(false));
 
-    // New order arrives via socket.
     // New order arrives — backend only emits this for GCash orders
     // after staff verifies the receipt (payment verified → confirmed).
     socket.on(KITCHEN_EVENTS.NEW_ORDER, (order) => {
@@ -153,7 +154,6 @@ export default function KitchenPage() {
       <ConnectionStatus connected={connected} reconnecting={reconnecting} />
 
       <KitchenHeader
-        pendingCount={pendingOrders.length}
         counterCount={counterOrders.length}
         onlineCount={onlineOrders.length}
       />

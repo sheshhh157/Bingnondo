@@ -30,7 +30,7 @@
  *
  * Every function keeps the `{ data: ... }` wrapper so ManagerLayout,
  * DashboardPage, SalesReportPage, OversightKitchen, OversightStocks,
- * OversightDelivery and MenuPage need no changes.
+ * DeliveriesTab and MenuPage need no changes.
  */
 
 import { get } from './apiClient';
@@ -182,11 +182,19 @@ export const kitchenAPI = {
 };
 
 // ─── Delivery ─────────────────────────────────────────────────────────────────
-// No delivery backend exists yet (no `deliveries` table, controller or route),
-// so there is nothing real to read. The page renders its empty state until one
-// is built. Replace this with a real `get('/api/deliveries')` call at that point.
+// Read-only delivery list backing the manager nav badge and the shared
+// "Riders & Deliveries" page. Joins the real deliveries/orders/riders tables.
 export const deliveryAPI = {
-  getAll: async () => ({ data: [] }),
+  getAll: async (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page)   query.set('page',   params.page);
+    if (params.limit)  query.set('limit',  params.limit);
+    if (params.search) query.set('search', params.search);
+    if (params.status && params.status !== 'all') query.set('status', params.status);
+    const qs = query.toString();
+    const res = await get(`/api/admin/deliveries${qs ? `?${qs}` : ''}`);
+    return { data: res.data || [] };
+  },
 };
 
 // ─── Menu catalog ─────────────────────────────────────────────────────────────

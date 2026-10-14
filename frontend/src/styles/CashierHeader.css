@@ -109,15 +109,19 @@
 }
 
 @media (max-width: 767px) {
+  /* Desktop sidebar owns navigation; on mobile the burger opens the drawer and
+     the brand is replaced by the current page name. */
   .c-header__sidebar-toggle { display: none; }
   .c-header__menu-btn { display: flex; }
+  .c-header__brand { display: none; }
+  .c-header__page-title { display: block; flex: 1; }
   .c-header__icon-btn { width: 44px; height: 44px; }
-  /* Menu button + brand sit together on the left. */
-  .c-header__top { justify-content: flex-start; }
+  /* Burger pinned top-left, page title beside it. */
+  .c-header__top { justify-content: flex-start; gap: 0.625rem; }
 }
 
 @media (max-width: 480px) {
-  .c-header__brand-name { font-size: 1rem; }
+  .c-header__page-title { font-size: 1rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

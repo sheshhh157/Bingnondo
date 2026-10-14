@@ -1,10 +1,18 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import { adminAPI } from '../../services/api';
 import {
-  useAdminToast, Spinner, Btn, AppSelect, PageHeader, Pagination,
+  Spinner, Btn, AppSelect, PageHeader, Pagination, TextInput,
 } from './adminShared';
+import { useAdminToast } from './useAdminToast';
+import { formatDateTime } from './format';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/AdminPage.css';
+
+const SearchIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
 
 // ── action badge ─────────────────────────────────────────────────────
 const ACTION_TYPES = ['create','deactivate','reactivate','reset_password','update_settings','register_device','remove_device','update_api_key'];
@@ -28,7 +36,7 @@ function DetailPanel({ entry }) {
     ['Action',      entry.action,                            false],
     ['Target type', entry.target_type||'—',                  false],
     ['Target ID',   entry.target_id   ||'—',                  true ],
-    ['Timestamp',   new Date(entry.created_at).toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'medium'}), false],
+    ['Timestamp',   formatDateTime(entry.created_at),        false],
   ];
   return (
     <div className="ap-detail">
@@ -116,15 +124,32 @@ export default function AuditLog() {
   const [filterTo, setFilterTo]         = useState('');
   const [filterOpen, setFilterOpen]     = useState(false);
 
+  // Client-side only: filters the rows already loaded on this page. Kept out of
+  // `load` entirely, so it never changes the request or triggers extra fetches.
+  const [search, setSearch]             = useState('');
+  const term = search.trim().toLowerCase();
+  const visible = term
+    ? logs.filter((e) =>
+        (e.actor_name || '').toLowerCase().includes(term) ||
+        (e.action || '').toLowerCase().includes(term) ||
+        (e.target_type || '').toLowerCase().includes(term) ||
+        String(e.target_id ?? '').includes(term))
+    : logs;
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await adminAPI.getAuditLog({ page, limit:20, actor_id:filterActor||undefined, action:filterAction||undefined, from:filterFrom||undefined, to:filterTo||undefined });
-      setLogs(data.data||data); setTotalPages(data.totalPages||1);
+      const rows = data.data||data;
+      const total = data.total ?? (Array.isArray(rows)?rows.length:0);
+      setLogs(rows); setTotalPages(data.totalPages||Math.max(1,Math.ceil(total/20)));
     } catch { toast.error('Failed to load audit log.'); }
     finally { setLoading(false); }
-  }, [page, filterActor, filterAction, filterFrom, filterTo]);
+  }, [page, filterActor, filterAction, filterFrom, filterTo, toast]);
 
+  // Fetch-on-mount: the sync setLoading inside `load` is intentional; there is
+  // no user event to move it to. See admin-notes on the set-state-in-effect rule.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(()=>{ load(); },[load]);
 
   useEffect(()=>{
@@ -133,7 +158,7 @@ export default function AuditLog() {
       .catch(()=>{});
   },[]);
 
-  function reset() { setFilterActor(''); setFilterAction(''); setFilterFrom(''); setFilterTo(''); setPage(1); }
+  function reset() { setFilterActor(''); setFilterAction(''); setFilterFrom(''); setFilterTo(''); setSearch(''); setPage(1); }
   const hasFilters = filterActor||filterAction||filterFrom||filterTo;
 
   const filterFields = (
@@ -164,8 +189,17 @@ export default function AuditLog() {
         {/* Filters */}
         <div className="ap-card">
           <div className="ap-card__body">
-            <div className="ap-toolbar">
+            <div className="ap-toolbar ap-toolbar--single-row">
               <div className="ap-toolbar__filters">
+                <div className="ap-toolbar__search">
+                  <TextInput
+                    placeholder="Search actor, action, or target"
+                    value={search}
+                    onChange={e=>setSearch(e.target.value)}
+                    prefix={<SearchIcon />}
+                    aria-label="Search audit log"
+                  />
+                </div>
                 <FilterTrigger open={filterOpen} onClick={()=>setFilterOpen(true)} active={hasFilters} label="Filter audit log" />
                 <FilterInline>{filterFields}</FilterInline>
               </div>
@@ -183,10 +217,12 @@ export default function AuditLog() {
         <div className="ap-card">
           {loading ? (
             <div className="ap-loading"><Spinner size={24}/></div>
-          ) : logs.length===0 ? (
+          ) : visible.length===0 ? (
             <div className="ap-empty">
-              <div className="ap-empty__title">No entries found</div>
-              <div className="ap-empty__sub">Try a different filter, or wait for admin actions to be performed.</div>
+              <div className="ap-empty__title">{term && logs.length>0 ? 'No entries match your search' : 'No entries found'}</div>
+              <div className="ap-empty__sub">{term
+                ? 'Try a different search term.'
+                : 'Try a different filter, or wait for admin actions to be performed.'}</div>
             </div>
           ) : (
             <div className="ap-table-wrap">
@@ -199,7 +235,7 @@ export default function AuditLog() {
                   </tr>
                 </thead>
                 <tbody>
-                  {logs.map(entry=>(
+                  {visible.map(entry=>(
                     <LogRow key={entry.id} entry={entry}
                       expanded={expanded===entry.id}
                       onToggle={()=>setExpanded(e=>e===entry.id?null:entry.id)}
@@ -211,7 +247,9 @@ export default function AuditLog() {
           )}
           {!loading&&logs.length>0&&(
             <div className="ap-table-foot">
-              <span className="ap-table-foot__info">Page {page} of {totalPages} · {logs.length} entries</span>
+              <span className="ap-table-foot__info">
+                Page {page} of {totalPages} · {term ? `${visible.length} of ${logs.length}` : logs.length} entries
+              </span>
               <Pagination page={page} total={totalPages} onPage={setPage}/>
             </div>
           )}

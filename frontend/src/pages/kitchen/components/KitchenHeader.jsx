@@ -1,14 +1,32 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import logo1 from '../../../assets/logo2.png';
 
+// Live wall clock. Kept in its own component so the `new Date()` read happens
+// once per tick instead of on every header render.
+function Clock() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const dateStr = now.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+  return (
+    <div className="kp-header__clock" aria-label={`Time: ${timeStr}`}>
+      <span className="kp-header__time">{timeStr}</span>
+      <span className="kp-header__date">{dateStr}</span>
+    </div>
+  );
+}
+
 export default function KitchenHeader({ counterCount, onlineCount }) {
   const { user, logout } = useAuth();
   const [logoutOpen, setLogoutOpen] = useState(false);
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const dateStr = now.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
     <header className="kp-header" role="banner">
@@ -49,10 +67,7 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
 
       {/* Clock + switcher + user */}
       <div className="kp-header__right">
-        <div className="kp-header__clock" aria-label={`Time: ${timeStr}`}>
-          <span className="kp-header__time">{timeStr}</span>
-          <span className="kp-header__date">{dateStr}</span>
-        </div>
+        <Clock />
 
         <div className="kp-header__user">
           <span className="kp-header__username">

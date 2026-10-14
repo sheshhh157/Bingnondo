@@ -250,6 +250,157 @@ exports.resetStaffPassword = async (req, res) => {
 };
 
 
+/**
+ * PUT /api/admin/staff-accounts/:id
+ * Update a staff account's name, email and/or role.
+ * Body: { full_name?, email?, role? }
+ */
+exports.updateStaffAccount = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const staffId = parseInt(req.params.id, 10);
+    const adminId = req.user.sub;
+    const { full_name, email, role } = req.body;
+
+    if (isNaN(staffId)) return res.status(400).json({ message: 'Invalid staff ID.' });
+
+    const { rows: currentRows } = await client.query(
+      'SELECT id, full_name, email, role FROM staff_accounts WHERE id = $1',
+      [staffId]
+    );
+    const current = currentRows[0];
+    if (!current) return res.status(404).json({ message: 'Staff account not found.' });
+    // Only cashier / kitchen_staff accounts are managed here (never admin/owner/legacy staff)
+    if (!VALID_ROLES.includes(current.role)) {
+      return res.status(403).json({ message: 'This account cannot be modified through this interface.' });
+    }
+
+    const nextName  = full_name !== undefined ? String(full_name).trim() : null;
+    const nextEmail = email    !== undefined ? String(email).toLowerCase().trim() : null;
+    const nextRole  = role     !== undefined ? role : null;
+
+    if (nextName !== null && nextName === '') {
+      return res.status(400).json({ message: 'Full name cannot be empty.' });
+    }
+    if (nextEmail !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      return res.status(400).json({ message: 'Enter a valid email address.' });
+    }
+    if (nextRole !== null && !VALID_ROLES.includes(nextRole)) {
+      return res.status(400).json({ message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}.` });
+    }
+    if (nextRole !== null && nextRole !== current.role && staffId === adminId) {
+      return res.status(403).json({ message: 'You cannot change your own role.' });
+    }
+
+    await client.query('BEGIN');
+
+    if (nextEmail !== null && nextEmail !== current.email) {
+      const { rows: dup } = await client.query(
+        'SELECT id FROM staff_accounts WHERE email = $1 AND id <> $2',
+        [nextEmail, staffId]
+      );
+      if (dup.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'An account with this email already exists.' });
+      }
+    }
+
+    const { rows } = await client.query(
+      `UPDATE staff_accounts SET
+         full_name  = COALESCE($1, full_name),
+         email      = COALESCE($2, email),
+         role       = COALESCE($3, role),
+         updated_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [nextName || null, nextEmail || null, nextRole, staffId]
+    );
+    const updated = rows[0];
+
+    await writeAuditLog(client, adminId, 'update_staff_account', 'staff_accounts', staffId, {
+      before: { full_name: current.full_name, email: current.email, role: current.role },
+      after:  { full_name: updated.full_name,  email: updated.email,  role: updated.role  },
+    });
+
+    await client.query('COMMIT');
+
+    return res.json({
+      message: 'Staff account updated successfully.',
+      data: sanitizeStaff(updated),
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[updateStaffAccount]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * DELETE /api/admin/staff-accounts/:id
+ * Permanently remove a staff account. Blocked when the account has activity
+ * (audit trail, orders, etc.) — deactivate it instead in that case.
+ */
+exports.deleteStaffAccount = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const staffId = parseInt(req.params.id, 10);
+    const adminId = req.user.sub;
+
+    if (isNaN(staffId)) return res.status(400).json({ message: 'Invalid staff ID.' });
+    if (staffId === adminId) {
+      return res.status(403).json({ message: 'You cannot delete your own account.' });
+    }
+
+    const { rows: currentRows } = await client.query(
+      'SELECT id, full_name, email, role FROM staff_accounts WHERE id = $1',
+      [staffId]
+    );
+    const current = currentRows[0];
+    if (!current) return res.status(404).json({ message: 'Staff account not found.' });
+    if (!VALID_ROLES.includes(current.role)) {
+      return res.status(403).json({ message: 'This account cannot be deleted through this interface.' });
+    }
+
+    await client.query('BEGIN');
+
+    // Account-scoped configuration is safe to remove alongside the account.
+    await client.query('DELETE FROM staff_dashboard_access WHERE staff_id = $1', [staffId]);
+    await client.query('DELETE FROM staff_switch_pin      WHERE staff_id = $1', [staffId]);
+
+    const { rows } = await client.query(
+      `DELETE FROM staff_accounts WHERE id = $1 AND role != 'admin'
+       RETURNING id, full_name, email, role`,
+      [staffId]
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Staff account not found.' });
+    }
+
+    await writeAuditLog(client, adminId, 'delete_staff_account', 'staff_accounts', staffId, {
+      full_name: current.full_name,
+      email: current.email,
+      role: current.role,
+    });
+
+    await client.query('COMMIT');
+
+    return res.json({ message: 'Staff account deleted successfully.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err && err.code === '23503') {
+      return res.status(409).json({ message: "This account has activity and can't be deleted. Deactivate it instead." });
+    }
+    console.error('[deleteStaffAccount]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  } finally {
+    client.release();
+  }
+};
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 6.3  AUDIT LOG
 // ─────────────────────────────────────────────────────────────────────────────

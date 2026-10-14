@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../../services/api';
-import { useAdminToast, Spinner, Btn, PageHeader } from './adminShared';
+import { Spinner, Btn, PageHeader } from './adminShared';
+import { useAdminToast } from './useAdminToast';
 import '../../styles/AdminPage.css';
 
 // ── Section wrapper ──────────────────────────────────────────────────
@@ -164,8 +165,10 @@ export default function SystemSettings() {
       setCategories(catsData.map(c => ({ id: c.id, name: c.name })));
     } catch { toast.error('Failed to load settings.'); }
     finally { setLoading(false); }
-  }, []);
+  }, [toast]);
 
+  // Fetch-on-mount: the sync setLoading inside `loadAll` is intentional.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(()=>{ loadAll(); },[loadAll]);
 
   async function saveHours() {
@@ -215,11 +218,11 @@ export default function SystemSettings() {
     } catch(err) { toast.error(err?.response?.data?.message || err.message || 'Failed to remove category.'); }
   }
 
-  if (loading) return <div className="ap-page"><div className="ap-loading"><Spinner size={24}/></div></div>;
+  if (loading) return <div className="ap-page sys-page"><div className="ap-loading"><Spinner size={24}/></div></div>;
 
   return (
     <>
-      <div className="ap-page">
+      <div className="ap-page sys-page">
 
         <PageHeader
           title="System Settings"

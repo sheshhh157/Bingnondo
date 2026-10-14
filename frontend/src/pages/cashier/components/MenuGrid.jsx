@@ -1,3 +1,4 @@
+import { currency } from '../../../utils/format';
 import '../../../styles/MenuGrid.css';
 
 export default function MenuGrid({ items, loading, error, onAdd, onRetry, draft, emptyMessage = 'Nothing here yet.' }) {
@@ -87,7 +88,7 @@ function MenuCard({ item, onAdd, draft }) {
         <p className="cdm-card__name">{item.name}</p>
         <div className="cdm-card__footer">
           <span className="cdm-card__price">
-            ₱{Number(item.price).toFixed(2)}
+            {currency(item.price)}
           </span>
           <button
             className="cdm-card__add"

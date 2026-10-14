@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { currency } from '../../../utils/format';
 import '../../../styles/OrderDraft.css';
-
-const fmt = (n) => `₱${Number(n).toFixed(2)}`;
 
 const TrashIcon = ({ size = 15 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -137,7 +136,7 @@ export default function OrderDraft({
         <footer className="cdr-footer">
           <div className="cdr-subtotal">
             <span className="cdr-subtotal__label">Subtotal</span>
-            <span className="cdr-subtotal__value">{fmt(total)}</span>
+            <span className="cdr-subtotal__value">{currency(total)}</span>
           </div>
           <button
             className="cdr-confirm-btn"
@@ -235,9 +234,9 @@ function DraftItem({ item, noteOpen, onOpenNote, onCloseNote, onQty, onNote }) {
       <div className="cdr-item__top">
         <div className="cdr-item__meta">
           <p className="cdr-item__name">{item.name}</p>
-          <p className="cdr-item__unit">{fmt(item.price)} each</p>
+          <p className="cdr-item__unit">{currency(item.price)} each</p>
         </div>
-        <span className="cdr-item__line-total">{fmt(item.price * item.qty)}</span>
+        <span className="cdr-item__line-total">{currency(item.price * item.qty)}</span>
       </div>
 
       <div className="cdr-item__bottom">

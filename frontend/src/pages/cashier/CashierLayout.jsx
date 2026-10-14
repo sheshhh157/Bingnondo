@@ -4,7 +4,6 @@ import CashierPage from './CashierPage';
 import InventoryPage from '../staff/InventoryPage';
 import SupportChatPage from '../staff/SupportChatPage';
 import logo from '../../assets/logo.png';
-import CashierBottomNav from './components/CashierBottomNav';
 import CashierHeader from './components/CashierHeader';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { NAV_GROUPS } from './cashierNav';
@@ -207,7 +206,6 @@ export default function CashierLayout() {
         {isCashierView ? (
           <CashierPage
             view={view}
-            onViewChange={setView}
             onToggleSidebar={toggleSidebar}
             sidebarOpen={sidebarOpen}
             onOpenDrawer={() => setDrawerOpen(true)}
@@ -226,7 +224,6 @@ export default function CashierLayout() {
             <div className="cl-staff-body">
               <StaffPageContent pageId={view} />
             </div>
-            <CashierBottomNav view={view} onNav={handleNav} />
           </div>
         )}
       </main>

@@ -129,7 +129,7 @@ let MOCK_INVENTORY = [
 const delay = (ms = 300) => new Promise((res) => setTimeout(res, ms));
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const BASE_URL = `${import.meta.env.VITE_API_URL || ''}/api`;
 
 // Token helpers — keys match AuthContext and socket.js
 export const tokenStorage = {
@@ -322,7 +322,12 @@ export const inventoryAPI = {
   create: (payload) =>
     apiRequest('/inventory', { method: 'POST', body: JSON.stringify(payload) }),
 
-  /** POST /api/inventory/:id/out-of-stock — force to 0 + cascade menu unavailability */
+  /** PUT /api/inventory/:id — edit ingredient details + stock
+   *  (name, unit, current_stock, reorder_level, category_ids[]) */
+  update: (id, payload) =>
+    apiRequest(`/inventory/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  /** POST /api/inventory/:id/out-of-stock */
   outOfStock: (id) =>
     apiRequest(`/inventory/${id}/out-of-stock`, { method: 'POST' }),
 };
@@ -528,6 +533,21 @@ export const adminAPI = {
       body: JSON.stringify({ new_password }),
     }),
 
+  updateStaffAccount: (id, data) =>
+    apiRequest(`/admin/staff-accounts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        full_name: data.full_name,
+        email:     data.email,
+        role:      data.role,
+      }),
+    }),
+
+  deleteStaffAccount: (id) =>
+    apiRequest(`/admin/staff-accounts/${id}`, {
+      method: 'DELETE',
+    }),
+
   // ── Dashboard Access ────────────────────────────────────────────────────────
   getDashboardAccess: (id) =>
     apiRequest(`/admin/staff-accounts/${id}/dashboard-access`),
@@ -667,6 +687,22 @@ export const adminRidersAPI = {
   /** POST /api/admin/riders/:id/reset-password — admin resets password */
   resetPassword: (id, password) =>
     apiClient.post(`/api/admin/riders/${id}/reset-password`, { password }),
+};
+
+// ─── ADMIN DELIVERIES API ─────────────────────────────────────────────────────
+export const adminDeliveriesAPI = {
+  /** GET /api/admin/deliveries — read-only delivery list
+   *  params: { page, limit, search, status }
+   */
+  getAll: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page)   query.set('page',   params.page);
+    if (params.limit)  query.set('limit',  params.limit);
+    if (params.search) query.set('search', params.search);
+    if (params.status && params.status !== 'all') query.set('status', params.status);
+    const qs = query.toString();
+    return apiClient.get(`/api/admin/deliveries${qs ? `?${qs}` : ''}`);
+  },
 };
 
 // ─── SUPPORT CHAT API (§4.5) ──────────────────────────────────────────────────

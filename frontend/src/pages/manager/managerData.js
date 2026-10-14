@@ -166,7 +166,7 @@ export const deliveryStatus = (list, p) =>
 
 /**
  * Event descriptor for a page whose state is the list itself
- * (OversightKitchen, OversightStocks, OversightDelivery, SalesReportPage).
+ * (OversightKitchen, OversightStocks, DeliveriesTab, SalesReportPage).
  */
 export const listEvent = (name, reducer) => ({
   name,

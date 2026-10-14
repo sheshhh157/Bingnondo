@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { ordersAPI } from '../../../services/cashierApi';
+import { currency } from '../../../utils/format';
 import Pagination from '../../../components/Pagination';
 import '../../../styles/TransactionHistory.css';
 
@@ -53,7 +54,6 @@ const DEFAULT_FILTERS = {
   pageSize: 10,
 };
 
-const fmt = (n) => `₱${Number(n).toFixed(2)}`;
 const fmtDt = (iso) => {
   const d = new Date(iso);
   return d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
@@ -100,7 +100,7 @@ function OrderDetail({ order }) {
       {(order.items || []).map((item, idx) => (
         <div key={idx} className="th-expanded__line">
           <span>{item.name || item.menu_item?.name} ×{item.quantity}</span>
-          <span>{fmt((item.unit_price || item.price || 0) * item.quantity)}</span>
+          <span>{currency((item.unit_price || item.price || 0) * item.quantity)}</span>
         </div>
       ))}
       {order.notes && <p className="th-expanded__note">Note: {order.notes}</p>}
@@ -357,6 +357,9 @@ export default function TransactionHistory() {
     }
   }, [range]);
 
+  // Fetch on range change. The synchronous setLoading inside fetchOrders is
+  // intentional — there is no user event to move it to.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   useEffect(() => {
@@ -378,7 +381,9 @@ export default function TransactionHistory() {
     };
   }, [fetchOrders]);
 
+  // Reset to the first page whenever any filter, sort or page-size changes.
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
     setPage(1);
   }, [range, search, payFilter, statusFilter, sortCol, sortDir, pageSize]);
 
@@ -509,7 +514,7 @@ export default function TransactionHistory() {
     <>
       {processed.length} order{processed.length !== 1 ? 's' : ''}
       {processed.length !== orders.length && ` of ${orders.length}`}
-      {' · '}{fmt(filteredTotal)}
+      {' · '}{currency(filteredTotal)}
     </>
   );
 
@@ -637,7 +642,7 @@ export default function TransactionHistory() {
                               {order.payment_method === 'gcash' ? 'GCash' : 'Cash'}
                             </span>
                           </td>
-                          <td className="th-cell--total">{fmt(order.total_amount || 0)}</td>
+                          <td className="th-cell--total">{currency(order.total_amount || 0)}</td>
                           <td>
                             <span className={`th-status ${STATUS_CLASS[order.status] || ''}`}>
                               {STATUS_LABEL[order.status] || order.status}
@@ -679,7 +684,7 @@ export default function TransactionHistory() {
                       </span>
                       <span className="th-card__row th-card__row--mid">
                         <span className="th-card__items">{itemsSummary(order)}</span>
-                        <span className="th-card__total">{fmt(order.total_amount || 0)}</span>
+                        <span className="th-card__total">{currency(order.total_amount || 0)}</span>
                       </span>
                       <span className="th-card__row th-card__row--bottom">
                         <span className={`th-pay-badge th-pay-badge--${order.payment_method || 'cash'}`}>

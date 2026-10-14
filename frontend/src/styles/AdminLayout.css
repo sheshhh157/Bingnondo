@@ -225,24 +225,6 @@
   text-transform: uppercase;
   color: rgba(255,251,235,0.62);
 }
-.al-nav__divider {
-  height: 1px;
-  margin: 8px 16px;
-  background: rgba(255,251,235,0.12);
-  flex-shrink: 0;
-}
-.al-nav__tag {
-  margin-left: auto;
-  font-size: 0.5625rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #FBBF24;
-  background: rgba(217,119,6,0.16);
-  border: 1px solid rgba(217,119,6,0.4);
-  border-radius: 99px;
-  padding: 1px 7px;
-}
 
 /* ─── User section ───────────────────────────────────────────────────── */
 .al-user {
@@ -597,7 +579,8 @@
   .al-content .sales-summary { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 560px) {
-  .al-content .sales-summary { grid-template-columns: 1fr; }
+  .al-content .sales-summary { grid-template-columns: repeat(2, 1fr); }
+  .al-content .sales-summary > :first-child { grid-column: 1 / -1; }
 }
 
 /* Transactions table: scroll instead of squashing, with a pinned order column. */

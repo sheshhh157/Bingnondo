@@ -63,6 +63,22 @@
   flex: 1;
 }
 
+/* ─── Single-row toolbar variant (Audit Log) ─────────────────────────────
+ * Keeps search + inline filter controls on one line at every desktop/tablet
+ * width by shrinking the fields instead of letting them wrap to a new row.
+ * Below 767px the inline filters collapse into the funnel modal as usual. */
+.ap-toolbar--single-row .ap-toolbar__filters { flex-wrap: nowrap; }
+.ap-toolbar__search { flex: 1 1 180px; min-width: 0; display: flex; }
+.ap-toolbar__search .ap-input-row { flex: 1 1 auto; min-width: 0; }
+.ap-toolbar__search .ap-input { min-width: 0; }
+.ap-toolbar--single-row .ap-toolbar__filters > .mf-inline > .ap-select,
+.ap-toolbar--single-row .ap-toolbar__filters > .mf-inline > .ap-input {
+  width: auto;
+  flex: 0 1 150px;
+  min-width: 0;
+}
+.ap-toolbar--single-row .ap-toolbar__filters > .mf-inline > .ap-btn { flex: 0 0 auto; }
+
 /* ─── Table ──────────────────────────────────────────────────────────── */
 .ap-table-wrap {
   overflow-x: auto;
@@ -385,45 +401,6 @@
 /* ─── Divider ────────────────────────────────────────────────────────── */
 .ap-divider { height: 1px; background: var(--color-border); }
 
-/* ─── API key masked field ───────────────────────────────────────────── */
-.ap-apikey {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ap-apikey__masked {
-  flex: 1;
-  padding: 7px 10px;
-  background: var(--color-muted);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 2px;
-  font-size: 0.75rem;
-  font-family: monospace;
-  color: rgba(59,10,10,0.65);
-}
-
-/* ─── Device card ────────────────────────────────────────────────────── */
-.ap-device {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  background: var(--color-muted);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 2px;
-}
-.ap-device__icon {
-  width: 36px; height: 36px;
-  border-radius: 2px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.ap-device__icon--online  { background:#F0FDF4; border:1px solid #BBF7D0; color:#15803D; }
-.ap-device__icon--offline { background:var(--color-muted); border:1px solid var(--color-border); color:var(--color-muted-foreground); }
-.ap-device__info { flex: 1; min-width: 0; }
-.ap-device__label { font-weight: 500; font-size: 0.8125rem; color: var(--color-foreground); }
-.ap-device__code  { font-size: 0.6875rem; color: var(--color-muted-foreground); font-family: monospace; margin-top: 1px; }
-
 /* ─── Category tags ──────────────────────────────────────────────────── */
 .ap-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .ap-tag {
@@ -520,18 +497,6 @@
   line-height: 1.6;
 }
 
-/* ─── Avatar initials ────────────────────────────────────────────────── */
-.ap-avatar {
-  width: 32px; height: 32px;
-  border-radius: 2px;
-  background: var(--color-muted);
-  border: 1px solid var(--color-border-strong);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.75rem; font-weight: 500;
-  color: rgba(59,10,10,0.7);
-  flex-shrink: 0;
-}
-
 /* ─── Inline member row ──────────────────────────────────────────────── */
 .ap-member { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ap-member__info { display: flex; flex-direction: column; min-width: 0; }
@@ -539,18 +504,7 @@
 .ap-member__email{ font-size: 0.6875rem; color: var(--color-muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ─── Context menu ───────────────────────────────────────────────────── */
-.ap-menu-wrap { position: relative; display: inline-block; }
-.ap-menu {
-  position: absolute;
-  right: 0; top: 100%;
-  margin-top: 4px;
-  z-index: 100;
-  background: var(--color-card);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 4px;
-  min-width: 160px;
-  box-shadow: var(--shadow-lg);
-}
+
 .ap-menu__item {
   display: block; width: 100%;
   padding: 9px 14px;
@@ -567,10 +521,6 @@
 .ap-menu__item--danger:hover { background: color-mix(in srgb, var(--color-primary) 10%, var(--color-background)); }
 .ap-menu__item--success { color: var(--color-success); }
 .ap-menu__item--success:hover { background: color-mix(in srgb, var(--color-success) 8%, var(--color-background)); }
-.ap-menu__divider { height: 1px; background: var(--color-border); }
-.ap-menu__backdrop {
-  position: fixed; inset: 0; z-index: 90;
-}
 
 /* ─── Keyframes ──────────────────────────────────────────────────────── */
 @keyframes ap-spin     { to { transform: rotate(360deg); } }
@@ -863,55 +813,6 @@
   background: color-mix(in srgb, var(--color-gold) 10%, var(--color-background));
   border-color: color-mix(in srgb, var(--color-gold) 28%, var(--color-background));
 }
-/* ── CustomerRestrictions — icon action buttons ─────────────────── */
-.cr-action-btns {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.cr-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  flex-shrink: 0;
-}
-
-
-/* ─── Riders Page additions ───────────────────────────────────────────── */
-
-/* Stats row */
-.ap-stats-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
-.ap-stat-chip { display: flex; flex-direction: column; align-items: center; padding: 12px 20px; background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); min-width: 90px; }
-.ap-stat-chip--green { border-color: #BBF7D0; background: #F0FDF4; }
-.ap-stat-chip--amber { border-color: #FDE68A; background: #FFFBEB; }
-.ap-stat-chip__val   { font-family: var(--font-heading); font-size: 1.5rem; font-weight: 700; color: var(--color-foreground); line-height: 1; }
-.ap-stat-chip__label { font-family: var(--font-body); font-size: 0.75rem; color: var(--color-muted-foreground); margin-top: 4px; }
-
-/* Search bar */
-.ap-search-bar { position: relative; margin-bottom: 16px; }
-.ap-search-bar__icon  { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--color-muted-foreground); pointer-events: none; }
-.ap-search-bar__input { width: 100%; padding: 9px 36px 9px 36px; font-family: var(--font-body); font-size: 0.875rem; background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-foreground); outline: none; box-sizing: border-box; }
-.ap-search-bar__input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 15%, transparent); }
-.ap-search-bar__clear { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--color-muted-foreground); font-size: 0.8rem; padding: 2px 4px; }
-
-/* Error banner */
-.ap-error-banner { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: var(--radius-md); color: var(--color-destructive); font-family: var(--font-body); font-size: 0.875rem; margin-bottom: 16px; }
-
-/* Table extensions */
-.ap-table__primary   { font-family: var(--font-body); font-size: 0.875rem; font-weight: 600; color: var(--color-foreground); margin: 0; }
-.ap-table__secondary { font-family: var(--font-body); font-size: 0.75rem; color: var(--color-muted-foreground); margin: 2px 0 0; }
-.ap-table__none      { color: var(--color-muted-foreground); font-size: 0.875rem; }
-.ap-table__note      { font-family: var(--font-body); font-size: 0.75rem; color: var(--color-muted-foreground); font-style: italic; }
-.ap-table__td--mono  { font-family: monospace; font-size: 0.85rem; }
 
 /* Buttons extensions */
 .ap-btn--xs          { padding: 5px 10px; font-size: 0.75rem; }
@@ -921,34 +822,6 @@
 /* Badge extensions */
 .ap-badge--warning   { background: #FFFBEB; color: #92400E; border-color: #FDE68A; }
 
-/* Form grid (2-col in modal) */
-.ap-form-grid        { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.ap-form-field       { display: flex; flex-direction: column; gap: 5px; }
-.ap-form-field--full { grid-column: 1 / -1; }
-.ap-form-label       { font-family: var(--font-body); font-size: 0.8125rem; font-weight: 600; color: var(--color-foreground); }
-.ap-form-optional    { font-weight: 400; color: var(--color-muted-foreground); font-size: 0.75rem; }
-.ap-form-input       { padding: 8px 10px; font-family: var(--font-body); font-size: 0.875rem; background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-foreground); outline: none; width: 100%; box-sizing: border-box; }
-.ap-form-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 15%, transparent); }
-.ap-form-input--error { border-color: var(--color-destructive); }
-.ap-form-textarea    { resize: vertical; min-height: 60px; }
-.ap-form-error       { font-family: var(--font-body); font-size: 0.75rem; color: var(--color-destructive); margin: 0; }
-
-/* Modal extensions */
-.ap-modal--sm    { max-width: 400px; }
-.ap-modal__desc  { font-family: var(--font-body); font-size: 0.875rem; color: var(--color-muted-foreground); margin: 0 0 14px; }
-.ap-modal--confirm { text-align: center; padding: 28px 24px 24px; }
-
-/* Confirm modal */
-.ap-confirm__icon          { font-size: 2rem; margin-bottom: 12px; display: block; }
-.ap-confirm__icon--danger  { color: var(--color-destructive); }
-.ap-confirm__icon--success { color: #15803D; }
-.ap-confirm__title  { font-family: var(--font-heading); font-size: 1.125rem; font-weight: 700; margin: 0 0 8px; color: var(--color-foreground); }
-.ap-confirm__msg    { font-family: var(--font-body); font-size: 0.875rem; color: var(--color-muted-foreground); margin: 0 0 20px; }
-.ap-confirm__actions { display: flex; gap: 8px; justify-content: center; }
-
-/* Skeleton */
-.ap-skeleton { height: 14px; background: var(--color-muted); border-radius: var(--radius-sm); animation: ap-pulse 1.5s ease-in-out infinite; }
-
 /* Empty state */
 .ap-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 20px; color: var(--color-muted-foreground); }
 .ap-empty p { font-family: var(--font-body); font-size: 0.875rem; margin: 0; }
@@ -957,18 +830,6 @@
 .ap-page__header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
 .ap-page__title  { font-family: var(--font-heading); font-size: 1.375rem; font-weight: 700; color: var(--color-foreground); margin: 0; }
 .ap-page__sub    { font-family: var(--font-body); font-size: 0.875rem; color: var(--color-muted-foreground); margin: 4px 0 0; }
-
-/* Table footer */
-.ap-table__footer { font-family: var(--font-body); font-size: 0.8125rem; color: var(--color-muted-foreground); padding: 10px 16px; border-top: 1px solid var(--color-border); }
-
-/* Animations */
-@keyframes ap-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-
-@media (max-width: 600px) {
-  .ap-form-grid { grid-template-columns: 1fr; }
-  .ap-stats-row { gap: 8px; }
-  .ap-stat-chip { min-width: 70px; padding: 10px 14px; }
-}
 
 /* ─── Page header (shared pattern) ──────────────────────────────────── */
 .ap-page-head__top {
@@ -1050,14 +911,60 @@
   .ap-row-action__label { display: none; }
 }
 
+/* ─── Mobile per-row action menu (staff table) ──────────────────────── */
+.ap-kebab { display: none; }
+.ap-row-menu-row { display: none; }
+.ap-menu__item-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
+.ap-menu__item:disabled { opacity: 0.42; cursor: not-allowed; }
+
+@media (max-width: 767px) {
+  .ap-table .ap-col--status,
+  .ap-table .ap-col--created { display: none; }
+  .ap-row-actions--inline { display: none; }
+  .ap-kebab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 40px;
+    height: 40px;
+    padding: 0 6px 0 0;
+    border: none;
+    background: none;
+    color: var(--color-muted-foreground);
+    cursor: pointer;
+    transition: color 120ms ease;
+  }
+  .ap-kebab:hover,
+  .ap-kebab[aria-expanded="true"] {
+    color: var(--color-foreground);
+  }
+  .ap-table .ap-row-menu-row { display: table-row; }
+  .ap-table tbody tr.ap-row-menu-row td.ap-row-menu-cell {
+    position: static;
+    padding: 0;
+    background: var(--color-muted);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .ap-row-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px; }
+  .ap-row-menu .ap-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 11px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+  }
+}
+
 /* ─── Focus visibility ──────────────────────────────────────────────── */
 .ap-btn:focus-visible,
 .ap-row-btn:focus-visible,
-.cr-action-btn:focus-visible,
+.ap-kebab:focus-visible,
+.ap-menu__item:focus-visible,
 .cr-viol-count:focus-visible,
 .ap-input:focus-visible,
 .ap-select:focus-visible,
-.ap-search-bar__input:focus-visible,
 .ap-input-suffix--btn:focus-visible,
 .ap-modal__close:focus-visible,
 .ap-tag__remove:focus-visible,
@@ -1067,9 +974,6 @@
   outline: 2px solid var(--color-ring);
   outline-offset: 1px;
 }
-
-/* search input placeholder contrast */
-.ap-search-bar__input::placeholder { color: rgba(59,10,10,0.5); }
 
 /* ══════════════════════════════════════════════════════════════════════
    RESPONSIVE — canonical admin breakpoints 1280 / 1024 / 768 / 640 / 480
@@ -1086,14 +990,9 @@
   .ap-page__actions > .ap-btn { flex: 1 1 auto; justify-content: center; }
 }
 
-/* ─── Stat rows: 4 → 2 (≤1024) → 2 (≤480) ───────────────────────────── */
+/* ─── Stat rows: 4 → 2 at ≤1024 ─────────────────────────────────────── */
 @media (max-width: 1024px) {
   .cr-stats { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 480px) {
-  .cr-stats { grid-template-columns: repeat(2, 1fr); }
-  .ap-stats-row { gap: 8px; }
-  .ap-stat-chip { flex: 1 1 calc(50% - 8px); }
 }
 
 /* ─── Toolbar: search first, filters wrap below ─────────────────────── */
@@ -1105,14 +1004,8 @@
 
 /* ─── Touch-friendly controls (16px avoids iOS focus zoom) ──────────── */
 @media (max-width: 767px) {
-  .ap-input,
-  .ap-select,
-  .ap-form-input,
-  .ap-search-bar__input,
-  .ap-tag__input { font-size: 16px; }
-  .ap-input,
-  .ap-select,
-  .ap-form-input { min-height: 40px; }
+  .ap-input, .ap-select, .ap-tag__input{ font-size: 16px; }
+  .ap-input, .ap-select{ min-height: 40px; }
   .ap-btn--sm,
   .ap-btn--md { min-height: 40px; }
   .ap-row-action { min-width: 40px; height: 40px; }
@@ -1136,16 +1029,29 @@
   .ap-table-wrap { box-shadow: inset -14px 0 12px -14px rgba(63,5,5,0.28); }
 }
 
-/* ─── Modals: full-screen sheet on phones (internal scroll, sticky bars) */
+/* ─── Fit-to-width table (Staff Accounts): no horizontal scroll ─────── */
+@media (max-width: 767px) {
+  .ap-table-wrap--fit { overflow-x: visible; box-shadow: none; }
+  .ap-table--fit { table-layout: fixed; width: 100%; }
+  .ap-table--fit th:first-child,
+  .ap-table--fit td:first-child { position: static; }
+  .ap-table--fit td,
+  .ap-table--fit th { padding-left: 12px; padding-right: 12px; }
+  .ap-table--fit .ap-col--actions { width: 56px; }
+  .ap-table--fit th.ap-col--actions,
+  .ap-table--fit td.ap-col--actions { padding-left: 8px; padding-right: 0; }
+}
+
+/* ─── Modals: centered card on phones (internal scroll, sticky bars) ── */
 @media (max-width: 639px) {
-  .ap-overlay { padding: 0; align-items: stretch; }
+  .ap-overlay { padding: 12px; }
   .ap-modal {
     max-width: 100% !important;
     width: 100%;
-    height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
-    border: none;
+    height: auto;
+    max-height: calc(100dvh - 24px);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
     display: flex;
     flex-direction: column;
   }
@@ -1154,25 +1060,32 @@
     top: 0;
     z-index: 2;
     background: var(--color-card);
-    padding-top: calc(14px + env(safe-area-inset-top));
   }
-  .ap-modal__body { flex: 1; overflow-y: auto; }
+  .ap-modal__body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
   .ap-modal__footer {
     position: sticky;
     bottom: 0;
     margin: 0;
-    padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
     background: var(--color-card);
     border-top: 1px solid var(--color-border);
   }
 }
 
-/* ─── Forms: 2-col grids collapse; hours rows stack ─────────────────── */
+/* ─── Forms: 2-col grids collapse; hours rows keep their row layout ──── */
 @media (max-width: 767px) {
-  .ap-form-grid { grid-template-columns: 1fr; }
-  .ap-hours-row { grid-template-columns: 1fr 1fr; }
-  .ap-hours-row .ap-hours-day { grid-column: 1 / -1; }
-  .ap-hours-row .ap-hours-check { grid-column: 1 / -1; }
+
+  /* Keep day | open | close | closed on one line; just tighten it so the
+     labels don't have to move to their own rows. Inputs stay 16px (see the
+     touch-friendly rule below) to avoid iOS focus zoom. */
+  .ap-hours-row { grid-template-columns: 36px 1fr 1fr auto; gap: 6px; }
+  .ap-hours-row .ap-input { min-width: 0; padding-left: 6px; padding-right: 6px; }
+  .ap-hours-row .ap-hours-day { font-size: 0.6875rem; }
+  .ap-hours-row .ap-hours-check { font-size: 0.625rem; }
   .ap-detail__grid { grid-template-columns: 1fr; }
   .ap-detail__key { white-space: normal; }
   /* Riders (.rd-* lives in RidersPage.css, which is not in the editable
@@ -1182,4 +1095,21 @@
 }
 @media (max-width: 480px) {
   .ap-page .rd-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ─── System Settings: centered column (not full-width) ──────────────── */
+/* `.ap-page` caps the column at 900px but has no auto margin, so it hugs
+   the left of the wide content area. Centering keeps the Business hours
+   rows from sprawling across the screen. */
+.sys-page { margin: 0 auto; }
+
+/* Even spacing rhythm on phones: the page is a flex column (gap: 20px) and
+   its first child (PageHeader) also carries a 20px bottom margin, doubling
+   the gap above the first card. Zero the header margin so header→card and
+   card→card gaps match. */
+@media (max-width: 767px) {
+  .sys-page { gap: 12px; }
+  .sys-page .ap-page__header { margin-bottom: 0; }
+  .sys-page .ap-card__head,
+  .sys-page .ap-card__body { padding: 12px; }
 }

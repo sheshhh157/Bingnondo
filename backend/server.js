@@ -19,6 +19,8 @@ const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 
 const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes');
 const adminRiderRoutes    = require('./src/modules/admin/admin.riders.routes');
+const adminDeliveryRoutes = require('./src/modules/admin/admin.deliveries.routes');
+const adminAuditRoutes    = require('./src/modules/admin/admin.audit.routes');
 const adminCustomerRestrictionsRoutes = require('./src/modules/admin/customer-restrictions.routes'); // §6.4
 const supportChatRoutes   = require('./src/modules/support-chat/support-chat.routes');
 const uploadRoutes        = require('./src/modules/upload/upload.routes');
@@ -83,6 +85,8 @@ app.use('/api/admin/staff-accounts', adminStaffRoutes);
 // System settings: business hours, menu categories
 app.use('/api/admin/system-settings', adminSettingsRoutes);
 app.use('/api/admin/riders',          adminRiderRoutes);   // §6.5 Rider CRUD (admin)
+app.use('/api/admin/deliveries',      adminDeliveryRoutes); // Riders & Deliveries — read-only list
+app.use('/api/admin/audit-log',       adminAuditRoutes);  // §6.6 Admin audit trail
 // Customer Restrictions (§6.4) — Admin + Owner only
 app.use('/api/admin/customer-restrictions', adminCustomerRestrictionsRoutes);
 app.use('/api/support-chat',          supportChatRoutes);
