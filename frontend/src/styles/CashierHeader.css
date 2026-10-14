@@ -1,121 +1,125 @@
-/* ─── Cashier Header — tabs + sidebar toggle ─────────────────────────── */
-/* Background: #7F1D1D (mid maroon), border: gold-amber glow              */
+/* ─── Cashier Header — brand row + tabs + account menu ──────────────── */
+/* Background: #7F1D1D (mid maroon), gold-amber accents.                  */
+/* In-flow, sticky child of .cashier-root (no fixed positioning, so the   */
+/* content below is never overlapped).                                    */
 .c-header {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 1rem;
-  height: 48px;
+  flex-direction: column;
   background: #7F1D1D;
   border-bottom: 2px solid rgba(253,230,138,0.18);
   flex-shrink: 0;
-  /* Fixed — never scrolls with content */
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: var(--cl-sidebar-w);
-  right: 0;
-  z-index: 10;
-  transition: left var(--cl-transition);
+  z-index: 30;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
-/* Collapsed sidebar — header shifts left */
-.cl-root--collapsed .c-header {
-  left: var(--cl-sidebar-w-collapsed);
+/* ─── Brand row ──────────────────────────────────────────────────────── */
+.c-header__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 56px;
+  padding: 0.375rem 1rem;
 }
 
-/* Mobile — no sidebar, header starts at left:0 below the topbar */
-@media (max-width: 767px) {
-  .c-header {
-    left: 0;
-    top: 52px;
-  }
+.c-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
 }
 
-/* ─── Sidebar toggle (hamburger) ─────────────────────────────────────── */
-.c-header__sidebar-toggle {
+.c-header__logo-dot {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border: none;
-  background: rgba(255,251,235,0.06);
-  border-radius: 8px;
-  cursor: pointer;
-  color: rgba(255,251,235,0.65);
-  transition: background 150ms ease, color 150ms ease;
+  border-radius: 9px;
+  background: rgba(253,230,138,0.16);
+  color: #FDE68A;
+  font-family: var(--font-heading);
+  font-size: 1.0625rem;
+  font-weight: 700;
 }
 
-.c-header__sidebar-toggle:hover {
-  background: rgba(255,251,235,0.12);
+.c-header__brand-name {
+  font-family: var(--font-heading);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   color: #FFFbeb;
-}
-
-.c-header__sidebar-toggle:focus-visible {
-  outline: 2px solid #F59E0B;
-  outline-offset: 2px;
-}
-
-/* ─── Nav tabs ───────────────────────────────────────────────────────── */
-.c-header__nav {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex: 1;
-}
-
-.c-header__tab {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.875rem;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(255,251,235,0.58);
-  font-family: 'Karla', system-ui, sans-serif;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  position: relative;
-  transition: all 150ms ease;
   white-space: nowrap;
 }
 
-.c-header__tab:hover {
+/* Current section name — desktop only (the sidebar owns nav there). */
+.c-header__page-title {
+  display: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-heading);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   color: #FFFbeb;
-  background: rgba(255,251,235,0.08);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.c-header__tab--active {
-  background: rgba(253,230,138,0.10);
-  border-color: rgba(245,158,11,0.38);
-  color: #FDE68A;
+/* ─── Icon button (collapse) ─────────────────────────────────────────── */
+.c-header__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: none;
+  background: rgba(255,251,235,0.06);
+  border-radius: 10px;
+  cursor: pointer;
+  color: rgba(255,251,235,0.7);
+  transition: background 150ms ease, color 150ms ease;
+  touch-action: manipulation;
 }
 
-.c-header__tab:focus-visible {
+.c-header__icon-btn:hover {
+  background: rgba(255,251,235,0.14);
+  color: #FFFbeb;
+}
+
+.c-header__icon-btn:focus-visible {
   outline: 2px solid #F59E0B;
   outline-offset: 2px;
 }
 
-/* ─── Draft badge ────────────────────────────────────────────────────── */
-.c-header__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  background: #FDE68A;
-  color: #3B0A0A;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  border-radius: 999px;
-}
+/* ─── Menu button (mobile only — opens the nav drawer) ───────────────── */
+.c-header__menu-btn { display: none; }
 
 /* ─── Responsive ─────────────────────────────────────────────────────── */
+/* Desktop: the sidebar owns navigation, so hide the mobile brand + menu
+   button and show the current section name next to the collapse button. */
+@media (min-width: 768px) {
+  .c-header__brand { display: none; }
+  .c-header__page-title { display: block; }
+}
+
+@media (max-width: 767px) {
+  .c-header__sidebar-toggle { display: none; }
+  .c-header__menu-btn { display: flex; }
+  .c-header__icon-btn { width: 44px; height: 44px; }
+  /* Menu button + brand sit together on the left. */
+  .c-header__top { justify-content: flex-start; }
+}
+
 @media (max-width: 480px) {
-  .c-header { padding: 0 0.75rem; }
-  .c-header__tab { font-size: 0.75rem; padding: 0.3rem 0.625rem; }
+  .c-header__brand-name { font-size: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-header__icon-btn { transition: none; animation: none; }
 }

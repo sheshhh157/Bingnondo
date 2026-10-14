@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { inventoryAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
+import { useAuth } from '../../context/AuthContext';
 import '../../styles/InventoryPage.css';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -237,31 +238,59 @@ function TransactionModal({ item, type, onClose, onSubmit }) {
 // ─── Mobile card ──────────────────────────────────────────────────────────────
 function InventoryCard({ item, onRestock, onAdjust, onOutOfStock }) {
   const s = stockStatus(item.current_stock, item.reorder_level);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const closeMore = () => setMoreOpen(false);
+  const cap = Math.max(item.current_stock * 1.5, item.reorder_level * 3, 10);
+  const pct = Math.min(100, (item.current_stock / cap) * 100);
   return (
-    <article className={`inv-card${s !== 'ok' ? ` inv-card--${s}` : ''}`}>
-      <div className="inv-card__top">
-        <div>
-          <p className="inv-card__name">{item.name}</p>
-          <p className="inv-card__unit">Unit: {item.unit}</p>
+    <article className={`inv-card inv-card--${s}`}>
+      <div className="inv-card__header">
+        <div className="inv-card__ident">
+          <h3 className="inv-card__name" title={item.name}>{item.name}</h3>
+          <span className="inv-card__unit">per {item.unit}</span>
         </div>
         <StockBadge current={item.current_stock} reorder={item.reorder_level} />
       </div>
-      <div className="inv-card__stats">
-        <div className="inv-card__stat">
-          <span className="inv-card__stat-label">Current</span>
-          <span className="inv-card__stat-value">{item.current_stock} <small>{item.unit}</small></span>
+
+      <div className="inv-card__level">
+        <div className="inv-card__level-top">
+          <span className="inv-card__stock">
+            {item.current_stock} <small>{item.unit}</small>
+          </span>
+          <span className="inv-card__reorder">Reorder at {item.reorder_level} {item.unit}</span>
         </div>
-        <div className="inv-card__stat">
-          <span className="inv-card__stat-label">Reorder at</span>
-          <span className="inv-card__stat-value">{item.reorder_level} <small>{item.unit}</small></span>
+        <div className={`inv-card__bar inv-card__bar--${s}`} role="presentation">
+          <div className="inv-card__bar-fill" style={{ width: `${pct}%` }} />
         </div>
       </div>
+
       <div className="inv-card__actions">
         <button className="inv-btn inv-btn--primary inv-btn--sm" onClick={() => onRestock(item)}>+ Restock</button>
-        <button className="inv-btn inv-btn--secondary inv-btn--sm" onClick={() => onAdjust(item)}>Adjust</button>
+        <button className="inv-btn inv-btn--quiet inv-btn--sm inv-card__inline" onClick={() => onAdjust(item)}>Adjust</button>
         {item.current_stock > 0 && (
-          <button className="inv-btn inv-btn--danger inv-btn--sm" onClick={() => onOutOfStock(item)}>Out of stock</button>
+          <button className="inv-btn inv-btn--quiet inv-btn--quiet-danger inv-btn--sm inv-card__inline" onClick={() => onOutOfStock(item)}>Out of stock</button>
         )}
+        <div className="inv-card__more">
+          <button
+            type="button"
+            className="inv-btn inv-btn--sm inv-card__more-btn"
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            aria-label={`More actions for ${item.name}`}
+            onClick={() => setMoreOpen((o) => !o)}
+          >⋯</button>
+          {moreOpen && (
+            <>
+              <div className="inv-menu-backdrop" onClick={closeMore} role="presentation" />
+              <div className="inv-menu" role="menu">
+                <button type="button" role="menuitem" className="inv-menu__item" onClick={() => { closeMore(); onAdjust(item); }}>Adjust stock</button>
+                {item.current_stock > 0 && (
+                  <button type="button" role="menuitem" className="inv-menu__item inv-menu__item--danger" onClick={() => { closeMore(); onOutOfStock(item); }}>Out of stock</button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </article>
   );
@@ -414,6 +443,9 @@ function AddIngredientModal({ onClose, onSubmit }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function InventoryPage() {
+  const { user } = useAuth();
+  // Creating new ingredients is admin-only; cashiers keep restock/adjust/out-of-stock.
+  const isAdmin = user?.role === 'admin';
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -422,8 +454,10 @@ export default function InventoryPage() {
   const [sortBy, setSortBy] = useState('name');
   const [modal, setModal] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [confirmItem, setConfirmItem] = useState(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchItems = useCallback(async () => {
@@ -441,11 +475,17 @@ export default function InventoryPage() {
   // Real-time socket sync
   useEffect(() => {
     const socket = getSocket();
-    const handler = (updated) => {
-      setItems((prev) => prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i)));
+    // The backend broadcasts `inventory:update` with a camelCase payload
+    // ({ itemId, currentStock, reorderLevel, name }) so both this page and the
+    // manager dashboard can consume it; map it onto the row shape used here.
+    const handler = (p) => {
+      setItems((prev) => prev.map((i) =>
+        i.id === p.itemId
+          ? { ...i, current_stock: p.currentStock, reorder_level: p.reorderLevel, name: p.name ?? i.name }
+          : i));
     };
-    socket.on('inventory_update', handler);
-    return () => socket.off('inventory_update', handler);
+    socket.on('inventory:update', handler);
+    return () => socket.off('inventory:update', handler);
   }, []);
 
   const handleTransaction = async (id, payload) => {
@@ -493,7 +533,7 @@ export default function InventoryPage() {
   const filtered = useMemo(() => {
     let r = items;
     if (search.trim()) {
-      const q = search.toLowerCase();
+      const q = search.trim().toLowerCase();
       r = r.filter((i) => i.name.toLowerCase().includes(q) || i.unit.toLowerCase().includes(q));
     }
     if (filterStatus === 'out') r = r.filter((i) => i.current_stock <= 0);
@@ -515,8 +555,10 @@ export default function InventoryPage() {
   const safePage   = Math.min(page, totalPages);
   const start      = (safePage - 1) * perPage;
 
+  // Number of non-default filters, surfaced on the mobile Filter button.
+  const activeFilterCount = (filterStatus !== 'all' ? 1 : 0) + (sortBy !== 'name' ? 1 : 0);
+
   const pagedTable = useMemo(() => filtered.slice(start, start + perPage), [filtered, start, perPage]);
-  const pagedCards = pagedTable; // same slice, different layout
 
   const from = filtered.length === 0 ? 0 : start + 1;
   const to   = Math.min(start + perPage, filtered.length);
@@ -547,23 +589,16 @@ export default function InventoryPage() {
           <h1 className="inv-page-title">Inventory</h1>
           <p className="inv-page-sub">Track ingredient stock and reorder thresholds</p>
         </div>
-        <div className="inv-header-actions">
-          <button className="inv-btn inv-btn--primary" onClick={() => setShowAddModal(true)}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add Ingredient
-          </button>
-          <button className="inv-btn inv-btn--ghost inv-btn--icon" onClick={fetchItems} aria-label="Refresh">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-              <path d="M21 3v5h-5"/>
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-              <path d="M8 16H3v5"/>
-            </svg>
-            Refresh
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="inv-header-actions">
+            <button className="inv-btn inv-btn--primary" onClick={() => setShowAddModal(true)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Ingredient
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
@@ -614,30 +649,46 @@ export default function InventoryPage() {
             aria-label="Search ingredients"
           />
         </div>
-        <select className="inv-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Filter by status">
-          <option value="all">All items</option>
-          <option value="ok">In stock</option>
-          <option value="low">Low stock</option>
-          <option value="out">Out of stock</option>
-        </select>
-        <select className="inv-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
-          <option value="name">Sort: Name</option>
-          <option value="stock_asc">Stock: Low first</option>
-          <option value="stock_desc">Stock: High first</option>
-        </select>
-        <label className="pag__limit-label" htmlFor="inv-per-page">
-          Show
-          <select
-            id="inv-per-page"
-            className="pag__limit-select"
-            value={perPage}
-            onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
-            aria-label="Items per page"
-          >
-            {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+        <button
+          type="button"
+          className={`inv-filter-btn${activeFilterCount > 0 ? ' inv-filter-btn--active' : ''}`}
+          onClick={() => setFiltersOpen(true)}
+          aria-haspopup="dialog"
+          aria-label="Filters and sorting"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/>
+          </svg>
+          Filter
+          {activeFilterCount > 0 && <span className="inv-filter-btn__badge">{activeFilterCount}</span>}
+        </button>
+
+        <div className="inv-filter-panel">
+          <select className="inv-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Filter by status">
+            <option value="all">All items</option>
+            <option value="ok">In stock</option>
+            <option value="low">Low stock</option>
+            <option value="out">Out of stock</option>
           </select>
-          per page
-        </label>
+          <select className="inv-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
+            <option value="name">Sort: Name</option>
+            <option value="stock_asc">Stock: Low first</option>
+            <option value="stock_desc">Stock: High first</option>
+          </select>
+          <label className="pag__limit-label" htmlFor="inv-per-page">
+            Show
+            <select
+              id="inv-per-page"
+              className="pag__limit-select"
+              value={perPage}
+              onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
+              aria-label="Items per page"
+            >
+              {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            per page
+          </label>
+        </div>
       </div>
 
       {/* Mobile cards */}
@@ -658,7 +709,7 @@ export default function InventoryPage() {
                   item={item}
                   onRestock={(i) => setModal({ item: i, type: 'restock' })}
                   onAdjust={(i) => setModal({ item: i, type: 'adjustment' })}
-                  onOutOfStock={handleOutOfStock}
+                  onOutOfStock={(i) => setConfirmItem(i)}
                 />
               ))
         }
@@ -683,12 +734,12 @@ export default function InventoryPage() {
         <table className="inv-table" aria-label="Inventory table">
           <thead>
             <tr>
-              <th className="inv-table__th">Ingredient</th>
-              <th className="inv-table__th">Unit</th>
-              <th className="inv-table__th">Stock level</th>
-              <th className="inv-table__th">Reorder at</th>
-              <th className="inv-table__th">Status</th>
-              <th className="inv-table__th inv-table__th--right">Actions</th>
+              <th scope="col" className="inv-table__th">Ingredient</th>
+              <th scope="col" className="inv-table__th">Unit</th>
+              <th scope="col" className="inv-table__th">Stock level</th>
+              <th scope="col" className="inv-table__th">Reorder at</th>
+              <th scope="col" className="inv-table__th">Status</th>
+              <th scope="col" className="inv-table__th inv-table__th--right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -724,9 +775,9 @@ export default function InventoryPage() {
                       <td className="inv-table__td inv-table__td--right">
                         <div className="inv-table__actions">
                           <button className="inv-btn inv-btn--primary inv-btn--xs" onClick={() => setModal({ item, type: 'restock' })}>+ Restock</button>
-                          <button className="inv-btn inv-btn--secondary inv-btn--xs" onClick={() => setModal({ item, type: 'adjustment' })}>Adjust</button>
+                          <button className="inv-btn inv-btn--quiet inv-btn--xs" onClick={() => setModal({ item, type: 'adjustment' })}>Adjust</button>
                           {item.current_stock > 0 && (
-                            <button className="inv-btn inv-btn--danger inv-btn--xs" onClick={() => handleOutOfStock(item)}>Out of stock</button>
+                            <button className="inv-btn inv-btn--quiet inv-btn--quiet-danger inv-btn--xs" onClick={() => setConfirmItem(item)}>Out of stock</button>
                           )}
                         </div>
                       </td>
@@ -760,12 +811,100 @@ export default function InventoryPage() {
         />
       )}
 
-      {/* Add ingredient modal */}
-      {showAddModal && (
+      {/* Add ingredient modal — admin only */}
+      {isAdmin && showAddModal && (
         <AddIngredientModal
           onClose={() => setShowAddModal(false)}
           onSubmit={handleAddIngredient}
         />
+      )}
+
+      {/* Mobile filters modal */}
+      {filtersOpen && (
+        <div
+          className="inv-modal-overlay inv-modal-overlay--compact"
+          onClick={(e) => e.target === e.currentTarget && setFiltersOpen(false)}
+          role="presentation"
+        >
+          <div className="inv-modal inv-modal--compact" role="dialog" aria-modal="true" aria-labelledby="inv-filter-title">
+            <div className="inv-modal__header">
+              <h2 className="inv-modal__title" id="inv-filter-title">Filters</h2>
+              <button className="inv-modal__close" onClick={() => setFiltersOpen(false)} aria-label="Close">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="inv-modal__body">
+              <label className="inv-field">
+                <span className="inv-field__label">Status</span>
+                <select className="inv-select inv-select--block" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                  <option value="all">All items</option>
+                  <option value="ok">In stock</option>
+                  <option value="low">Low stock</option>
+                  <option value="out">Out of stock</option>
+                </select>
+              </label>
+              <label className="inv-field">
+                <span className="inv-field__label">Sort by</span>
+                <select className="inv-select inv-select--block" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                  <option value="name">Name</option>
+                  <option value="stock_asc">Stock: Low first</option>
+                  <option value="stock_desc">Stock: High first</option>
+                </select>
+              </label>
+              <label className="inv-field">
+                <span className="inv-field__label">Items per page</span>
+                <select className="inv-select inv-select--block" value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}>
+                  {PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="inv-modal__footer">
+              <button
+                className="inv-btn inv-btn--ghost"
+                onClick={() => { setFilterStatus('all'); setSortBy('name'); setPerPage(10); setPage(1); }}
+              >
+                Reset
+              </button>
+              <button className="inv-btn inv-btn--primary" onClick={() => setFiltersOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Out-of-stock confirmation — destructive */}
+      {confirmItem && (
+        <div
+          className="inv-modal-overlay"
+          onClick={(e) => e.target === e.currentTarget && setConfirmItem(null)}
+          role="presentation"
+        >
+          <div className="inv-modal" role="dialog" aria-modal="true" aria-labelledby="inv-oos-title">
+            <div className="inv-modal__header">
+              <h2 className="inv-modal__title" id="inv-oos-title">Mark as out of stock?</h2>
+              <button className="inv-modal__close" onClick={() => setConfirmItem(null)} aria-label="Close">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="inv-modal__body">
+              <p className="inv-modal__item-meta">
+                This sets <strong>{confirmItem.name}</strong> to 0 {confirmItem.unit}. Any menu items that use it will be marked unavailable until it is restocked.
+              </p>
+            </div>
+            <div className="inv-modal__footer">
+              <button className="inv-btn inv-btn--ghost" onClick={() => setConfirmItem(null)}>Cancel</button>
+              <button
+                className="inv-btn inv-btn--danger"
+                onClick={() => { const it = confirmItem; setConfirmItem(null); handleOutOfStock(it); }}
+              >
+                Mark out of stock
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

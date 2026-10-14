@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { paymentsAPI } from '../../../services/api';
+import { ordersAPI } from '../../../services/cashierApi';
 import '../../../styles/PaymentModal.css';
 
 const fmt   = (n) => `₱${Number(n).toFixed(2)}`;
@@ -14,8 +14,14 @@ function computeTotal(counts) {
 }
 
 // ─── Denomination Keyboard ────────────────────────────────────────────────────
-function DenomKeyboard({ counts, onChange }) {
-  const add = (d) => onChange({ ...counts, [d]: (counts[d] || 0) + 1 });
+function DenomKeyboard({ counts, total, onChange }) {
+  const cashGiven = computeTotal(counts);
+  const remaining = Math.round((total - cashGiven) * 100) / 100;
+  const canAdd = (d) => cashGiven === 0 || d <= remaining;
+  const add = (d) => {
+    if (!canAdd(d)) return;
+    onChange({ ...counts, [d]: (counts[d] || 0) + 1 });
+  };
   const remove = (d) => {
     const next = (counts[d] || 0) - 1;
     const updated = { ...counts };
@@ -24,7 +30,7 @@ function DenomKeyboard({ counts, onChange }) {
   };
   const clear = () => onChange({});
 
-  // Active denominations (those with qty > 0), sorted descending
+  // Active denominations (those with qty > 0)
   const active = ALL_DENOMS.filter((d) => (counts[d] || 0) > 0);
 
   return (
@@ -50,7 +56,7 @@ function DenomKeyboard({ counts, onChange }) {
         </div>
       )}
 
-      {/* Bills row */}
+      {/* Bills */}
       <div className="pm-kbd__section-label">Bills</div>
       <div className="pm-kbd__row">
         {BILLS.map((d) => (
@@ -58,6 +64,8 @@ function DenomKeyboard({ counts, onChange }) {
             key={d}
             className={`pm-kbd__key${(counts[d] || 0) > 0 ? ' pm-kbd__key--active' : ''}`}
             onClick={() => add(d)}
+            disabled={!canAdd(d)}
+            title={!canAdd(d) ? `Only ${fmt(remaining)} left due` : undefined}
             type="button"
             aria-label={`Add ₱${d} bill`}
           >
@@ -67,7 +75,7 @@ function DenomKeyboard({ counts, onChange }) {
         ))}
       </div>
 
-      {/* Coins row */}
+      {/* Coins */}
       <div className="pm-kbd__section-label">Coins</div>
       <div className="pm-kbd__row pm-kbd__row--coins">
         {COINS.map((d) => (
@@ -75,6 +83,8 @@ function DenomKeyboard({ counts, onChange }) {
             key={d}
             className={`pm-kbd__key pm-kbd__key--coin${(counts[d] || 0) > 0 ? ' pm-kbd__key--active' : ''}`}
             onClick={() => add(d)}
+            disabled={!canAdd(d)}
+            title={!canAdd(d) ? `Only ${fmt(remaining)} left due` : undefined}
             type="button"
             aria-label={`Add ₱${d} coin`}
           >
@@ -88,13 +98,16 @@ function DenomKeyboard({ counts, onChange }) {
 }
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
-export default function PaymentModal({ orderId, orderNumber, total, draft, onClose, onSuccess }) {
+export default function PaymentModal({ items, total, draft, onClose, onSuccess }) {
   const [method, setMethod]           = useState('');
   const [denomCounts, setDenomCounts] = useState({});
   const [step, setStep]               = useState('select');
   const [processing, setProcessing]   = useState(false);
   const [error, setError]             = useState('');
+  const [placedOrderNumber, setPlacedOrderNumber] = useState(null);
+  const [placedOrder, setPlacedOrder]             = useState(null);
   const dialogRef = useRef(null);
+  const openerRef = useRef(null);
 
   const cashGiven = computeTotal(denomCounts);
   const change    = cashGiven - total;
@@ -102,10 +115,38 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
 
   useEffect(() => {
     const el = dialogRef.current;
+    openerRef.current = document.activeElement;
     if (el) el.focus();
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+
+    // Lock background scroll while the dialog is open.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const focusables = () => el
+      ? Array.from(el.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'
+        ))
+      : [];
+    const onKey = (e) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey);
+      // Restore focus to whatever opened the modal.
+      openerRef.current?.focus?.();
+    };
   }, [onClose]);
 
   const handlePayment = async () => {
@@ -116,12 +157,15 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
     setProcessing(true);
     setError('');
     try {
-      await paymentsAPI.process({
-        order_id: orderId,
+      // Nothing is written to the DB until this call — the order is created
+      // together with its 'paid' payment in one transaction.
+      const { data } = await ordersAPI.checkout({
+        items,
         method,
-        amount: total,
         cash_given: method === 'cash' ? cashGiven : undefined,
       });
+      setPlacedOrder(data);
+      setPlacedOrderNumber(data.order_number);
       setStep('receipt');
     } catch (err) {
       setError(err.response?.data?.message || 'Payment failed. Please try again.');
@@ -143,8 +187,8 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
           <>
             {/* ── Header ── */}
             <div className="pm-head">
-              <div className="pm-head__left">
-                <span className="pm-head__label">Order #{orderNumber}</span>
+              <div className="pm-head__titles">
+                <span className="pm-head__eyebrow">Counter Sale</span>
                 <h2 id="pm-title" className="pm-head__title">Process Payment</h2>
               </div>
               <button className="pm-close" onClick={onClose} aria-label="Close">
@@ -174,7 +218,7 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
                     ))}
                   </div>
 
-                  {/* Total / Cash given / Change — all in one box */}
+                  {/* Total + cash given / change */}
                   <div className="pm-summary__footer">
                     <div className="pm-summary__foot-row">
                       <span>Total</span>
@@ -182,7 +226,7 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
                     </div>
                     {method === 'cash' && cashGiven > 0 && (
                       <>
-                        <div className="pm-summary__foot-row pm-summary__foot-row--sub">
+                        <div className="pm-summary__foot-row">
                           <span>Cash given</span>
                           <span>{fmt(cashGiven)}</span>
                         </div>
@@ -234,6 +278,7 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
                 <div className="pm-right">
                   <DenomKeyboard
                     counts={denomCounts}
+                    total={total}
                     onChange={(c) => { setDenomCounts(c); setError(''); }}
                   />
                 </div>
@@ -276,13 +321,14 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
           </>
         ) : (
           <Receipt
-            orderNumber={orderNumber}
+            order={placedOrder}
+            orderNumber={placedOrderNumber}
             draft={draft}
             total={total}
             method={method}
             cashGiven={method === 'cash' ? cashGiven : null}
             change={method === 'cash' ? change : null}
-            onDone={() => { onSuccess(method); onClose(); }}
+            onDone={() => { onSuccess(placedOrder); onClose(); }}
           />
         )}
       </div>
@@ -291,7 +337,7 @@ export default function PaymentModal({ orderId, orderNumber, total, draft, onClo
 }
 
 // ─── PayMethodCard ────────────────────────────────────────────────────────────
-function PayMethodCard({ id, value, label, description, selected, onSelect, icon }) {
+function PayMethodCard({ id, label, description, selected, onSelect, icon }) {
   return (
     <button
       id={id}
@@ -315,8 +361,15 @@ function PayMethodCard({ id, value, label, description, selected, onSelect, icon
 }
 
 // ─── Receipt ──────────────────────────────────────────────────────────────────
-function Receipt({ orderNumber, draft, total, method, cashGiven, change, onDone }) {
-  const now     = new Date();
+function Receipt({ order, orderNumber, draft, total, method, cashGiven, change, onDone }) {
+  // Prefer the authoritative response from checkout; fall back to props.
+  const items      = order?.items?.length ? order.items : draft;
+  const sum        = order?.total_amount != null ? order.total_amount : total;
+  const ref        = orderNumber || order?.order_number;
+  const payMethod  = (order?.payment?.method) || method;
+  const paidGiven  = cashGiven;
+  const paidChange = change;
+  const now        = new Date();
   const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -329,7 +382,7 @@ function Receipt({ orderNumber, draft, total, method, cashGiven, change, onDone 
           </svg>
         </div>
         <h2 className="pm-receipt__title">Payment Confirmed</h2>
-        <p className="pm-receipt__sub">Order #{orderNumber} — {method === 'cash' ? 'Cash' : 'GCash'}</p>
+        <p className="pm-receipt__sub">Order #{ref} — {payMethod === 'cash' ? 'Cash' : 'GCash'}</p>
       </div>
 
       <div className="pm-receipt__paper">
@@ -337,10 +390,10 @@ function Receipt({ orderNumber, draft, total, method, cashGiven, change, onDone 
         <div className="pm-receipt__meta">{dateStr} · {timeStr}</div>
         <div className="pm-receipt__divider" aria-hidden="true" />
 
-        {draft.map((item) => (
+        {items.map((item) => (
           <div key={item.id} className="pm-receipt__line">
-            <span>{item.name} <span className="pm-receipt__qty">×{item.qty}</span></span>
-            <span>₱{Number(item.price * item.qty).toFixed(2)}</span>
+            <span>{item.name} <span className="pm-receipt__qty">×{item.quantity ?? item.qty}</span></span>
+            <span>₱{Number((item.unit_price ?? item.price) * (item.quantity ?? item.qty)).toFixed(2)}</span>
           </div>
         ))}
 
@@ -348,18 +401,18 @@ function Receipt({ orderNumber, draft, total, method, cashGiven, change, onDone 
 
         <div className="pm-receipt__line pm-receipt__line--bold">
           <span>Total</span>
-          <span>₱{Number(total).toFixed(2)}</span>
+          <span>₱{Number(sum).toFixed(2)}</span>
         </div>
 
-        {method === 'cash' && cashGiven !== null && (
+        {payMethod === 'cash' && paidGiven !== null && (
           <>
             <div className="pm-receipt__line">
               <span>Cash given</span>
-              <span>₱{Number(cashGiven).toFixed(2)}</span>
+              <span>₱{Number(paidGiven).toFixed(2)}</span>
             </div>
             <div className="pm-receipt__line pm-receipt__line--accent">
               <span>Change</span>
-              <span>₱{Number(change).toFixed(2)}</span>
+              <span>₱{Number(paidChange).toFixed(2)}</span>
             </div>
           </>
         )}
@@ -367,12 +420,20 @@ function Receipt({ orderNumber, draft, total, method, cashGiven, change, onDone 
         <div className="pm-receipt__footer-text">Thank you for dining with us!</div>
       </div>
 
-      <button className="pm-receipt__done" onClick={onDone}>
-        New Order
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-      </button>
+      <div className="pm-receipt__actions">
+        <button className="pm-receipt__print" onClick={() => window.print()}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+          </svg>
+          Print Receipt
+        </button>
+        <button className="pm-receipt__done" onClick={onDone}>
+          New Order
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

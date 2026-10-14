@@ -1,101 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../../services/api';
+import {
+  useAdminToast, Spinner, Btn, Field, TextInput, AppSelect, Modal,
+  PageHeader, RowAction, Pagination,
+} from './adminShared';
+import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/AdminPage.css';
-
-// ── shared mini-components (same pattern as other admin pages) ──────
-let _tid = 0;
-function useToast() {
-  const [toasts, setToasts] = useState([]);
-  const push = useCallback((msg, type = 'info') => {
-    const id = ++_tid;
-    setToasts(p => [...p, { id, msg, type }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4500);
-  }, []);
-  const dismiss = id => setToasts(p => p.filter(t => t.id !== id));
-  return { toasts, dismiss, toast: { success: m => push(m, 'success'), error: m => push(m, 'error'), info: m => push(m, 'info') } };
-}
-
-function Toasts({ toasts, dismiss }) {
-  const icons = { success: '✓', error: '✕', info: 'i' };
-  return (
-    <div className="ap-toast-stack" role="status" aria-live="polite">
-      {toasts.map(t => (
-        <div key={t.id} className={`ap-toast ap-toast--${t.type}`}>
-          <span className="ap-toast__icon">{icons[t.type]}</span>
-          <span className="ap-toast__msg">{t.msg}</span>
-          <button className="ap-toast__dismiss" onClick={() => dismiss(t.id)} aria-label="Dismiss">✕</button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Spinner({ size = 16 }) {
-  return (
-    <svg className="ap-spinner" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="#2E2B22" strokeWidth="2.5" />
-      <path d="M12 3a9 9 0 0 1 9 9" stroke="#C9963C" strokeWidth="2.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function Btn({ variant = 'ghost', size = 'md', icon, children, disabled, loading, onClick, type = 'button' }) {
-  return (
-    <button type={type} className={`ap-btn ap-btn--${variant} ap-btn--${size}`} disabled={disabled || loading} onClick={onClick}>
-      {loading ? <Spinner size={13} /> : icon && <span style={{ display: 'flex', flexShrink: 0 }}>{icon}</span>}
-      {children}
-    </button>
-  );
-}
-
-function AppSelect({ id, children, ...props }) {
-  return <select id={id} className="ap-select" {...props}>{children}</select>;
-}
-
-function Field({ label, id, error, children }) {
-  return (
-    <div className="ap-input-wrap">
-      {label && <label className="ap-label" htmlFor={id}>{label}</label>}
-      {children}
-      {error && <span className="ap-field-error">{error}</span>}
-    </div>
-  );
-}
-
-function Modal({ open, onClose, title, width = 520, children }) {
-  const ref = useRef();
-  useEffect(() => {
-    if (!open) return;
-    const h = e => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onClose]);
-  if (!open) return null;
-  return (
-    <div className="ap-overlay" ref={ref} onClick={e => e.target === ref.current && onClose()} role="presentation">
-      <div className="ap-modal" style={{ maxWidth: width }} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <div className="ap-modal__head">
-          <span className="ap-modal__title" id="modal-title">{title}</span>
-          <button className="ap-modal__close" onClick={onClose} aria-label="Close">✕</button>
-        </div>
-        <div className="ap-modal__body">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function Pagination({ page, total, onPage }) {
-  if (total <= 1) return null;
-  return (
-    <div className="ap-pager">
-      <Btn variant="ghost" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>←</Btn>
-      {Array.from({ length: total }, (_, i) => i + 1).map(p => (
-        <Btn key={p} variant={p === page ? 'gold' : 'ghost'} size="sm" onClick={() => onPage(p)}>{p}</Btn>
-      ))}
-      <Btn variant="ghost" size="sm" disabled={page >= total} onClick={() => onPage(page + 1)}>→</Btn>
-    </div>
-  );
-}
 
 // ── Restriction level badge ─────────────────────────────────────────
 const LEVEL_META = {
@@ -136,7 +46,7 @@ function ViolationModal({ open, onClose, customer }) {
     if (!open || !customer) return;
     setLoading(true);
     adminAPI.getCustomerViolations(customer.customer_id)
-      .then(({ data }) => setViolations(data))
+      .then(({ data }) => setViolations(data.data || data))
       .catch(() => setViolations([]))
       .finally(() => setLoading(false));
   }, [open, customer]);
@@ -171,8 +81,8 @@ function ViolationModal({ open, onClose, customer }) {
             <div key={v.id} className="cr-viol-row">
               <div className="cr-viol-row__left">
                 <ViolBadge type={v.violation_type} />
-                {v.order_id && (
-                  <span className="cr-viol-row__order">Order #{v.order_id}</span>
+                {v.order_number && (
+                  <span className="cr-viol-row__order">Order #{v.order_number}</span>
                 )}
               </div>
               <div className="cr-viol-row__date">
@@ -251,78 +161,102 @@ function OverrideModal({ open, onClose, customer, onSuccess, toast }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Override restriction" width={460}>
-      <div className="cr-modal-customer">
-        <div className="cr-modal-avatar">{customer?.customer_name?.[0]?.toUpperCase() || 'C'}</div>
-        <div>
-          <div className="cr-modal-name">{customer?.customer_name}</div>
-          <div className="cr-modal-email">{customer?.customer_email}</div>
+      <form onSubmit={e => { e.preventDefault(); submit(); }}>
+        <div className="cr-modal-customer">
+          <div className="cr-modal-avatar">{customer?.customer_name?.[0]?.toUpperCase() || 'C'}</div>
+          <div>
+            <div className="cr-modal-name">{customer?.customer_name}</div>
+            <div className="cr-modal-email">{customer?.customer_email}</div>
+          </div>
         </div>
-      </div>
 
-      <div className="ap-divider" />
+        <div className="ap-divider" />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Field label="Restriction level" id="ov-level">
-          <AppSelect id="ov-level" value={level} onChange={e => setLevel(e.target.value)}>
-            {LEVELS.map(l => (
-              <option key={l} value={l}>{LEVEL_LABELS[l]}</option>
-            ))}
-          </AppSelect>
-        </Field>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label="Restriction level" id="ov-level">
+            <AppSelect id="ov-level" value={level} onChange={e => setLevel(e.target.value)}>
+              {LEVELS.map(l => (
+                <option key={l} value={l}>{LEVEL_LABELS[l]}</option>
+              ))}
+            </AppSelect>
+          </Field>
 
-        <Field label="Reason / notes" id="ov-reason" error={error}>
-          <textarea
-            id="ov-reason"
-            className="ap-input"
-            rows={3}
-            value={reason}
-            onChange={e => { setReason(e.target.value); setError(''); }}
-            placeholder="State the reason for this override. This will be logged to the audit trail."
-            style={{ resize: 'vertical', minHeight: 72 }}
-          />
-          {error && <span className="ap-field-error">{error}</span>}
-        </Field>
+          <Field label="Reason / notes" id="ov-reason" error={error}>
+            <textarea
+              id="ov-reason"
+              className="ap-input"
+              rows={3}
+              value={reason}
+              onChange={e => { setReason(e.target.value); setError(''); }}
+              placeholder="State the reason for this override. This will be logged to the audit trail."
+              style={{ resize: 'vertical', minHeight: 72 }}
+            />
+          </Field>
 
-        {isLifting && (
-          <div className="cr-override-notice cr-override-notice--lift">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            This will restore full ordering access for this customer.
-          </div>
-        )}
-        {isDemotion && !isLifting && (
-          <div className="cr-override-notice cr-override-notice--warn">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            Changing restriction level will affect this customer's checkout options immediately.
-          </div>
-        )}
+          {isLifting && (
+            <div className="cr-override-notice cr-override-notice--lift">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              This will restore full ordering access for this customer.
+            </div>
+          )}
+          {isDemotion && !isLifting && (
+            <div className="cr-override-notice cr-override-notice--warn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              Changing restriction level will affect this customer's checkout options immediately.
+            </div>
+          )}
 
-        <p style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', lineHeight: 1.6 }}>
-          All admin overrides are permanently logged to the audit trail with your account ID attached.
-          Overrides cannot be silently reversed.
-        </p>
-      </div>
+          <p style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', lineHeight: 1.6 }}>
+            All admin overrides are permanently logged to the audit trail with your account ID attached.
+            Overrides cannot be silently reversed.
+          </p>
+        </div>
 
-      <div className="ap-modal__footer">
-        <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
-        <Btn
-          variant={isLifting ? 'gold' : 'primary'}
-          onClick={submit}
-          loading={loading}
-        >
-          {isLifting ? 'Lift restriction' : 'Apply override'}
-        </Btn>
-      </div>
+        <div className="ap-modal__footer">
+          <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
+          <Btn
+            variant={isLifting ? 'gold' : 'primary'}
+            type="submit"
+            loading={loading}
+          >
+            {isLifting ? 'Lift restriction' : 'Apply override'}
+          </Btn>
+        </div>
+      </form>
     </Modal>
   );
 }
 
+// ── Icons ─────────────────────────────────────────────────────────────
+const HistoryIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <polyline points="10 9 9 9 8 9"/>
+  </svg>
+);
+const ShieldIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <line x1="12" y1="8" x2="12" y2="12"/>
+    <line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+);
+const SearchIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
+
 // ── Customer restriction row ────────────────────────────────────────
 function CustomerRow({ customer, onViewViolations, onOverride }) {
-  const violCount = customer.violation_count || 0;
+  const violCount = customer.total_violations || 0;
 
   return (
     <tr>
@@ -333,8 +267,8 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
             {customer.customer_name?.[0]?.toUpperCase() || 'C'}
           </div>
           <div className="ap-member__info">
-            <span className="ap-member__name">{customer.customer_name}</span>
-            <span className="ap-member__email">{customer.customer_email}</span>
+            <span className="ap-member__name" title={customer.customer_name}>{customer.customer_name}</span>
+            <span className="ap-member__email" title={customer.customer_email}>{customer.customer_email}</span>
           </div>
         </div>
       </td>
@@ -355,8 +289,8 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
 
       {/* Updated */}
       <td style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)', whiteSpace: 'nowrap' }}>
-        {customer.updated_at
-          ? new Date(customer.updated_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
+        {customer.restriction_updated_at
+          ? new Date(customer.restriction_updated_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
           : <span style={{ color: 'var(--color-muted-foreground)' }}>Auto</span>
         }
       </td>
@@ -371,35 +305,20 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
 
       {/* Actions */}
       <td className="ap-table__th--right">
-        <div className="cr-action-btns">
-          {/* View violations */}
-          <button
-            className="cr-action-btn cr-action-btn--history"
+        <div className="ap-row-actions">
+          <RowAction
+            icon={<HistoryIcon />}
+            label="History"
+            srLabel={`View violation history for ${customer.customer_name}`}
             onClick={() => onViewViolations(customer)}
-            aria-label="View violation history"
-            title="View violation history"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10 9 9 9 8 9"/>
-            </svg>
-          </button>
-          {/* Override restriction */}
-          <button
-            className="cr-action-btn cr-action-btn--override"
+          />
+          <RowAction
+            variant="gold"
+            icon={<ShieldIcon />}
+            label="Override"
+            srLabel={`Override restriction for ${customer.customer_name}`}
             onClick={() => onOverride(customer)}
-            aria-label="Override restriction"
-            title="Override restriction"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-          </button>
+          />
         </div>
       </td>
     </tr>
@@ -414,10 +333,10 @@ function StatCards({ customers }) {
   const suspended  = customers.filter(c => c.restriction_level === 'suspended').length;
 
   const stats = [
-    { label: 'Flagged customers', value: total,     icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' },
-    { label: 'Warned',            value: warned,    color: '#D4A030' },
-    { label: 'GCash only',        value: codBlock,  color: '#A090D0' },
-    { label: 'Suspended',         value: suspended, color: '#E06050' },
+    { label: 'Flagged customers', value: total,     color: undefined },
+    { label: 'Warned',            value: warned,    color: '#D97706' },
+    { label: 'GCash only',        value: codBlock,  color: '#B45309' },
+    { label: 'Suspended',         value: suspended, color: '#DC2626' },
   ];
 
   return (
@@ -436,7 +355,7 @@ function StatCards({ customers }) {
 
 // ── Main page ────────────────────────────────────────────────────────
 export default function CustomerRestrictions() {
-  const { toasts, dismiss, toast } = useToast();
+  const { toast } = useAdminToast();
 
   const [customers, setCustomers]   = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -444,40 +363,54 @@ export default function CustomerRestrictions() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch]         = useState('');
   const [filterLevel, setFilterLevel] = useState('');
+  const [filterOpen, setFilterOpen]   = useState(false);
 
   const [viewViol, setViewViol]   = useState(null);   // customer for violation modal
   const [override, setOverride]   = useState(null);   // customer for override modal
 
-  const load = useCallback(async () => {
+  const load = useCallback(() => {
     setLoading(true);
-    try {
-      const { data } = await adminAPI.listCustomerRestrictions({
-        page, limit: 12,
-        search:           search     || undefined,
-        restriction_level: filterLevel || undefined,
-      });
-      setCustomers(data.data || data);
-      setTotalPages(data.totalPages || 1);
-    } catch {
-      toast.error('Failed to load customer restrictions.');
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search, filterLevel]);
+    adminAPI.listCustomerRestrictions({
+      page, limit: 12,
+      search:           search     || undefined,
+      restriction_level: filterLevel || undefined,
+    })
+      .then(({ data }) => {
+        setCustomers(data.data || data);
+        setTotalPages(data.totalPages || 1);
+      })
+      .catch(() => toast.error('Failed to load customer restrictions.'))
+      .finally(() => setLoading(false));
+  }, [page, search, filterLevel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
-  const SearchIcon = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
+  const hasFilters = Boolean(search || filterLevel);
+  const clearFilters = () => { setSearch(''); setFilterLevel(''); setPage(1); };
+
+  const filterFields = (
+    <>
+      <AppSelect value={filterLevel} onChange={e => { setFilterLevel(e.target.value); setPage(1); }} aria-label="Filter by restriction level">
+        <option value="">All restriction levels</option>
+        <option value="warned">Warned</option>
+        <option value="cod_restricted">GCash only</option>
+        <option value="suspended">Suspended</option>
+      </AppSelect>
+      {hasFilters && (
+        <button type="button" className="ap-clear-link" onClick={clearFilters}>Clear filters</button>
+      )}
+    </>
   );
 
   return (
     <>
-      <Toasts toasts={toasts} dismiss={dismiss} />
-
       <div className="ap-page ap-page--wide">
+
+        <PageHeader
+          title="Customer Restrictions"
+          chip={`${customers.length} flagged`}
+          sub="Customers with repeated order violations. Manual overrides are logged to the audit trail."
+        />
 
         {/* Stats */}
         <StatCards customers={customers} />
@@ -494,25 +427,16 @@ export default function CustomerRestrictions() {
         <div className="ap-toolbar">
           <div className="ap-toolbar__filters">
             <div style={{ minWidth: 220, flex: 1 }}>
-              <div className="ap-input-row">
-                <span className="ap-input-prefix"><SearchIcon /></span>
-                <input
-                  className="ap-input ap-input--prefix"
-                  placeholder="Search customer name or email…"
-                  value={search}
-                  onChange={e => { setSearch(e.target.value); setPage(1); }}
-                  aria-label="Search customers"
-                />
-              </div>
+              <TextInput
+                placeholder="Search customer name or email…"
+                value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1); }}
+                prefix={<SearchIcon />}
+                aria-label="Search customers"
+              />
             </div>
-            <div style={{ minWidth: 180 }}>
-              <AppSelect value={filterLevel} onChange={e => { setFilterLevel(e.target.value); setPage(1); }}>
-                <option value="">All restriction levels</option>
-                <option value="warned">Warned</option>
-                <option value="cod_restricted">GCash only</option>
-                <option value="suspended">Suspended</option>
-              </AppSelect>
-            </div>
+            <FilterTrigger open={filterOpen} onClick={() => setFilterOpen(true)} active={hasFilters} label="Filter customers" />
+            <FilterInline>{filterFields}</FilterInline>
           </div>
         </div>
 
@@ -540,7 +464,7 @@ export default function CustomerRestrictions() {
                 <thead>
                   <tr>
                     {['Customer', 'Violations', 'Restriction', 'Last updated', 'Updated by', ''].map(h => (
-                      <th key={h} className={h === '' ? 'ap-table__th--right' : ''}>{h}</th>
+                      <th key={h} scope="col" className={h === '' ? 'ap-table__th--right' : ''}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -561,7 +485,7 @@ export default function CustomerRestrictions() {
           {!loading && customers.length > 0 && (
             <div className="ap-table-foot">
               <span className="ap-table-foot__info">
-                Page {page} of {totalPages} · {customers.length} customers
+                Page {page} of {totalPages} · showing {customers.length} customer{customers.length === 1 ? '' : 's'}
               </span>
               <Pagination page={page} total={totalPages} onPage={setPage} />
             </div>
@@ -584,6 +508,10 @@ export default function CustomerRestrictions() {
         onSuccess={load}
         toast={toast}
       />
+
+      <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter customers">
+        {filterFields}
+      </FilterModal>
     </>
   );
 }

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supportChatAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
+import Pagination from '../../components/Pagination';
 import '../../styles/SupportChatPage.css';
+
+const SC_PAGE_SIZE = 12;
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
@@ -303,6 +306,7 @@ export default function SupportChatPage() {
   const [sending,        setSending]        = useState(false);
   const [searchQuery,    setSearchQuery]    = useState('');
   const [filterStatus,   setFilterStatus]   = useState('all');
+  const [threadPage,     setThreadPage]     = useState(1);
   const [unreadIds,      setUnreadIds]      = useState(new Set());
   const [mobileView,     setMobileView]     = useState('threads'); // 'threads' | 'chat'
   const [orderDrawer,    setOrderDrawer]    = useState(null); // order object | null
@@ -433,7 +437,7 @@ export default function SupportChatPage() {
   // ── Filtered threads ─────────────────────────────────────────────────────────
   const filteredThreads = threads
     .filter((t) => {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.trim().toLowerCase();
       const matchQ = !q || t.customer_name?.toLowerCase().includes(q) || t.last_message?.toLowerCase().includes(q);
       const matchF = filterStatus === 'all' || t.status === filterStatus;
       return matchQ && matchF;
@@ -445,6 +449,12 @@ export default function SupportChatPage() {
       if (bUnread !== aUnread) return bUnread - aUnread;
       return new Date(b.last_message_at) - new Date(a.last_message_at);
     });
+
+  // ── Client-side pagination of the thread list ────────────────────────────────
+  const threadTotalPages = Math.max(1, Math.ceil(filteredThreads.length / SC_PAGE_SIZE));
+  const threadSafePage   = Math.min(threadPage, threadTotalPages);
+  const threadStart      = (threadSafePage - 1) * SC_PAGE_SIZE;
+  const pagedThreads     = filteredThreads.slice(threadStart, threadStart + SC_PAGE_SIZE);
 
   // Group messages by date
   const groupedMessages = messages.reduce((groups, msg) => {
@@ -465,17 +475,6 @@ export default function SupportChatPage() {
       {/* ── Page header (mobile only — shows above thread list) ───────────────── */}
       <div className="sc-page-header">
         <div className="sc-page-header__left">
-          {mobileView === 'chat' && activeThread ? (
-            <button
-              className="sc-back-btn"
-              onClick={() => setMobileView('threads')}
-              aria-label="Back to conversations"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <polyline points="15 18 9 12 15 6"/>
-              </svg>
-            </button>
-          ) : null}
           <div>
             <h1 className="sc-page-title">
               Support Chat
@@ -523,7 +522,7 @@ export default function SupportChatPage() {
               <input
                 type="search"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setThreadPage(1); }}
                 placeholder="Search conversations…"
                 className="sc-search__input"
                 aria-label="Search conversations"
@@ -534,7 +533,7 @@ export default function SupportChatPage() {
                 <button
                   key={s}
                   className={`sc-filter-tab${filterStatus === s ? ' sc-filter-tab--active' : ''}`}
-                  onClick={() => setFilterStatus(s)}
+                  onClick={() => { setFilterStatus(s); setThreadPage(1); }}
                   aria-pressed={filterStatus === s}
                 >
                   {s === 'all' ? 'All' : s === 'unlocked' ? 'Active' : 'Locked'}
@@ -557,7 +556,7 @@ export default function SupportChatPage() {
                 <p>{searchQuery ? 'No conversations match.' : 'No active conversations.'}</p>
               </div>
             ) : (
-              filteredThreads.map((thread) => (
+              pagedThreads.map((thread) => (
                 <ThreadItem
                   key={thread.id}
                   thread={thread}
@@ -568,6 +567,18 @@ export default function SupportChatPage() {
               ))
             )}
           </div>
+
+          {!threadsLoading && filteredThreads.length > 0 && (
+            <Pagination
+              label="Conversation pagination"
+              page={threadSafePage}
+              totalPages={threadTotalPages}
+              total={filteredThreads.length}
+              from={threadStart + 1}
+              to={Math.min(threadStart + SC_PAGE_SIZE, filteredThreads.length)}
+              onPage={setThreadPage}
+            />
+          )}
         </aside>
 
         {/* ── Right: Chat window + Order Drawer ─────────────────────────────────── */}

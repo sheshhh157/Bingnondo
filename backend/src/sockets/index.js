@@ -16,7 +16,8 @@
  *   order:status       → all rooms: order status changed
  *   order:ready        → staff/manager: order ready, needs delivery assignment
  *   menu_update        → all: menu item availability changed (shared with menu.controller)
- *   inventory:update   → staff/manager: stock level changed
+ *   inventory:update   → cashier/staff/manager: stock level changed
+ *   inventory:low_stock→ cashier/staff/manager: stock crossed into low/out
  *   kitchen_alert      → kitchen + esp32:<id>: new alert, fire buzzer
  *   kitchen_alert:ack  → esp32:<id>: alert acknowledged, stop buzzer
  *   delivery:update    → staff/manager: delivery status changed
@@ -192,7 +193,21 @@ function emitMenuUpdate(item) {
 
 function emitInventoryUpdate(item) {
   if (!_io) return;
-  _io.to('staff').to('manager').emit('inventory:update', item);
+  _io.to('cashier').to('staff').to('manager').emit('inventory:update', item);
+}
+
+/**
+ * Stock crossed into low (at/below reorder) or out (at zero).
+ *
+ * `inventory:update` already lets a stock list recompute its counts; this is
+ * the distinct "notify manager" signal (Flowchart 2) so a dashboard can raise
+ * a visible alert rather than relying on the viewer watching the numbers.
+ *
+ * @param {{ low: Array, disabled: Array }} payload
+ */
+function emitLowStock(payload) {
+  if (!_io) return;
+  _io.to('cashier').to('staff').to('manager').emit('inventory:low_stock', payload);
 }
 
 function emitKitchenAlert({ alertId, orderId, orderNumber, deviceId, locationLabel }) {
@@ -265,6 +280,7 @@ module.exports = {
   emitOrderReady,
   emitMenuUpdate,
   emitInventoryUpdate,
+  emitLowStock,
   emitKitchenAlert,
   emitKitchenAlertAck,
   emitDeliveryUpdate,

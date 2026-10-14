@@ -1,6 +1,8 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
 const { ALL_STATUSES, isKnownStatus, canTransition } = require('./status-transitions');
+// Flowchart 2: preparing an order consumes its ingredients. See deduction.js.
+const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
 
 // ─── Helper: format order number ─────────────────────────────────────────────
 function orderNumber(id) {
@@ -35,18 +37,32 @@ function isValidTimeZone(tz) {
 }
 
 // ─── POST /api/orders ─────────────────────────────────────────────────────────
-// Cashier creates a counter order.
-// Body: { items: [{ menu_item_id, quantity, notes? }], special_request? }
-// Status starts as 'pending' so it lands in kitchen's New Orders tab first.
-// Kitchen acknowledges → 'confirmed' → 'preparing' → 'ready'.
-// A 'pending' payment row is created; cashier marks paid via POST /api/payments.
+// Cashier creates a counter order and takes payment in the same step.
+// Body: { items: [{ menu_item_id, quantity, notes? }], special_request?,
+//         payment: { method: 'cash'|'gcash'|'cash_on_delivery', cash_given? } }
+//
+// Nothing is written until payment is supplied: the order, its line items and a
+// 'paid' payment row are inserted in one transaction, so an order can never
+// exist unpaid. The order starts as 'pending' so it lands in the kitchen's New
+// Orders tab; kitchen acknowledges → 'confirmed' → 'preparing' → 'ready'.
 async function createOrder(req, res, next) {
   const client = await db.getClient();
   try {
-    const { items, special_request } = req.body;
+    const { items, special_request, payment } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'Order must contain at least one item.' });
+    }
+
+    // Payment is mandatory — nothing is persisted until it is provided.
+    if (!payment || !payment.method) {
+      return res.status(400).json({
+        message: 'A payment method is required. Nothing is saved until the order is paid.',
+      });
+    }
+    const allowedMethods = ['cash', 'gcash', 'cash_on_delivery'];
+    if (!allowedMethods.includes(payment.method)) {
+      return res.status(400).json({ message: `method must be one of: ${allowedMethods.join(', ')}` });
     }
 
     // 1. Validate all items exist and are available, compute total
@@ -74,6 +90,16 @@ async function createOrder(req, res, next) {
       }
       totalAmount += parseFloat(mi.price) * qty;
       validated.push({ menu_item_id: mi.id, name: mi.name, unit_price: parseFloat(mi.price), quantity: qty, notes: item.notes || null });
+    }
+
+    // Cash must cover the total before anything is written.
+    if (payment.method === 'cash') {
+      const given = parseFloat(payment.cash_given);
+      if (isNaN(given) || given < totalAmount) {
+        return res.status(400).json({
+          message: `Cash given (₱${isNaN(given) ? '?' : given.toFixed(2)}) must be at least the total (₱${totalAmount.toFixed(2)}).`,
+        });
+      }
     }
 
     await client.query('BEGIN');
@@ -105,17 +131,24 @@ async function createOrder(req, res, next) {
       [order.id, req.user.sub]
     );
 
-    // 5. Create pending payment record (method updated when cashier confirms payment)
-    await client.query(
-      `INSERT INTO payments (order_id, method, amount, status) VALUES ($1, 'cash', $2, 'pending')`,
-      [order.id, totalAmount]
+    // 5. Record the payment as paid. The order only exists because it was paid,
+    //    so the payment row is born 'paid' — there is no unpaid state.
+    const { rows: payRows } = await client.query(
+      `INSERT INTO payments (order_id, method, amount, status, paid_at)
+       VALUES ($1, $2, $3, 'paid', NOW())
+       RETURNING *`,
+      [order.id, payment.method, totalAmount]
     );
 
     await client.query('COMMIT');
 
-    // 6. Attach items to response and emit to kitchen
+    // 6. Attach items + payment to the response and emit to kitchen
     order.items = validated;
     order.total_amount = parseFloat(order.total_amount);
+    order.payment = payRows[0];
+    order.change = payment.method === 'cash'
+      ? parseFloat((parseFloat(payment.cash_given) - totalAmount).toFixed(2))
+      : null;
 
     socketHub.emitNewOrder(order);
 
@@ -157,7 +190,9 @@ const MAX_ORDERS_LIMIT = 10000;
  */
 const LATEST_PAYMENT_JOIN = `
   LEFT JOIN LATERAL (
-    SELECT status, method, paid_at
+    SELECT status, method, paid_at,
+           gcash_ref_number, receipt_image_url, receipt_uploaded_at,
+           rejection_reason, verified_by, verified_at
     FROM payments
     WHERE order_id = o.id
     ORDER BY paid_at DESC NULLS LAST, id DESC
@@ -484,6 +519,122 @@ async function getOrderReport(req, res, next) {
   }
 }
 
+// ─── GET /api/orders/online ───────────────────────────────────────────────────
+// Cashier's "Online Orders" console. Lists every online order with the pieces
+// the accept/dispatch workflow needs in one shot: the customer, the latest
+// payment (incl. the GCash receipt fields), its delivery row and its line items.
+//
+// An "online order" is `order_type = 'online'` — the ONLY other value the
+// `orders_order_type_check` constraint allows is 'counter'. This is deliberately
+// independent of `order_channel`, which the seed and the kitchen lane disagree
+// on ('online' vs 'mobile_app').
+//
+// Unlike GET /api/orders, this is NOT scoped to `cashier_id`: online orders
+// carry a `customer_id`, never a `cashier_id`, so a cashier-scoped query would
+// always return nothing.
+//
+// Query params: status (repeatable/comma list), search, limit, offset.
+// Declared before `/:id` in the router so "online" is not parsed as an id.
+async function getOnlineOrders(req, res, next) {
+  try {
+    const { status, search, limit, offset } = req.query;
+    const conditions = [`o.order_type = 'online'`];
+    const params = [];
+    let p = 1;
+
+    if (status) {
+      conditions.push(`o.status = ANY($${p++})`);
+      params.push(String(status).split(',').map((s) => s.trim()));
+    }
+
+    // Match on order number, customer name, mobile, or GCash ref.
+    if (search && String(search).trim()) {
+      const term = `%${escapeLike(String(search).trim())}%`;
+      conditions.push(`(
+        'ORD-' || LPAD(o.id::text, 4, '0') ILIKE $${p} ESCAPE '\\'
+        OR (COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) ILIKE $${p} ESCAPE '\\'
+        OR c.mobile_number ILIKE $${p} ESCAPE '\\'
+        OR p.gcash_ref_number ILIKE $${p} ESCAPE '\\'
+      )`);
+      params.push(term);
+      p++;
+    }
+
+    const parsedLimit = Number.parseInt(limit, 10);
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.min(Math.max(parsedLimit, 1), MAX_ORDERS_LIMIT)
+      : 200;
+    const parsedOffset = Number.parseInt(offset, 10);
+    const safeOffset = Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0;
+
+    const { rows } = await db.query(
+      `SELECT
+         o.id,
+         'ORD-' || LPAD(o.id::text, 4, '0') AS order_number,
+         o.order_type,
+         o.order_channel,
+         o.status,
+         o.total_amount::float,
+         o.special_request,
+         o.created_at,
+         o.updated_at,
+         o.customer_id,
+         COALESCE(NULLIF(TRIM(c.first_name || ' ' || c.last_name), ''), c.email) AS customer_name,
+         c.mobile_number AS customer_mobile,
+         c.address       AS customer_address,
+
+         p.method              AS payment_method,
+         p.status              AS payment_status,
+         p.paid_at,
+         p.gcash_ref_number,
+         p.receipt_image_url,
+         p.receipt_uploaded_at,
+         p.rejection_reason,
+
+         d.delivery_preference,
+         d.status        AS delivery_status,
+         d.rider_name,
+         d.rider_contact,
+         d.assigned_at,
+         d.delivered_at,
+
+         json_agg(
+           json_build_object(
+             'id',           oi.id,
+             'menu_item_id', oi.menu_item_id,
+             'name',         mi.name,
+             'quantity',     oi.quantity,
+             'unit_price',   oi.unit_price::float,
+             'notes',        oi.notes
+           ) ORDER BY oi.id
+         ) AS items,
+
+         COUNT(*) OVER()::int AS total
+       FROM orders o
+       LEFT JOIN customers  c ON c.id = o.customer_id
+       LEFT JOIN deliveries d ON d.order_id = o.id
+       ${LATEST_PAYMENT_JOIN}
+       JOIN order_items oi ON oi.order_id = o.id
+       JOIN menu_items  mi ON mi.id = oi.menu_item_id
+       WHERE ${conditions.join(' AND ')}
+       GROUP BY o.id, c.id, p.method, p.status, p.paid_at, p.gcash_ref_number,
+                p.receipt_image_url, p.receipt_uploaded_at, p.rejection_reason,
+                d.delivery_preference, d.status, d.rider_name, d.rider_contact,
+                d.assigned_at, d.delivered_at
+       ORDER BY o.created_at DESC
+       LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+      params
+    );
+
+    const total = rows.length ? rows[0].total : 0;
+    for (const row of rows) delete row.total;
+
+    res.json({ orders: rows, total });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ─── GET /api/orders/:id ──────────────────────────────────────────────────────
 async function getOrderById(req, res, next) {
   try {
@@ -580,6 +731,12 @@ async function updateOrderStatus(req, res, next) {
       [req.params.id, status, req.user.sub]
     );
 
+    // Confirmed -> preparing means cooking has started: deduct ingredients.
+    let usage = null;
+    if (status === 'preparing') {
+      usage = await applyOrderIngredientUsage(client, req.params.id, req.user.sub);
+    }
+
     await client.query('COMMIT');
 
     const order = rows[0];
@@ -591,6 +748,7 @@ async function updateOrderStatus(req, res, next) {
     if (status === 'ready') {
       socketHub.emitOrderReady({ orderId: order.id, orderNumber: order.order_number });
     }
+    emitIngredientUsage(usage);
 
     res.json(order);
   } catch (err) {
@@ -774,7 +932,7 @@ async function updateOrderItems(req, res, next) {
   }
 }
 
-module.exports = { createOrder, getOrders, getOrderTotals, getOrderReport, getOrderById, updateOrderStatus, cancelOrder, updateOrderItems };
+module.exports = { createOrder, getOrders, getOnlineOrders, getOrderTotals, getOrderReport, getOrderById, updateOrderStatus, cancelOrder, updateOrderItems };
 
 // Internal helpers, exposed for tests. They hold the rules that decide which
 // orders count as revenue, so they are worth asserting directly — testing them

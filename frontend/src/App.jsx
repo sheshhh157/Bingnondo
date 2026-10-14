@@ -10,13 +10,6 @@ import Login from './pages/auth/Login';
 // Cashier
 import CashierLayout from './pages/cashier/CashierLayout';
 
-// Staff
-import StaffLayout from './pages/staff/StaffLayout';
-import PaymentVerificationPage from './pages/staff/PaymentVerificationPage';
-import InventoryPage from './pages/staff/InventoryPage';
-import MenuPage from './pages/staff/MenuPage';
-import SupportChatPage from './pages/staff/SupportChatPage';
-
 // Kitchen
 import KitchenPage from './pages/kitchen/KitchenPage';
 
@@ -27,6 +20,8 @@ import SystemSettings from './pages/admin/SystemSettings';
 import AuditLog from './pages/admin/AuditLog';
 import CustomerRestrictions from './pages/admin/CustomerRestrictions';
 import RidersPage from './pages/admin/RidersPage';
+import AdminInventoryPage from './pages/staff/InventoryPage';
+import AdminMenuPage from './pages/staff/MenuPage';
 
 // Manager
 import ManagerLayout from './pages/manager/ManagerLayout';
@@ -88,7 +83,6 @@ function RoleRedirect() {
   if (user.type === 'rider')         return <Navigate to="/rider/active" replace />;
   if (user.role === 'admin')         return <Navigate to="/admin/accounts" replace />;
   if (user.role === 'cashier')       return <Navigate to="/cashier" replace />;
-  if (user.role === 'staff')         return <Navigate to="/staff/payments" replace />;
   if (user.role === 'kitchen_staff') return <Navigate to="/kitchen" replace />;
   if (user.role === 'manager' || user.role === 'owner') return <Navigate to="/manager/dashboard" replace />;
   return <Navigate to="/login" replace />;
@@ -113,22 +107,6 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
-
-              {/* ── Staff ── */}
-              <Route
-                path="/staff"
-                element={
-                  <ProtectedRoute allowedRoles={['staff']}>
-                    <StaffLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<Navigate to="/staff/payments" replace />} />
-                <Route path="payments"  element={<PaymentVerificationPage />} />
-                <Route path="inventory" element={<InventoryPage />} />
-                <Route path="menu"      element={<MenuPage />} />
-                <Route path="chat"      element={<SupportChatPage />} />
-              </Route>
 
               {/* ── Kitchen ── */}
               <Route
@@ -155,6 +133,9 @@ export default function App() {
                 <Route path="settings"     element={<SystemSettings />} />
                 <Route path="audit"        element={<AuditLog />} />
                 <Route path="restrictions" element={<CustomerRestrictions />} />
+                {/* Menu & inventory management live on the admin side */}
+                <Route path="inventory"    element={<AdminInventoryPage />} />
+                <Route path="menu"         element={<AdminMenuPage />} />
                 {/* Manager-view pages embedded inside Admin (no redirect to /manager) */}
                 <Route path="dashboard"            element={<DashboardPage />} />
                 <Route path="sales"                element={<SalesReportPage />} />

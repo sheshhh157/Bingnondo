@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/RiderLayout.css';
 import riderCat from '../../assets/rider_cat.png';
 
@@ -63,8 +65,12 @@ const NAV_ITEMS = [
 export default function RiderLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogout = () => setLogoutOpen(true);
+
+  const confirmLogout = () => {
+    setLogoutOpen(false);
     logout();
     navigate('/login', { replace: true });
   };
@@ -152,6 +158,17 @@ export default function RiderLayout() {
           </NavLink>
         ))}
       </nav>
+
+      <ConfirmDialog
+        open={logoutOpen}
+        title="Sign out?"
+        message="You'll be returned to the login screen. Any unsaved changes will be lost."
+        confirmLabel="Sign out"
+        cancelLabel="Stay"
+        tone="danger"
+        onConfirm={confirmLogout}
+        onCancel={() => setLogoutOpen(false)}
+      />
 
     </div>
   );

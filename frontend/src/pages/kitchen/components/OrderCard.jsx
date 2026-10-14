@@ -42,9 +42,10 @@ export default function OrderCard({ order, lane, onStatusChange }) {
         await kitchenAPI.acknowledgeOrder(order.id);
         onStatusChange(order.id, 'confirmed');
       } else if (isPreparing) {
-        // Mark ready: preparing → ready
-        await kitchenAPI.updateOrderStatus(order.id, 'ready');
-        onStatusChange(order.id, 'ready');
+        // Mark ready. Counter orders are finalised to 'completed' server-side,
+        // so reflect whichever status comes back to drop the card correctly.
+        const res = await kitchenAPI.updateOrderStatus(order.id, 'ready');
+        onStatusChange(order.id, res?.status ?? 'ready');
       } else {
         // Start preparing: confirmed → preparing
         await kitchenAPI.updateOrderStatus(order.id, 'preparing');

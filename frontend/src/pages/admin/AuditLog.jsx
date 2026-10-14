@@ -1,23 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { adminAPI } from '../../services/api';
+import {
+  useAdminToast, Spinner, Btn, AppSelect, PageHeader, Pagination,
+} from './adminShared';
+import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/AdminPage.css';
-
-// ── shared mini components ───────────────────────────────────────────
-let _tid = 0;
-function useToast(){const[toasts,setToasts]=useState([]);const push=useCallback((msg,type='info')=>{const id=++_tid;setToasts(p=>[...p,{id,msg,type}]);setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),4000);},[]);const dismiss=id=>setToasts(p=>p.filter(t=>t.id!==id));return{toasts,dismiss,toast:{success:m=>push(m,'success'),error:m=>push(m,'error'),info:m=>push(m,'info')}};}
-function Toasts({toasts,dismiss}){const icons={success:'✓',error:'✕',info:'i'};return(<div className="ap-toast-stack" role="status" aria-live="polite">{toasts.map(t=>(<div key={t.id} className={`ap-toast ap-toast--${t.type}`}><span className="ap-toast__icon">{icons[t.type]}</span><span className="ap-toast__msg">{t.msg}</span><button className="ap-toast__dismiss" onClick={()=>dismiss(t.id)} aria-label="Dismiss">✕</button></div>))}</div>);}
-function Spinner({size=16}){return(<svg className="ap-spinner" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#2E2B22" strokeWidth="2.5"/><path d="M12 3a9 9 0 0 1 9 9" stroke="#C9963C" strokeWidth="2.5" strokeLinecap="round"/></svg>);}
-function Btn({variant='ghost',size='md',icon,children,disabled,loading,onClick,type='button'}){return(<button type={type} className={`ap-btn ap-btn--${variant} ap-btn--${size}`} disabled={disabled||loading} onClick={onClick}>{loading?<Spinner size={13}/>:icon&&<span style={{display:'flex',flexShrink:0}}>{icon}</span>}{children}</button>);}
-function AppSelect({id,children,...props}){return(<select id={id} className="ap-select" {...props}>{children}</select>);}
-
-function Pagination({page,total,onPage}){
-  if(total<=1)return null;
-  return(<div className="ap-pager">
-    <Btn variant="ghost" size="sm" disabled={page<=1} onClick={()=>onPage(page-1)}>←</Btn>
-    {Array.from({length:total},(_,i)=>i+1).map(p=>(<Btn key={p} variant={p===page?'gold':'ghost'} size="sm" onClick={()=>onPage(p)}>{p}</Btn>))}
-    <Btn variant="ghost" size="sm" disabled={page>=total} onClick={()=>onPage(page+1)}>→</Btn>
-  </div>);
-}
 
 // ── action badge ─────────────────────────────────────────────────────
 const ACTION_TYPES = ['create','deactivate','reactivate','reset_password','update_settings','register_device','remove_device','update_api_key'];
@@ -48,15 +35,15 @@ function DetailPanel({ entry }) {
       <div className="ap-detail__heading">ENTRY DETAIL</div>
       <div className="ap-detail__grid">
         {rows.map(([k,v,mono])=>(
-          <> 
-            <span key={`k-${k}`} className="ap-detail__key">{k}</span>
-            <span key={`v-${k}`} className={`ap-detail__val${mono?' ap-detail__val--mono':''}`}>{v}</span>
-          </>
+          <Fragment key={`${k}-${v}`}>
+            <span className="ap-detail__key">{k}</span>
+            <span className={`ap-detail__val${mono?' ap-detail__val--mono':''}`}>{v}</span>
+          </Fragment>
         ))}
         {Object.keys(details).length>0 && (
           <>
-            <span className="ap-detail__key" style={{alignSelf:'flex-start',marginTop:4}}>Details</span>
-            <pre className="ap-detail__pre">{JSON.stringify(details,null,2)}</pre>
+            <span className="ap-detail__key" key="dk" style={{alignSelf:'flex-start',marginTop:4}}>Details</span>
+            <pre className="ap-detail__pre" key="dv">{JSON.stringify(details,null,2)}</pre>
           </>
         )}
       </div>
@@ -65,12 +52,18 @@ function DetailPanel({ entry }) {
 }
 
 // ── log table row ─────────────────────────────────────────────────────
+const LockIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+);
+
 function LogRow({ entry, expanded, onToggle }) {
   const t = new Date(entry.created_at);
   return (
     <>
-      <tr onClick={onToggle} style={{cursor:'pointer',background:expanded?'#1E1C15':'transparent'}}
-        onMouseEnter={e=>{if(!expanded)e.currentTarget.style.background='#1E1C15';}}
+      <tr onClick={onToggle} style={{cursor:'pointer',background:expanded?'var(--color-muted)':'transparent'}}
+        onMouseEnter={e=>{if(!expanded)e.currentTarget.style.background='var(--color-muted)';}}
         onMouseLeave={e=>{if(!expanded)e.currentTarget.style.background='transparent';}}>
         <td style={{whiteSpace:'nowrap'}}>
           <div style={{fontSize:'0.75rem',color:'var(--color-foreground)'}}>
@@ -81,7 +74,7 @@ function LogRow({ entry, expanded, onToggle }) {
           </div>
         </td>
         <td>
-          <div style={{fontSize:'0.8125rem',fontWeight:500,color:'var(--color-foreground)'}}>{entry.actor_name||`Staff #${entry.actor_id}`}</div>
+          <div title={entry.actor_name||`Staff #${entry.actor_id}`} style={{fontSize:'0.8125rem',fontWeight:500,color:'var(--color-foreground)',maxWidth:'240px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{entry.actor_name||`Staff #${entry.actor_id}`}</div>
           {entry.actor_role&&<div style={{fontSize:'0.6875rem',color:'var(--color-muted-foreground)',textTransform:'capitalize',marginTop:1}}>{entry.actor_role.replace('_',' ')}</div>}
         </td>
         <td><ActionBadge action={entry.action}/></td>
@@ -92,12 +85,12 @@ function LogRow({ entry, expanded, onToggle }) {
           }
         </td>
         <td style={{textAlign:'right'}}>
-          <span style={{color:'var(--color-muted-foreground)',display:'inline-block',transition:'transform 120ms ease',transform:expanded?'rotate(180deg)':'rotate(0deg)'}}>▾</span>
+          <span style={{color:'var(--color-muted-foreground)',display:'inline-block',transition:'transform 120ms ease',transform:expanded?'rotate(180deg)':'rotate(0deg)',fontSize:'0.75rem'}}>▾</span>
         </td>
       </tr>
       {expanded&&(
-        <tr style={{borderBottom:'1px solid #262218'}}>
-          <td colSpan={5} style={{padding:'0 16px 12px'}}>
+        <tr>
+          <td colSpan={5} style={{padding:0, borderBottom:'1px solid var(--color-border)'}}>
             <DetailPanel entry={entry}/>
           </td>
         </tr>
@@ -108,7 +101,7 @@ function LogRow({ entry, expanded, onToggle }) {
 
 // ── main page ─────────────────────────────────────────────────────────
 export default function AuditLog() {
-  const { toasts, dismiss, toast } = useToast();
+  const { toast } = useAdminToast();
 
   const [logs, setLogs]           = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -121,6 +114,7 @@ export default function AuditLog() {
   const [filterAction, setFilterAction] = useState('');
   const [filterFrom, setFilterFrom]     = useState('');
   const [filterTo, setFilterTo]         = useState('');
+  const [filterOpen, setFilterOpen]     = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,42 +136,39 @@ export default function AuditLog() {
   function reset() { setFilterActor(''); setFilterAction(''); setFilterFrom(''); setFilterTo(''); setPage(1); }
   const hasFilters = filterActor||filterAction||filterFrom||filterTo;
 
-  const LockIcon = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-    </svg>
+  const filterFields = (
+    <>
+      <AppSelect value={filterActor} onChange={e=>{setFilterActor(e.target.value);setPage(1);}} aria-label="Filter by actor">
+        <option value="">All actors</option>
+        {actors.map(a=><option key={a.id} value={a.id}>{a.full_name}</option>)}
+      </AppSelect>
+      <AppSelect value={filterAction} onChange={e=>{setFilterAction(e.target.value);setPage(1);}} aria-label="Filter by action">
+        <option value="">All actions</option>
+        {ACTION_TYPES.map(a=><option key={a} value={a}>{a.replace(/_/g,' ')}</option>)}
+      </AppSelect>
+      <input type="date" className="ap-input" value={filterFrom} onChange={e=>{setFilterFrom(e.target.value);setPage(1);}} aria-label="From date"/>
+      <input type="date" className="ap-input" value={filterTo} onChange={e=>{setFilterTo(e.target.value);setPage(1);}} aria-label="To date"/>
+      {hasFilters && <Btn variant="muted" size="sm" onClick={reset}>Clear filters</Btn>}
+    </>
   );
 
   return (
     <>
-      <Toasts toasts={toasts} dismiss={dismiss}/>
       <div className="ap-page ap-page--wide">
+
+        <PageHeader
+          title="Audit Log"
+          sub="A permanent, chronological record of every administrative action on Bingnondo."
+        />
 
         {/* Filters */}
         <div className="ap-card">
           <div className="ap-card__body">
             <div className="ap-toolbar">
               <div className="ap-toolbar__filters">
-                <div style={{minWidth:160,flex:1}}>
-                  <AppSelect value={filterActor} onChange={e=>{setFilterActor(e.target.value);setPage(1);}}>
-                    <option value="">All actors</option>
-                    {actors.map(a=><option key={a.id} value={a.id}>{a.full_name}</option>)}
-                  </AppSelect>
-                </div>
-                <div style={{minWidth:170,flex:1}}>
-                  <AppSelect value={filterAction} onChange={e=>{setFilterAction(e.target.value);setPage(1);}}>
-                    <option value="">All actions</option>
-                    {ACTION_TYPES.map(a=><option key={a} value={a}>{a.replace(/_/g,' ')}</option>)}
-                  </AppSelect>
-                </div>
-                <div style={{minWidth:140}}>
-                  <input type="date" className="ap-input" value={filterFrom} onChange={e=>{setFilterFrom(e.target.value);setPage(1);}} aria-label="From date"/>
-                </div>
-                <div style={{minWidth:140}}>
-                  <input type="date" className="ap-input" value={filterTo} onChange={e=>{setFilterTo(e.target.value);setPage(1);}} aria-label="To date"/>
-                </div>
+                <FilterTrigger open={filterOpen} onClick={()=>setFilterOpen(true)} active={hasFilters} label="Filter audit log" />
+                <FilterInline>{filterFields}</FilterInline>
               </div>
-              {hasFilters && <Btn variant="muted" size="sm" onClick={reset}>Clear filters</Btn>}
             </div>
           </div>
         </div>
@@ -203,7 +194,7 @@ export default function AuditLog() {
                 <thead>
                   <tr>
                     {['Timestamp','Actor','Action','Target',''].map(h=>(
-                      <th key={h} className={h===''?'ap-table__th--right':''}>{h}</th>
+                      <th key={h} scope="col" className={h===''?'ap-table__th--right':''}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -226,6 +217,10 @@ export default function AuditLog() {
           )}
         </div>
       </div>
+
+      <FilterModal open={filterOpen} onClose={()=>setFilterOpen(false)} title="Filter audit log">
+        {filterFields}
+      </FilterModal>
     </>
   );
 }

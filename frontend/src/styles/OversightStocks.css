@@ -64,7 +64,12 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+}
+.osk-table-scroll {
   overflow-x: auto;
+}
+.osk-table-wrap > .cp-pag {
+  background: var(--color-card);
 }
 .osk-table {
   width: 100%;

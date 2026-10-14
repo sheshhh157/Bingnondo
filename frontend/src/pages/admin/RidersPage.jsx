@@ -1,5 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { adminRidersAPI } from '../../services/api';
+import {
+  useAdminToast, Spinner, Btn, Field, TextInput, PasswordInput,
+  Modal, ConfirmModal, PageHeader, Pagination,
+} from './adminShared';
+import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/AdminPage.css';
 import '../../styles/RidersPage.css';
 
@@ -18,149 +23,6 @@ const STATUS_OPTIONS = [
   { value: 'on_delivery', label: 'On Delivery' },
   { value: 'inactive',   label: 'Inactive'    },
 ];
-
-// ── toast hook ────────────────────────────────────────────────────────────────
-let _tid = 0;
-function useToast() {
-  const [toasts, setToasts] = useState([]);
-  const push = useCallback((msg, type = 'info') => {
-    const id = ++_tid;
-    setToasts(p => [...p, { id, msg, type }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4200);
-  }, []);
-  const dismiss = id => setToasts(p => p.filter(t => t.id !== id));
-  return {
-    toasts, dismiss,
-    toast: { success: m => push(m, 'success'), error: m => push(m, 'error'), info: m => push(m, 'info') },
-  };
-}
-
-// ── Toasts ────────────────────────────────────────────────────────────────────
-function Toasts({ toasts, dismiss }) {
-  return (
-    <div className="ap-toast-stack" role="status" aria-live="polite">
-      {toasts.map(t => (
-        <div key={t.id} className={`ap-toast ap-toast--${t.type}`}>
-          <span className="ap-toast__icon">
-            {t.type === 'success' ? (
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-            ) : t.type === 'error' ? (
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            ) : (
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            )}
-          </span>
-          <span className="ap-toast__msg">{t.msg}</span>
-          <button className="ap-toast__dismiss" onClick={() => dismiss(t.id)} aria-label="Dismiss">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Spinner ────────────────────────────────────────────────────────────────────
-function Spinner({ size = 16 }) {
-  return (
-    <svg className="ap-spinner" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="var(--color-border-strong)" strokeWidth="2.5"/>
-      <path d="M12 3a9 9 0 0 1 9 9" stroke="var(--color-gold)" strokeWidth="2.5" strokeLinecap="round"/>
-    </svg>
-  );
-}
-
-// ── Btn ────────────────────────────────────────────────────────────────────────
-function Btn({ variant = 'ghost', size = 'md', icon, children, disabled, loading, onClick, type = 'button', className = '' }) {
-  return (
-    <button
-      type={type}
-      className={`ap-btn ap-btn--${variant} ap-btn--${size} ${className}`}
-      disabled={disabled || loading}
-      onClick={onClick}
-    >
-      {loading ? <Spinner size={13} /> : icon && <span style={{ display: 'flex', flexShrink: 0 }}>{icon}</span>}
-      {children}
-    </button>
-  );
-}
-
-// ── Field ─────────────────────────────────────────────────────────────────────
-function Field({ label, id, error, hint, children }) {
-  return (
-    <div className="ap-input-wrap">
-      {label && <label className="ap-label" htmlFor={id}>{label}</label>}
-      {children}
-      {hint && !error && <span style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', marginTop: '3px' }}>{hint}</span>}
-      {error && <span className="ap-field-error">{error}</span>}
-    </div>
-  );
-}
-
-function TextInput({ id, error, prefix, suffix, ...props }) {
-  return (
-    <div className="ap-input-row">
-      {prefix && <span className="ap-input-prefix">{prefix}</span>}
-      <input
-        id={id}
-        className={`ap-input${prefix ? ' ap-input--prefix' : ''}${suffix ? ' ap-input--suffix' : ''}${error ? ' ap-input--error' : ''}`}
-        {...props}
-      />
-      {suffix && <span className="ap-input-suffix">{suffix}</span>}
-    </div>
-  );
-}
-
-function AppSelect({ id, error, children, ...props }) {
-  return (
-    <select id={id} className={`ap-select${error ? ' ap-input--error' : ''}`} {...props}>
-      {children}
-    </select>
-  );
-}
-
-// ── Modal ─────────────────────────────────────────────────────────────────────
-function Modal({ open, onClose, title, width = 520, children }) {
-  const ref = useRef();
-  useEffect(() => {
-    if (!open) return;
-    const h = e => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
-  }, [open, onClose]);
-
-  if (!open) return null;
-  return (
-    <div className="ap-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="ap-modal" style={{ maxWidth: width }} ref={ref}>
-        <div className="ap-modal__head">
-          <span className="ap-modal__title">{title}</span>
-          <button className="ap-modal__close" onClick={onClose} aria-label="Close modal">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// ── Confirm Dialog ─────────────────────────────────────────────────────────────
-function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmLabel = 'Confirm', variant = 'danger', loading }) {
-  return (
-    <Modal open={open} onClose={onClose} title={title} width={400}>
-      <div className="ap-modal__body">
-        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-muted-foreground)', lineHeight: 1.6 }}>{message}</p>
-        <div className="ap-modal__footer">
-          <Btn variant="ghost" size="sm" onClick={onClose} disabled={loading}>Cancel</Btn>
-          <Btn variant={variant} size="sm" onClick={onConfirm} loading={loading}>{confirmLabel}</Btn>
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 // ── Vehicle Icon SVG ──────────────────────────────────────────────────────────
 function VehicleIcon({ type, size = 20 }) {
@@ -294,7 +156,7 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading }) {
     }
   }, [open, initial]);
 
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setErrors(e => ({ ...e, [k]: '' })); };
 
   const validate = () => {
     const e = {};
@@ -312,11 +174,9 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading }) {
     onSave(form);
   };
 
-  const vehicleLabel = (v) => VEHICLE_TYPES.find(t => t.value === v)?.label || v;
-
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Rider' : 'Add New Rider'} width={540}>
-      <div className="ap-modal__body">
+      <form onSubmit={e => { e.preventDefault(); handleSubmit(); }}>
 
         {/* Vehicle type picker — visual pill row */}
         <Field label="Vehicle Type" id="rd-vehicle-type">
@@ -345,6 +205,7 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading }) {
               onChange={e => set('full_name', e.target.value)}
               error={errors.full_name}
               autoComplete="off"
+              autoFocus
             />
           </Field>
 
@@ -397,9 +258,8 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading }) {
 
         {!isEdit && (
           <Field label="Temporary Password *" id="rd-pass" error={errors.temp_password} hint="Rider uses this on first login. Min. 8 characters.">
-            <TextInput
+            <PasswordInput
               id="rd-pass"
-              type="password"
               placeholder="Minimum 8 characters"
               value={form.temp_password}
               onChange={e => set('temp_password', e.target.value)}
@@ -412,12 +272,12 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading }) {
         <div className="ap-divider" />
 
         <div className="ap-modal__footer">
-          <Btn variant="ghost" size="sm" onClick={onClose} disabled={loading}>Cancel</Btn>
-          <Btn variant="primary" size="sm" onClick={handleSubmit} loading={loading}>
+          <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
+          <Btn variant="primary" type="submit" loading={loading}>
             {isEdit ? 'Save Changes' : 'Add Rider'}
           </Btn>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }
@@ -425,10 +285,9 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading }) {
 // ── Reset Password Modal ──────────────────────────────────────────────────────
 function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
   const [pw, setPw]     = useState('');
-  const [show, setShow] = useState(false);
   const [err, setErr]   = useState('');
 
-  useEffect(() => { if (open) { setPw(''); setErr(''); setShow(false); } }, [open]);
+  useEffect(() => { if (open) { setPw(''); setErr(''); } }, [open]);
 
   const handleSave = () => {
     if (!pw) { setErr('Password is required.'); return; }
@@ -438,7 +297,7 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Reset Rider Password" width={420}>
-      <div className="ap-modal__body">
+      <form onSubmit={e => { e.preventDefault(); handleSave(); }}>
         <div className="rd-reset-rider">
           <RiderAvatar name={rider?.full_name} status={rider?.status} />
           <div>
@@ -447,30 +306,21 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
           </div>
         </div>
         <Field label="New Password" id="rd-reset-pw" error={err} hint="Min. 8 characters. Rider must use this on next login.">
-          <div className="ap-input-row">
-            <input
-              id="rd-reset-pw"
-              type={show ? 'text' : 'password'}
-              className={`ap-input ap-input--suffix${err ? ' ap-input--error' : ''}`}
-              placeholder="New password"
-              value={pw}
-              onChange={e => { setPw(e.target.value); setErr(''); }}
-              autoComplete="new-password"
-            />
-            <button type="button" className="ap-input-suffix ap-input-suffix--btn" onClick={() => setShow(v => !v)} aria-label={show ? 'Hide password' : 'Show password'}>
-              {show ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              )}
-            </button>
-          </div>
+          <PasswordInput
+            id="rd-reset-pw"
+            placeholder="New password"
+            value={pw}
+            onChange={e => { setPw(e.target.value); setErr(''); }}
+            error={err}
+            autoComplete="new-password"
+            autoFocus
+          />
         </Field>
         <div className="ap-modal__footer">
-          <Btn variant="ghost" size="sm" onClick={onClose} disabled={loading}>Cancel</Btn>
-          <Btn variant="primary" size="sm" onClick={handleSave} loading={loading}>Reset Password</Btn>
+          <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
+          <Btn variant="primary" type="submit" loading={loading}>Reset Password</Btn>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }
@@ -614,8 +464,8 @@ function RiderRow({ rider, onSelect, isSelected }) {
         <div className="ap-member">
           <RiderAvatar name={rider.full_name} status={rider.status} />
           <div className="ap-member__info">
-            <span className="ap-member__name">{rider.full_name}</span>
-            <span className="ap-member__email">{rider.mobile_number}</span>
+            <span className="ap-member__name" title={rider.full_name}>{rider.full_name}</span>
+            <span className="ap-member__email" title={rider.mobile_number}>{rider.mobile_number}</span>
           </div>
         </div>
       </td>
@@ -629,7 +479,7 @@ function RiderRow({ rider, onSelect, isSelected }) {
         </div>
       </td>
       <td>
-        <span style={{ fontSize: '0.8125rem', color: 'var(--color-muted-foreground)', fontFamily: 'monospace' }}>
+        <span title={rider.email || undefined} style={{ display: 'inline-block', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom', fontSize: '0.8125rem', color: 'var(--color-muted-foreground)', fontFamily: 'monospace' }}>
           {rider.email || '—'}
         </span>
       </td>
@@ -643,7 +493,7 @@ function RiderRow({ rider, onSelect, isSelected }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function RidersPage() {
-  const { toasts, dismiss, toast } = useToast();
+  const { toast } = useAdminToast();
 
   // data
   const [riders,    setRiders]    = useState([]);
@@ -672,6 +522,7 @@ export default function RidersPage() {
   const [confirmOpen,  setConfirmOpen]  = useState(false);
   const [confirmRider, setConfirmRider] = useState(null);
   const [confirmSaving, setConfirmSaving] = useState(false);
+  const [filterOpen,    setFilterOpen]    = useState(false);
 
   // ── fetch ──────────────────────────────────────────────────────────────────
   const fetchRiders = useCallback(async () => {
@@ -680,9 +531,8 @@ export default function RidersPage() {
       const res = await adminRidersAPI.getAll({ page, limit: LIMIT, search: search || undefined, status: statusF !== 'all' ? statusF : undefined });
       setRiders(res.data || []);
       setTotal(res.total || 0);
-    } catch (err) {
+    } catch {
       toast.error('Failed to load riders.');
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -779,29 +629,32 @@ export default function RidersPage() {
   // ── render ─────────────────────────────────────────────────────────────────
   const isEmpty = !loading && riders.length === 0;
 
+  const filterFields = (
+    <div className="rd-filter-pills" role="group" aria-label="Filter by status">
+      {STATUS_OPTIONS.map(({ value, label }) => (
+        <button
+          key={value}
+          type="button"
+          className={`rd-filter-pill${statusF === value ? ' rd-filter-pill--active' : ''}`}
+          onClick={() => setStatusF(value)}
+          aria-pressed={statusF === value}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="ap-page ap-page--wide rd-page">
 
       {/* ── Page header ─────────────────────────────────────────────────── */}
-      <div className="rd-page-head">
-        <div className="rd-page-head__left">
-          <div className="rd-page-head__icon" aria-hidden="true">
-            <VehicleIcon type="motorcycle" size={18} />
-          </div>
-          <div>
-            <h1 className="rd-page-head__title">Rider Management</h1>
-            <p className="rd-page-head__sub">Register, manage, and monitor delivery riders</p>
-          </div>
-        </div>
-        <Btn
-          variant="primary"
-          size="md"
-          onClick={handleAddNew}
-          icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}
-        >
-          Add Rider
-        </Btn>
-      </div>
+      <PageHeader
+        title="Rider Management"
+        chip={`${total} rider${total === 1 ? '' : 's'}`}
+        sub="Register, manage, and monitor delivery riders."
+        action={<Btn variant="primary" onClick={handleAddNew} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}>Add Rider</Btn>}
+      />
 
       {/* ── Stats bar ───────────────────────────────────────────────────── */}
       <StatsBar riders={riders} />
@@ -811,32 +664,20 @@ export default function RidersPage() {
         {/* toolbar */}
         <div className="ap-card__head">
           <div className="ap-toolbar" style={{ width: '100%' }}>
+            <div className="ap-toolbar__filters">
             {/* search */}
-            <div className="ap-input-row" style={{ flex: 1, minWidth: 0, maxWidth: 340 }}>
-              <span className="ap-input-prefix">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              </span>
-              <input
-                className="ap-input ap-input--prefix"
+            <div style={{ flex: 1, minWidth: 0, maxWidth: 340 }}>
+              <TextInput
                 placeholder="Search by name, mobile, plate…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
+                prefix={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>}
                 aria-label="Search riders"
               />
             </div>
             {/* status filter — pill tabs */}
-            <div className="rd-filter-pills" role="group" aria-label="Filter by status">
-              {STATUS_OPTIONS.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`rd-filter-pill${statusF === value ? ' rd-filter-pill--active' : ''}`}
-                  onClick={() => setStatusF(value)}
-                  aria-pressed={statusF === value}
-                >
-                  {label}
-                </button>
-              ))}
+            <FilterTrigger open={filterOpen} onClick={() => setFilterOpen(true)} active={statusF !== 'all'} label="Filter riders by status" />
+            <FilterInline>{filterFields}</FilterInline>
             </div>
           </div>
         </div>
@@ -862,10 +703,10 @@ export default function RidersPage() {
             <table className="ap-table rd-table" aria-label="Riders list">
               <thead>
                 <tr>
-                  <th>Rider</th>
-                  <th>Vehicle</th>
-                  <th>Email</th>
-                  <th>Status</th>
+                  <th scope="col">Rider</th>
+                  <th scope="col">Vehicle</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Status</th>
                   <th style={{ width: 32 }} aria-hidden="true" />
                 </tr>
               </thead>
@@ -889,21 +730,7 @@ export default function RidersPage() {
             <span className="ap-table-foot__info">
               Showing {((page - 1) * LIMIT) + 1}–{Math.min(page * LIMIT, total)} of {total} rider{total !== 1 ? 's' : ''}
             </span>
-            {totalPages > 1 && (
-              <div className="ap-pager">
-                <Btn variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-                  icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>}
-                  aria-label="Previous page"
-                />
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)', padding: '0 8px' }}>
-                  {page} / {totalPages}
-                </span>
-                <Btn variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
-                  icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>}
-                  aria-label="Next page"
-                />
-              </div>
-            )}
+            <Pagination page={page} total={totalPages} onPage={setPage} label="Riders pagination" />
           </div>
         )}
       </div>
@@ -935,7 +762,7 @@ export default function RidersPage() {
         loading={resetSaving}
       />
 
-      <ConfirmDialog
+      <ConfirmModal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={handleConfirmToggle}
@@ -950,7 +777,9 @@ export default function RidersPage() {
         loading={confirmSaving}
       />
 
-      <Toasts toasts={toasts} dismiss={dismiss} />
+      <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter riders">
+        {filterFields}
+      </FilterModal>
     </div>
   );
 }

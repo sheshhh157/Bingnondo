@@ -43,6 +43,7 @@ export default function ManagerLayout() {
   const { payload: orderNew }    = useSocketEvent('order:new');
   const { payload: orderReady }  = useSocketEvent('order:ready');
   const { payload: orderStatus } = useSocketEvent('order:status');
+  const { payload: lowStock }    = useSocketEvent('inventory:low_stock');
   const { connected } = useSocketContext();
   const { toast } = useToast();
 
@@ -101,6 +102,29 @@ export default function ManagerLayout() {
     if (!meta) return;
     toast({ title: `Order #${orderStatus.orderNumber}`, desc: meta.desc, variant: meta.variant });
   }, [orderStatus, toast]);
+
+  // "Notify manager" (Flowchart 2): an ingredient crossed into low/out after an
+  // order was prepared. The stock list updates silently via `inventory:update`;
+  // this raises the alert so it is not missed.
+  useEffect(() => {
+    if (!lowStock) return;
+    const disabled = lowStock.disabled || [];
+    const low = lowStock.low || [];
+    if (disabled.length > 0) {
+      const names = disabled.slice(0, 2).map((d) => d.name).join(', ');
+      toast({
+        title: 'Ingredient out of stock',
+        desc: `${disabled.length} menu item${disabled.length === 1 ? '' : 's'} unavailable${names ? ` · ${names}` : ''}`,
+        variant: 'danger',
+      });
+    } else if (low.length > 0) {
+      toast({
+        title: 'Low stock warning',
+        desc: `${low.length} ingredient${low.length === 1 ? '' : 's'} hit the reorder level`,
+        variant: 'warning',
+      });
+    }
+  }, [lowStock, toast]);
 
   return (
     <div className="ml-root">

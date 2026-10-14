@@ -10,6 +10,7 @@ import EmptyState from '../../components/EmptyState';
 import StatCard from '../../components/StatCard';
 import PageHeader from '../../components/PageHeader';
 import ErrorBanner from '../../components/ErrorBanner';
+import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/MenuPage.css';
 
 export default function MenuPage() {
@@ -21,6 +22,7 @@ export default function MenuPage() {
 
   const [search, setSearch] = useState('');
   const [showAvailable, setShowAvailable] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const query = search.trim().toLowerCase();
 
   const unavailableCount = useMemo(() => items.filter((i) => !i.is_available).length, [items]);
@@ -35,6 +37,17 @@ export default function MenuPage() {
     }
     return Object.entries(map);
   }, [items, query, showAvailable]);
+
+  const filterFields = (
+    <button
+      type="button"
+      className={`menu-toggle${showAvailable ? ' menu-toggle--on' : ''}`}
+      onClick={() => setShowAvailable((v) => !v)}
+      aria-pressed={showAvailable}
+    >
+      Available only
+    </button>
+  );
 
   return (
     <div className="menu-root">
@@ -72,14 +85,8 @@ export default function MenuPage() {
             aria-label="Search menu items"
           />
         </div>
-        <button
-          type="button"
-          className={`menu-toggle${showAvailable ? ' menu-toggle--on' : ''}`}
-          onClick={() => setShowAvailable((v) => !v)}
-          aria-pressed={showAvailable}
-        >
-          Available only
-        </button>
+        <FilterTrigger open={filterOpen} onClick={() => setFilterOpen(true)} active={showAvailable} label="Filter menu items" />
+        <FilterInline>{filterFields}</FilterInline>
       </div>
 
       {loading ? (
@@ -145,6 +152,10 @@ export default function MenuPage() {
           ))}
         </div>
       )}
+
+      <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter menu items">
+        {filterFields}
+      </FilterModal>
     </div>
   );
 }

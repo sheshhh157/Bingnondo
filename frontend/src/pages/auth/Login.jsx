@@ -34,7 +34,6 @@ export default function Login() {
       const routes = {
         cashier:       '/cashier',
         kitchen_staff: '/kitchen',
-        staff:         '/staff',
         owner:         '/manager',
         admin:         '/admin',
         manager:       '/manager',
