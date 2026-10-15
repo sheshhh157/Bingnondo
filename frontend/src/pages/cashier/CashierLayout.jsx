@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import CashierPage from './CashierPage';
-import InventoryPage from '../staff/InventoryPage';
-import SupportChatPage from '../staff/SupportChatPage';
+import InventoryPage from '../shared/InventoryPage';
+import SupportChatPage from './SupportChatPage';
 import logo from '../../assets/logo.png';
 import CashierHeader from './components/CashierHeader';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -221,7 +221,7 @@ export default function CashierLayout() {
               onOpenDrawer={() => setDrawerOpen(true)}
               drawerOpen={drawerOpen}
             />
-            <div className="cl-staff-body">
+            <div className="cl-staff-body" key={view}>
               <StaffPageContent pageId={view} />
             </div>
           </div>

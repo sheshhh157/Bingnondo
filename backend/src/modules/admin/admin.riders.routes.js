@@ -25,4 +25,8 @@ router.patch('/:id/status',       ctrl.updateRiderStatus);
 // POST   /api/admin/riders/:id/reset-password — admin sets a new password
 router.post('/:id/reset-password', ctrl.resetRiderPassword);
 
+// DELETE /api/admin/riders/:id      — permanently remove a rider (blocked once
+//                                     they have delivery history)
+router.delete('/:id',             ctrl.deleteRider);
+
 module.exports = router;

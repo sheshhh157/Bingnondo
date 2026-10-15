@@ -27,6 +27,8 @@
 }
 .ok-conn--off { color: var(--color-destructive); border-color: #F3CFCF; background: #FBEAEA; }
 
+/* Kitchen queue — two independent lanes (Counter | divider | Online). Each lane
+   is a single column of at most three rows and paginates on its own. */
 .ok-split {
   display: grid;
   grid-template-columns: 1fr;
@@ -48,7 +50,7 @@
 
 .ok-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
-/* Unrecognised order_channel bucket — sits below the counter/online grid. */
+/* Unrecognised order_channel bucket — sits below the counter/online lanes. */
 .ok-unknown {
   margin-top: 16px;
   padding-top: 16px;
@@ -76,8 +78,30 @@
   color: var(--color-primary);
 }
 .ok-col__title { margin: 0; font-size: 1rem; font-weight: 600; }
+/* Each lane lays its cards out two-up (2 columns × 3 rows per page). */
+.ok-col__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
 
-.ok-col__list { display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 640px) {
+  .ok-col__list { grid-template-columns: 1fr; }
+}
+
+/* Ready-for-handoff grid — its own six-per-page window (2 columns × 3 rows),
+   a single column on phones. */
+.ok-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .ok-grid { grid-template-columns: 1fr; }
+}
 
 .ok-card {
   background: var(--color-card);
@@ -148,6 +172,9 @@
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .ok-handoff__header {
   display: flex;
@@ -168,11 +195,6 @@
 }
 .ok-handoff__title { margin: 0; font-size: 1rem; font-weight: 600; }
 .ok-handoff__hint { font-size: 0.78rem; color: var(--color-muted-foreground); }
-.ok-handoff__list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 .ok-card--handoff { border-left: 3px solid var(--color-primary); }
 .ok-card__handoff-note {
   margin-top: 10px;

@@ -21,16 +21,14 @@ import SystemSettings from './pages/admin/SystemSettings';
 import AuditLog from './pages/admin/AuditLog';
 import CustomerRestrictions from './pages/admin/CustomerRestrictions';
 import RidersPage from './pages/admin/RidersPage';
-import AdminInventoryPage from './pages/staff/InventoryPage';
-import AdminMenuPage from './pages/staff/MenuPage';
+import AdminInventoryPage from './pages/shared/InventoryPage';
+import AdminMenuPage from './pages/admin/AdminMenuPage';
 
-// Manager
-import ManagerLayout from './pages/manager/ManagerLayout';
-import DashboardPage from './pages/manager/DashboardPage';
-import SalesReportPage from './pages/manager/SalesReportPage';
-import OversightKitchen from './pages/manager/OversightKitchen';
-import OversightStocks from './pages/manager/OversightStocks';
-import OversightMenu from './pages/manager/MenuPage';
+// Oversight-view pages (embedded inside Admin)
+import SalesReportPage from './pages/admin/SalesReportPage';
+import OversightKitchen from './pages/admin/OversightKitchen';
+import OversightStocks from './pages/admin/OversightStocks';
+import OversightMenu from './pages/admin/OversightMenuPage';
 
 // Rider
 import RiderLayout from './pages/rider/RiderLayout';
@@ -84,7 +82,6 @@ function RoleRedirect() {
   if (user.role === 'admin')         return <Navigate to="/admin/accounts" replace />;
   if (user.role === 'cashier')       return <Navigate to="/cashier" replace />;
   if (user.role === 'kitchen_staff') return <Navigate to="/kitchen" replace />;
-  if (user.role === 'manager' || user.role === 'owner') return <Navigate to="/manager/dashboard" replace />;
   return <Navigate to="/login" replace />;
 }
 
@@ -137,31 +134,12 @@ export default function App() {
                 {/* Menu & inventory management live on the admin side */}
                 <Route path="inventory"    element={<AdminInventoryPage />} />
                 <Route path="menu"         element={<AdminMenuPage />} />
-                {/* Manager-view pages embedded inside Admin (no redirect to /manager) */}
+                {/* Oversight-view pages embedded inside Admin */}
                 <Route path="dashboard"            element={<Navigate to="/admin/overview" replace />} />
                 <Route path="sales"                element={<SalesReportPage />} />
                 <Route path="oversight/kitchen"    element={<OversightKitchen />} />
                 <Route path="oversight/stocks"     element={<OversightStocks />} />
                 <Route path="oversight/menu"       element={<OversightMenu />} />
-              </Route>
-
-              {/* ── Manager/Owner — admin can also view (read-only, no backend changes) ── */}
-              <Route
-                path="/manager"
-                element={
-                  <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
-                    <ManagerLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<Navigate to="/manager/dashboard" replace />} />
-                <Route path="dashboard"          element={<DashboardPage />} />
-                <Route path="sales"              element={<SalesReportPage />} />
-                <Route path="oversight"          element={<Navigate to="/manager/dashboard" replace />} />
-                <Route path="oversight/kitchen"  element={<OversightKitchen />} />
-                <Route path="oversight/stocks"   element={<OversightStocks />} />
-                <Route path="oversight/menu"     element={<OversightMenu />} />
-                <Route path="oversight/delivery" element={<RidersPage readOnly />} />
               </Route>
 
               {/* ── Rider ── */}

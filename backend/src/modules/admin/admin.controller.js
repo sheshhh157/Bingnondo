@@ -365,10 +365,6 @@ exports.deleteStaffAccount = async (req, res) => {
 
     await client.query('BEGIN');
 
-    // Account-scoped configuration is safe to remove alongside the account.
-    await client.query('DELETE FROM staff_dashboard_access WHERE staff_id = $1', [staffId]);
-    await client.query('DELETE FROM staff_switch_pin      WHERE staff_id = $1', [staffId]);
-
     const { rows } = await client.query(
       `DELETE FROM staff_accounts WHERE id = $1 AND role != 'admin'
        RETURNING id, full_name, email, role`,

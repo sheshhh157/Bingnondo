@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
-  Spinner, Badge, Btn, Field, TextInput, PasswordInput,
+  Spinner, TableSkeleton, Badge, Btn, Field, TextInput, PasswordInput,
   AppSelect, Modal, ConfirmModal, PageHeader, RowAction, Pagination,
 } from './adminShared';
 import { useAdminToast } from './useAdminToast';
@@ -406,23 +406,30 @@ export default function StaffAccounts() {
   }
 
   async function handleStatusChange() {
-    const newStatus = actionRow.status === 'active' ? 'deactivated' : 'active';
-    setActionLoading(actionRow.id);
+    const target = actionRow;
+    const newStatus = target.status === 'active' ? 'deactivated' : 'active';
+    setActionLoading(target.id);
+    // Optimistic: flip the status pill immediately; the reload below reconciles
+    // with the server (e.g. dropping the row if a status filter is active).
+    setAccounts(list => list.map(a => (a.id === target.id ? { ...a, status: newStatus } : a)));
     try {
-      await adminAPI.updateStaffStatus(actionRow.id, newStatus);
-      toast.success(`${actionRow.full_name} ${newStatus === 'active' ? 'reactivated' : 'deactivated'}.`);
+      await adminAPI.updateStaffStatus(target.id, newStatus);
+      toast.success(`${target.full_name} ${newStatus === 'active' ? 'reactivated' : 'deactivated'}.`);
       load();
-    } catch (err) { toast.error(err?.response?.data?.message || 'Action failed.'); }
-    finally { setActionLoading(null); setActionRow(null); setActionType(null); }
+    } catch (err) {
+      setAccounts(list => list.map(a => (a.id === target.id ? { ...a, status: target.status } : a)));
+      toast.error(err?.response?.data?.message || 'Action failed.');
+    } finally { setActionLoading(null); setActionRow(null); setActionType(null); }
   }
 
   async function handleDelete() {
+    const target = deleteTarget;
     setDeleteLoading(true);
     try {
-      await adminAPI.deleteStaffAccount(deleteTarget.id);
-      toast.success(`${deleteTarget.full_name} deleted.`);
+      await adminAPI.deleteStaffAccount(target.id);
+      toast.success(`${target.full_name} deleted.`);
+      setAccounts(list => list.filter(a => a.id !== target.id));
       setDeleteTarget(null);
-      load();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to delete account.');
     } finally { setDeleteLoading(false); }
@@ -455,7 +462,7 @@ export default function StaffAccounts() {
         {/* Table */}
         <div className="ap-card">
           {loading && accounts.length === 0 ? (
-            <div className="ap-loading"><Spinner size={24} /></div>
+            <TableSkeleton rows={5} cols={5} />
           ) : filtered.length === 0 ? (
             accounts.length === 0 ? (
               <div className="ap-empty">
@@ -504,7 +511,7 @@ export default function StaffAccounts() {
             </div>
           )}
 
-          {!loading && filtered.length > 0 && (
+          {filtered.length > 0 && (
             <div className="ap-table-foot">
               <span className="ap-table-foot__info">
                 {visible.length < filtered.length

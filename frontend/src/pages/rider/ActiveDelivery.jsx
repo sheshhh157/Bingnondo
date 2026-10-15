@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getCurrentDelivery, updateDeliveryStatus } from '../../services/riderApi';
+import { useSocketEventContext } from '../../context/SocketContext';
 import '../../styles/ActiveDelivery.css';
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
@@ -114,6 +115,8 @@ export default function ActiveDelivery() {
   const [confirm, setConfirm]     = useState(null);  // { status, message }
   const [actionLoading, setAL]    = useState(false);
   const [successMsg, setSuccess]  = useState('');
+  const [initialLoad, setInitial] = useState(true);
+  const { subscribe } = useSocketEventContext();
 
   const fetchDelivery = useCallback(async () => {
     setLoading(true);
@@ -124,11 +127,21 @@ export default function ActiveDelivery() {
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load delivery. Please try again.');
     } finally {
+      setInitial(false);
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchDelivery(); }, [fetchDelivery]);
+
+  // Live updates: the server pushes into this rider's private room. A new
+  // assignment (`delivery:new`) or any status change (`delivery:update`) just
+  // re-fetches, so the card appears/disappears without a manual refresh.
+  useEffect(() => {
+    return subscribe((name) => {
+      if (name === 'delivery:new' || name === 'delivery:update') fetchDelivery();
+    });
+  }, [subscribe, fetchDelivery]);
 
   const handleStatusClick = (nextStatus) => {
     const messages = {
@@ -169,7 +182,12 @@ export default function ActiveDelivery() {
     return new Date(iso).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
-  if (loading) {
+  // Only the very first load blanks the screen; manual/auto refreshes keep the
+  // current card visible and dim it instead, so the page never jumps.
+  const firstLoad = loading && initialLoad;
+  const refreshing = loading && !initialLoad;
+
+  if (firstLoad) {
     return (
       <div className="ad-loading" role="status" aria-live="polite">
         <span className="ad-spinner ad-spinner--lg" aria-label="Loading delivery" />
@@ -188,10 +206,12 @@ export default function ActiveDelivery() {
         <button
           className="ad-btn ad-btn--icon"
           onClick={fetchDelivery}
+          disabled={refreshing}
+          aria-busy={refreshing}
           aria-label="Refresh delivery"
           title="Refresh"
         >
-          <IconRefresh />
+          {refreshing ? <span className="ad-spinner" aria-hidden="true" /> : <IconRefresh />}
         </button>
       </header>
 
@@ -212,9 +232,9 @@ export default function ActiveDelivery() {
       )}
 
       {!delivery ? (
-        <NoDelivery onRefresh={fetchDelivery} refreshing={loading} />
+        <NoDelivery onRefresh={fetchDelivery} refreshing={refreshing} />
       ) : (
-        <div className="ad-card">
+        <div className={`ad-card${refreshing ? ' ad-card--busy' : ''}`} aria-busy={refreshing}>
           {/* ── Header row ── */}
           <div className="ad-card__head">
             <div className="ad-card__order-info">

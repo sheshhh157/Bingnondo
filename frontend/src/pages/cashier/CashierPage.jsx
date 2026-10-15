@@ -230,7 +230,7 @@ export default function CashierPage({ view, onToggleSidebar, sidebarOpen, onOpen
           </div>
         )}
 
-        <div className="cashier-content">
+        <div className="cashier-content" key={`${view}-${counterTab}`}>
           {view === VIEWS.ORDER ? (
             counterTab === COUNTER_TABS.HISTORY ? (
               <TransactionHistory />

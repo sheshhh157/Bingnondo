@@ -48,8 +48,10 @@ export const getCurrentDelivery = () => get('/api/rider/delivery/current');
  * payload: { status: 'out_for_delivery' | 'delivered' }
  *
  * Side effects (handled by backend):
- *   out_for_delivery → orders.status = 'out_for_delivery', customer notified
- *   delivered        → orders.status = 'completed', riders.status = 'available', customer notified
+ *   out_for_delivery → orders.status = 'out_for_delivery' (+ history row)
+ *   delivered        → orders.status = 'completed', riders.status = 'available',
+ *                      next waiting delivery auto-assigned to this rider,
+ *                      delivery/order events broadcast over socket.io
  */
 export const updateDeliveryStatus = (id, status) =>
   patch(`/api/rider/delivery/${id}/status`, { status });

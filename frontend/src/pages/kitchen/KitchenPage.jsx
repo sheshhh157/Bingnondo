@@ -112,6 +112,12 @@ export default function KitchenPage() {
       dispatchAlerts({ type: 'ADD', payload: alert });
     });
 
+    // An alert acknowledged on the physical ESP32 button - clear it from the
+    // panel live, the same as pressing Acknowledge here.
+    socket.on(KITCHEN_EVENTS.KITCHEN_ALERT_ACK, ({ alertId }) => {
+      dispatchAlerts({ type: 'ACKNOWLEDGE', id: alertId });
+    });
+
     socket.on(KITCHEN_EVENTS.ORDER_STATUS_UPDATE, ({ orderId, status }) => {
       dispatchOrders({ type: 'UPDATE_STATUS', id: orderId, status });
     });
@@ -121,6 +127,7 @@ export default function KitchenPage() {
       socket.off('reconnecting'); socket.off('reconnect_failed');
       socket.off(KITCHEN_EVENTS.NEW_ORDER);
       socket.off(KITCHEN_EVENTS.KITCHEN_ALERT);
+      socket.off(KITCHEN_EVENTS.KITCHEN_ALERT_ACK);
       socket.off(KITCHEN_EVENTS.ORDER_STATUS_UPDATE);
     };
   }, []);

@@ -34,7 +34,7 @@ function authenticateToken(req, res, next) {
  *
  * Usage:
  *   router.get('/admin/accounts', authenticateToken, requireRoles('admin'), handler);
- *   router.post('/orders', authenticateToken, requireRoles('cashier', 'staff'), handler);
+ *   router.post('/orders', authenticateToken, requireRoles('cashier', 'admin'), handler);
  *
  * @param {...string} roles - allowed role strings
  */

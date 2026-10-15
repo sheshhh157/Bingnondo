@@ -101,7 +101,7 @@ export default function DeliveryHistory() {
     setLoading(true);
     setError('');
     try {
-      const res = await getDeliveryHistory({ page: p, limit: 15 });
+      const res = await getDeliveryHistory({ page: p, limit: 10 });
       if (p === 1) {
         setDeliveries(res.deliveries || []);
       } else {

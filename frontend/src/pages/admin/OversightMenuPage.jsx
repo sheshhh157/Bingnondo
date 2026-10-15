@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { menuAPI } from '../../services/managerApi';
+import { menuAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
 import { currency, menuAvailVariant } from '../../utils/format';
-import { MENU_EVENTS, outOfStockIngredients } from './managerData';
+import { MENU_EVENTS, outOfStockIngredients } from './oversightData';
 import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
 import Badge from '../../components/Badge';

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminDeliveriesAPI } from '../../services/api';
-import { Spinner, Btn, PageHeader, Pagination, Modal } from './adminShared';
+import { TableSkeleton, Btn, PageHeader, Pagination, Modal } from './adminShared';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import { getSocket } from '../../services/socket';
 import { currency } from '../../utils/format';
@@ -125,11 +126,16 @@ export default function DeliveriesTab() {
   const [page,     setPage]     = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
   const [detail,   setDetail]   = useState(null);
-  const LIMIT = 15;
+  const LIMIT = 10;
 
-  const load = useCallback(() => {
+  // Typing shouldn't fire a request per keystroke; the box stays instant and
+  // the fetch rides the settled value.
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     return adminDeliveriesAPI
-      .getAll({ page, limit: LIMIT, search: search || undefined, status: statusF })
+      .getAll({ page, limit: LIMIT, search: debouncedSearch || undefined, status: statusF })
       .then(res => {
         setRows(res.data || []);
         setCounts(res.counts || {});
@@ -137,22 +143,26 @@ export default function DeliveriesTab() {
         setError(false);
       })
       .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, [page, search, statusF]);
+      .finally(() => { if (!silent) setLoading(false); });
+  }, [page, debouncedSearch, statusF]);
 
+  // Fetch-on-mount: the sync setLoading inside `load` is intentional; there is
+  // no user event to move it to. See admin-notes on the set-state-in-effect rule.
+  // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
-  const handleSearch = (val) => { setLoading(true); setSearch(val); setPage(1); };
-  const handleStatus = (val) => { setLoading(true); setStatusF(val); setPage(1); };
-  const handlePage   = (p)   => { setLoading(true); setPage(p); };
-  const refresh      = () => { setLoading(true); load(); };
+  const handleSearch = (val) => { setSearch(val); setPage(1); };
+  const handleStatus = (val) => { setStatusF(val); setPage(1); };
+  const handlePage   = (p)   => setPage(p);
+  const refresh      = ()    => load();
 
-  // Live refresh when a rider advances a delivery
+  // Live refresh when a rider advances a delivery — silent, so it never dims
+  // the list the user is reading.
   useEffect(() => {
     let socket;
     try { socket = getSocket(); } catch { return undefined; }
     if (!socket) return undefined;
-    const onUpdate = () => { load(); };
+    const onUpdate = () => { load(true); };
     socket.on('delivery:update', onUpdate);
     return () => { socket.off('delivery:update', onUpdate); };
   }, [load]);
@@ -160,6 +170,10 @@ export default function DeliveriesTab() {
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
   const allCount = Object.values(counts).reduce((a, b) => a + b, 0);
   const isEmpty = !loading && !error && rows.length === 0;
+  // First load gets the skeleton; a later reload (paging, filter, refresh) keeps
+  // the current rows on screen and dims them instead of blanking the card.
+  const firstLoad = loading && rows.length === 0 && !error;
+  const busy = loading && rows.length > 0;
 
   const filterFields = (
     <div className="rd-filter-pills" role="group" aria-label="Filter by delivery status">
@@ -217,8 +231,8 @@ export default function DeliveriesTab() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="ap-loading"><Spinner size={24} /></div>
+        {firstLoad ? (
+          <TableSkeleton rows={5} cols={4} />
         ) : error ? (
           <div className="ap-empty">
             <div className="ap-empty__title">Couldn't load deliveries.</div>
@@ -230,7 +244,7 @@ export default function DeliveriesTab() {
             <div className="ap-empty__sub">{!search && statusF === 'all' && 'Deliveries appear here once orders are placed and assigned.'}</div>
           </div>
         ) : (
-          <div className="rd-del-list">
+          <div className={`rd-del-list${busy ? ' is-busy' : ''}`} aria-busy={busy}>
             {rows.map(row => (
               <button
                 key={row.id}
@@ -274,7 +288,7 @@ export default function DeliveriesTab() {
           </div>
         )}
 
-        {!loading && !error && !isEmpty && (
+        {!firstLoad && !error && !isEmpty && (
           <div className="ap-table-foot">
             <span className="ap-table-foot__info">
               Showing {((page - 1) * LIMIT) + 1}–{Math.min(page * LIMIT, total)} of {total} deliver{total !== 1 ? 'ies' : 'y'}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { inventoryAPI, categoriesAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
@@ -144,8 +145,8 @@ function RestockModal({ item, onClose, onSubmit }) {
     } finally { setLoading(false); }
   };
 
-  return (
-    <div className="inv-modal-overlay" onClick={onClose} aria-hidden="true">
+  return createPortal(
+    <div className="inv-modal-overlay" onClick={onClose} role="presentation">
       <div
         className="inv-modal"
         onClick={(e) => e.stopPropagation()}
@@ -229,12 +230,132 @@ function RestockModal({ item, onClose, onSubmit }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
+  );
+}
+
+// ─── Adjust Modal ─────────────────────────────────────────────────────────────
+// Corrects stock to a physically counted value (up or down). Submits an
+// `adjustment` transaction, which the backend treats as "set to this value".
+function AdjustModal({ item, onClose, onSubmit }) {
+  const [newStock, setNewStock] = useState(String(item.current_stock));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
+  const parsed = Number(newStock);
+  const valid = newStock !== '' && Number.isFinite(parsed) && parsed >= 0;
+  const delta = valid ? parsed - item.current_stock : 0;
+  const changed = valid && delta !== 0;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!valid) { setError('Enter a stock count of zero or greater.'); return; }
+    if (!changed) { setError('New count matches the current stock.'); return; }
+    setLoading(true); setError('');
+    try {
+      await onSubmit(item.id, { change_type: 'adjustment', quantity: parsed });
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Adjustment failed.');
+    } finally { setLoading(false); }
+  };
+
+  return createPortal(
+    <div className="inv-modal-overlay" onClick={onClose} role="presentation">
+      <div
+        className="inv-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="adjust-modal-title"
+      >
+        <div className="inv-modal__header">
+          <h2 id="adjust-modal-title" className="inv-modal__title">
+            Adjust Stock
+          </h2>
+          <button className="inv-modal__close" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className="inv-modal__body">
+          <div className="inv-modal__item-card">
+            <span className="inv-modal__item-name">{item.name}</span>
+            <div className="inv-modal__item-meta">
+              <span>Current: <strong>{item.current_stock} {item.unit}</strong></span>
+              <StockBadge current={item.current_stock} reorder={item.reorder_level} />
+            </div>
+          </div>
+
+          <form id="adjust-form" onSubmit={handleSubmit} noValidate>
+            <div className="inv-field">
+              <label htmlFor="adjust-qty" className="inv-field__label">
+                Counted stock ({item.unit})
+              </label>
+              <input
+                id="adjust-qty"
+                ref={inputRef}
+                type="number"
+                min={0}
+                step="0.01"
+                value={newStock}
+                onChange={(e) => { setNewStock(e.target.value); setError(''); }}
+                className="inv-field__input"
+                placeholder="0"
+                required
+              />
+              {valid && (
+                <p className="inv-field__hint">
+                  {delta > 0
+                    ? <>New total: <strong>{parsed} {item.unit}</strong> (increase {delta})</>
+                    : delta < 0
+                      ? <>New total: <strong>{parsed} {item.unit}</strong> (decrease {Math.abs(delta)})</>
+                      : <>No change from current stock.</>}
+                </p>
+              )}
+            </div>
+
+            {error && (
+              <p className="inv-modal__error" role="alert">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                {error}
+              </p>
+            )}
+          </form>
+        </div>
+
+        <div className="inv-modal__footer">
+          <button className="inv-btn inv-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="inv-btn inv-btn--primary" form="adjust-form" type="submit" disabled={loading || !changed} aria-busy={loading}>
+            {loading ? <span className="inv-spinner" aria-label="Saving…" /> : 'Adjust'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
 // ─── Mobile card ──────────────────────────────────────────────────────────────
-function InventoryCard({ item, isAdmin, onRestock, onOutOfStock, onEdit }) {
+function InventoryCard({ item, isAdmin, isCashier, onRestock, onAdjust, onOutOfStock, onEdit }) {
   const s = stockStatus(item.current_stock, item.reorder_level);
   const cap = Math.max(item.current_stock * 1.5, item.reorder_level * 3, 10);
   const pct = Math.min(100, (item.current_stock / cap) * 100);
@@ -269,6 +390,9 @@ function InventoryCard({ item, isAdmin, onRestock, onOutOfStock, onEdit }) {
 
       <div className="inv-card__actions">
         <button className="inv-btn inv-btn--primary inv-btn--sm" onClick={() => onRestock(item)}>+ Restock</button>
+        {isCashier && (
+          <button className="inv-btn inv-btn--quiet inv-btn--sm" onClick={() => onAdjust(item)}>Adjust</button>
+        )}
         {isAdmin && (
           <button className="inv-btn inv-btn--quiet inv-btn--sm" onClick={() => onEdit(item)}>Edit</button>
         )}
@@ -411,8 +535,8 @@ function ItemModal({ mode, item, categories, onClose, onSubmit }) {
     } finally { setLoading(false); }
   };
 
-  return (
-    <div className="inv-modal-overlay" onClick={onClose} aria-hidden="true">
+  return createPortal(
+    <div className="inv-modal-overlay" onClick={onClose} role="presentation">
       <div
         className="inv-modal"
         onClick={(e) => e.stopPropagation()}
@@ -525,7 +649,8 @@ function ItemModal({ mode, item, categories, onClose, onSubmit }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -534,6 +659,8 @@ export default function InventoryPage() {
   const { user } = useAuth();
   // Creating new ingredients is admin-only; cashiers keep restock/adjust/out-of-stock.
   const isAdmin = user?.role === 'admin';
+  // Correcting stock to a counted value is a cashier action (admins use Edit).
+  const isCashier = user?.role === 'cashier';
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -543,6 +670,7 @@ export default function InventoryPage() {
   const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [modal, setModal] = useState(null);
+  const [adjustModal, setAdjustModal] = useState(null);
   const [itemModal, setItemModal] = useState(null);
   const [confirmItem, setConfirmItem] = useState(null);
   const [page, setPage] = useState(1);
@@ -572,7 +700,7 @@ export default function InventoryPage() {
     const socket = getSocket();
     // The backend broadcasts `inventory:update` with a camelCase payload
     // ({ itemId, currentStock, reorderLevel, name }) so both this page and the
-    // manager dashboard can consume it; map it onto the row shape used here.
+    // admin overview can consume it; map it onto the row shape used here.
     const handler = (p) => {
       setItems((prev) => prev.map((i) =>
         i.id === p.itemId
@@ -585,14 +713,15 @@ export default function InventoryPage() {
 
   const handleTransaction = async (id, payload) => {
     const { data } = await inventoryAPI.transaction(id, payload);
+    const verb = payload.change_type === 'adjustment' ? 'Adjusted' : 'Restocked';
     const autoEnabled = data.auto_enabled_menu_items?.length || 0;
     if (autoEnabled > 0) {
       showToast(
-        `Restocked! ${autoEnabled} menu item${autoEnabled > 1 ? 's' : ''} automatically marked available.`,
+        `${verb}! ${autoEnabled} menu item${autoEnabled > 1 ? 's' : ''} automatically marked available.`,
         'success'
       );
     } else {
-      showToast('Restocked successfully.');
+      showToast(`${verb} successfully.`);
     }
     await fetchItems();
   };
@@ -818,7 +947,9 @@ export default function InventoryPage() {
                   key={item.id}
                   item={item}
                   isAdmin={isAdmin}
+                  isCashier={isCashier}
                   onRestock={(i) => setModal({ item: i })}
+                  onAdjust={(i) => setAdjustModal({ item: i })}
                   onOutOfStock={(i) => setConfirmItem(i)}
                   onEdit={(i) => setItemModal({ mode: 'edit', item: i })}
                 />
@@ -898,6 +1029,9 @@ export default function InventoryPage() {
                       <td className="inv-table__td inv-table__td--right">
                         <div className="inv-table__actions">
                           <button className="inv-btn inv-btn--primary inv-btn--xs" onClick={() => setModal({ item })}>+ Restock</button>
+                          {isCashier && (
+                            <button className="inv-btn inv-btn--quiet inv-btn--xs" onClick={() => setAdjustModal({ item })}>Adjust</button>
+                          )}
                           {isAdmin && (
                             <button className="inv-btn inv-btn--quiet inv-btn--xs" onClick={() => setItemModal({ mode: 'edit', item })}>Edit</button>
                           )}
@@ -935,6 +1069,15 @@ export default function InventoryPage() {
         />
       )}
 
+      {/* Adjust modal — cashier only */}
+      {adjustModal && (
+        <AdjustModal
+          item={adjustModal.item}
+          onClose={() => setAdjustModal(null)}
+          onSubmit={handleTransaction}
+        />
+      )}
+
       {/* Add / edit ingredient modal — admin only */}
       {isAdmin && itemModal && (
         <ItemModal
@@ -947,7 +1090,7 @@ export default function InventoryPage() {
       )}
 
       {/* Mobile filters modal */}
-      {filtersOpen && (
+      {filtersOpen && createPortal(
         <div
           className="inv-modal-overlay inv-modal-overlay--compact"
           onClick={(e) => e.target === e.currentTarget && setFiltersOpen(false)}
@@ -1005,11 +1148,12 @@ export default function InventoryPage() {
               <button className="inv-btn inv-btn--primary" onClick={() => setFiltersOpen(false)}>Done</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Out-of-stock confirmation — destructive */}
-      {confirmItem && (
+      {confirmItem && createPortal(
         <div
           className="inv-modal-overlay"
           onClick={(e) => e.target === e.currentTarget && setConfirmItem(null)}
@@ -1046,7 +1190,8 @@ export default function InventoryPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

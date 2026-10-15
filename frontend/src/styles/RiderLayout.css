@@ -239,6 +239,11 @@
   padding: 28px 28px 28px;
   box-sizing: border-box;
   overflow-y: auto;
+  animation: rl-page-in 220ms ease-out;
+}
+@keyframes rl-page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Mobile top bar ───────────────────────────────────────────────────────── */
@@ -414,4 +419,8 @@
 /* Large desktop */
 @media (min-width: 1280px) {
   .rl-main { padding: 32px 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-main { animation: none; }
 }

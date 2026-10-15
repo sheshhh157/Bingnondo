@@ -1,36 +1,26 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authClient } from '../services/apiClient';
 import { connectSocket, disconnectSocket } from '../services/socket';
-import { switchAPI } from '../services/api';
+import { joinSocketRoom } from './SocketContext';
 
 const AuthContext = createContext(null);
 
 const SOCKET_ROOM_MAP = {
   cashier:       'cashier',
   kitchen_staff: 'kitchen',
-  staff:         'staff',
-  owner:         'manager',
   admin:         'manager',
-  // Riders get their own socket room
-  rider:         'rider',
 };
 
 export function AuthProvider({ children }) {
-  const [user, setUser]                   = useState(null);
-  const [loading, setLoading]             = useState(true);
-  const [switchOptions, setSwitchOptions] = useState([]);
+  const [user, setUser]       = useState(null);
+  const [loading, setLoading] = useState(true);
 
   // ── Restore session from localStorage ──────────────────────────────────────
   useEffect(() => {
     const stored = localStorage.getItem('bingnondo_user');
     if (stored) {
       try {
-        const parsed = JSON.parse(stored);
-        setUser(parsed);
-        const cachedOptions = localStorage.getItem('bingnondo_switch_options');
-        if (cachedOptions) {
-          try { setSwitchOptions(JSON.parse(cachedOptions)); } catch { /* ignore */ }
-        }
+        setUser(JSON.parse(stored));
       } catch {
         localStorage.clear();
       }
@@ -41,23 +31,10 @@ export function AuthProvider({ children }) {
       localStorage.clear();
       disconnectSocket();
       setUser(null);
-      setSwitchOptions([]);
       window.location.replace('/login');
     };
     window.addEventListener('auth:expired', onExpired);
     return () => window.removeEventListener('auth:expired', onExpired);
-  }, []);
-
-  // ── Fetch switch options (staff only) ──────────────────────────────────────
-  const fetchSwitchOptions = useCallback(async () => {
-    try {
-      const res = await switchAPI.getOptions();
-      const options = res.data?.data || [];
-      setSwitchOptions(options);
-      localStorage.setItem('bingnondo_switch_options', JSON.stringify(options));
-    } catch {
-      setSwitchOptions([]);
-    }
   }, []);
 
   // ── Shared login — handles both staff and rider ─────────────────────────────
@@ -74,45 +51,17 @@ export function AuthProvider({ children }) {
     localStorage.setItem('bingnondo_user', JSON.stringify(userData));
     setUser(userData);
 
-    // Connect to appropriate socket room
-    const socketRoom = userData.type === 'rider'
-      ? 'rider'
-      : SOCKET_ROOM_MAP[userData.role] || userData.role;
-    connectSocket(socketRoom);
-
-    // Only staff (non-admin) get the dashboard switcher
-    if (userData.type === 'staff' && userData.role !== 'admin') {
-      fetchSwitchOptions();
+    // Riders are served by the app-wide socket (SocketContext), whose handshake
+    // token lands them in their private `rider:<id>` room. Staff roles keep the
+    // dedicated role-room socket they have always used.
+    if (userData.type === 'rider') {
+      joinSocketRoom();
+    } else {
+      connectSocket(SOCKET_ROOM_MAP[userData.role] || userData.role);
     }
 
     return userData;
-  }, [fetchSwitchOptions]);
-
-  // ── Switch Dashboard (staff only) ──────────────────────────────────────────
-  const switchDashboard = useCallback(async (targetDashboard, pin = null) => {
-    const body = { target_dashboard: targetDashboard };
-    if (pin) body.pin = pin;
-
-    const res = await switchAPI.switch(body);
-    const { accessToken, refreshToken, user: updatedUser, active_dashboard, home_role } = res.data;
-
-    localStorage.setItem('bingnondo_access_token', accessToken);
-    localStorage.setItem('bingnondo_refresh_token', refreshToken);
-
-    const newUserData = {
-      ...updatedUser,
-      role:      active_dashboard,
-      home_role: home_role,
-    };
-    localStorage.setItem('bingnondo_user', JSON.stringify(newUserData));
-    setUser(newUserData);
-
-    disconnectSocket();
-    connectSocket(SOCKET_ROOM_MAP[active_dashboard] || active_dashboard);
-    fetchSwitchOptions();
-
-    return { success: true };
-  }, [fetchSwitchOptions]);
+  }, []);
 
   // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = useCallback(() => {
@@ -120,12 +69,11 @@ export function AuthProvider({ children }) {
     localStorage.clear();
     disconnectSocket();
     setUser(null);
-    setSwitchOptions([]);
     window.location.replace('/login');
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, switchDashboard, switchOptions, fetchSwitchOptions }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -8,6 +8,7 @@
  *   kitchen          — Kitchen display + ESP32 devices
  *   staff            — Staff management dashboard
  *   manager          — Owner/Manager dashboard (read-only)
+ *   rider:<riderId>  — Private per-rider room (assignment + status updates)
  *   esp32:<deviceId> — Per-device room for hardware alert control
  *
  * Events emitted by backend:
@@ -19,8 +20,9 @@
  *   inventory:update   → cashier/staff/manager: stock level changed
  *   inventory:low_stock→ cashier/staff/manager: stock crossed into low/out
  *   kitchen_alert      → kitchen + esp32:<id>: new alert, fire buzzer
- *   kitchen_alert:ack  → esp32:<id>: alert acknowledged, stop buzzer
- *   delivery:update    → staff/manager: delivery status changed
+ *   kitchen_alert:ack  → kitchen + esp32:<id>: alert acknowledged, stop buzzer
+ *   delivery:new       → rider:<id>: a delivery was auto-assigned to that rider
+ *   delivery:update    → staff/manager + rider:<id>: delivery status changed
  *
  * Pattern: setIO(io) is called from server.js — same pattern as menu.controller.
  *
@@ -40,7 +42,7 @@
 const { verifyAccessToken } = require('../modules/auth/auth.jwt');
 
 /** Roles entitled to the owner-level `manager` room. */
-const MANAGER_ROLES = new Set(['owner', 'admin', 'manager']);
+const MANAGER_ROLES = new Set(['admin']);
 
 /** The one room guarded by handshake auth. */
 const MANAGER_ROOM = 'manager';
@@ -57,12 +59,21 @@ function resolveUser(handshakeAuth) {
   const token = handshakeAuth && handshakeAuth.token;
   if (!token) return null;
   const decoded = verifyAccessToken(token);
-  if (!decoded || decoded.type !== 'staff') return null;
+  if (!decoded || (decoded.type !== 'staff' && decoded.type !== 'rider')) return null;
   return decoded;
 }
 
 function isManagerEntitled(user) {
-  return Boolean(user) && MANAGER_ROLES.has(user.role);
+  return Boolean(user) && user.type === 'staff' && MANAGER_ROLES.has(user.role);
+}
+
+function isRider(user) {
+  return Boolean(user) && user.type === 'rider';
+}
+
+/** The private room a signed-in rider is allowed to claim. */
+function riderRoom(user) {
+  return `rider:${user.sub}`;
 }
 
 function setIO(io) {
@@ -89,16 +100,36 @@ function setIO(io) {
       console.log(`[socket] ${socket.id} auto-joined room: ${MANAGER_ROOM} (role: ${socket.data.user.role})`);
     }
 
+    // Riders auto-claim their private room for the same reason: assignment
+    // events arrive after a reconnect and a page reload would otherwise miss
+    // them.
+    if (isRider(socket.data.user)) {
+      const room = riderRoom(socket.data.user);
+      socket.join(room);
+      console.log(`[socket] ${socket.id} auto-joined room: ${room} (rider ${socket.data.user.sub})`);
+    }
+
     // Client joins a role-based room after connecting. The `= {}` default
     // guards a malformed emit (no payload) from throwing inside the handler.
     socket.on('join', ({ room } = {}) => {
       if (!room) return;
 
-      // `manager` is the only guarded room: a socket may only claim it when
-      // its handshake token carries an owner-level role. Other rooms keep the
-      // legacy behaviour.
+      // `manager` and `rider:<id>` are guarded: a socket may only claim them
+      // when its handshake token carries the matching identity. Other rooms
+      // keep the legacy open behaviour.
       if (room === MANAGER_ROOM) {
         if (!isManagerEntitled(socket.data.user)) {
+          console.warn(`[socket] ${socket.id} refused room: ${room} (not entitled)`);
+          return;
+        }
+        socket.join(room);
+        console.log(`[socket] ${socket.id} joined room: ${room}`);
+        return;
+      }
+
+      // Rider rooms are private: a socket may only join its own `rider:<sub>`.
+      if (room.startsWith('rider:')) {
+        if (!isRider(socket.data.user) || room !== riderRoom(socket.data.user)) {
           console.warn(`[socket] ${socket.id} refused room: ${room} (not entitled)`);
           return;
         }
@@ -220,12 +251,24 @@ function emitKitchenAlert({ alertId, orderId, orderNumber, deviceId, locationLab
 
 function emitKitchenAlertAck({ alertId, deviceId }) {
   if (!_io) return;
-  _io.to(`esp32:${deviceId}`).emit('kitchen_alert:ack', { alertId });
+  _io.to('kitchen').emit('kitchen_alert:ack', { alertId });
+  if (deviceId) _io.to(`esp32:${deviceId}`).emit('kitchen_alert:ack', { alertId });
+}
+
+function emitDeliveryNew(delivery) {
+  if (!_io) return;
+  if (delivery.rider_id != null) {
+    _io.to(`rider:${delivery.rider_id}`).emit('delivery:new', delivery);
+  }
 }
 
 function emitDeliveryUpdate(delivery) {
   if (!_io) return;
   _io.to('staff').to('manager').emit('delivery:update', delivery);
+  // The assigned rider also sees their own delivery move, in real time.
+  if (delivery.rider_id != null) {
+    _io.to(`rider:${delivery.rider_id}`).emit('delivery:update', delivery);
+  }
 }
 
 // ─── §4.0 Payment Verification Events ────────────────────────────────────────
@@ -284,6 +327,7 @@ module.exports = {
   emitKitchenAlert,
   emitKitchenAlertAck,
   emitDeliveryUpdate,
+  emitDeliveryNew,
   emitPaymentPending,
   emitPaymentVerified,
   emitPaymentRejected,

@@ -6,7 +6,7 @@ const ctrl = require('./inventory.controller');
 // All inventory routes are staff-only
 const staffAccess = [authenticateToken, requireStaff];
 // 'cashier' added — cashier can now restock inventory via the Staff Portal tab
-const staffWrite  = [authenticateToken, requireStaff, requireRoles('cashier', 'staff', 'owner', 'admin')];
+const staffWrite  = [authenticateToken, requireStaff, requireRoles('cashier', 'admin')];
 // Creating/editing ingredients lives on the admin side only
 const adminOnly   = [authenticateToken, requireStaff, requireRoles('admin')];
 
@@ -29,7 +29,7 @@ router.put('/:id', ...adminOnly, ctrl.updateItem);
 // GET  /api/inventory/:id                 — single item detail
 router.get('/:id', ...staffAccess, ctrl.getById);
 
-// POST /api/inventory/:id/transaction     — restock / deduction
+// POST /api/inventory/:id/transaction     — restock / deduction / adjustment
 router.post('/:id/transaction', ...staffWrite, ctrl.createTransaction);
 
 // GET  /api/inventory/:id/transactions    — movement history

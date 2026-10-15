@@ -1068,6 +1068,38 @@
   flex-shrink: 0;
 }
 
+/* ── First-load skeleton ── */
+.kp-skel {
+  position: relative;
+  overflow: hidden;
+  background: var(--k-surface-2);
+  border-radius: var(--k-r-sm);
+}
+.kp-skel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--k-border) 60%, transparent), transparent);
+  transform: translateX(-100%);
+  animation: kp-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes kp-shimmer { to { transform: translateX(100%); } }
+
+.kp-skel--line   { width: 130px; height: 16px; }
+.kp-skel--card {
+  min-width: 220px;
+  max-width: 260px;
+  flex-shrink: 0;
+  height: 132px;
+  border-radius: var(--k-r-lg);
+}
+.kp-skel--column {
+  flex: 1;
+  min-height: 120px;
+  border-radius: var(--k-r-lg);
+  margin: 12px;
+}
+
 /* ── Bottom two-column split ── */
 /* Mobile stacks the lanes (base .kp-split is flex-column); the two-column
    grid only applies from tablet up. */

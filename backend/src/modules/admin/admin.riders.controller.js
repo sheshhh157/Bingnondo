@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const db = require('../../config/db');
+const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('../rider/assignment');
 
 const BCRYPT_ROUNDS = 12;
 
@@ -106,7 +107,7 @@ exports.getRider = async (req, res) => {
 
 // ─── POST /api/admin/riders ───────────────────────────────────────────────────
 // Create a new rider account.
-// Body: { full_name, mobile_number, email?, plate_number?, vehicle_type?, notes?, password? }
+// Body: { full_name, mobile_number, email?, plate_number?, vehicle_type?, notes?, password }
 exports.createRider = async (req, res) => {
   const client = await db.getClient();
   try {
@@ -138,14 +139,16 @@ exports.createRider = async (req, res) => {
       });
     }
 
-    // Hash password if provided; otherwise NULL (rider sets it on first login via reset flow)
-    let passwordHash = null;
-    if (password) {
-      if (password.length < 8) {
-        return res.status(400).json({ message: 'Password must be at least 8 characters.' });
-      }
-      passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    // A rider cannot sign in without a password and there is no self-service
+    // setup flow, so a missing one must fail loudly rather than creating a
+    // locked-out account with a NULL hash.
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required.' });
     }
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    }
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     await client.query('BEGIN');
 
@@ -318,7 +321,16 @@ exports.updateRiderStatus = async (req, res) => {
       rider_name: current[0].full_name,
     });
 
+    // Putting a rider back on duty may unblock a delivery that was waiting for
+    // a free rider. Assign it in the same transaction.
+    let assigned = [];
+    if (status === 'available') {
+      assigned = await autoAssignPendingDeliveries(client);
+    }
+
     await client.query('COMMIT');
+
+    emitAssignedDeliveries(assigned);
 
     res.json(sanitizeRider(rows[0]));
   } catch (err) {
@@ -369,6 +381,69 @@ exports.resetRiderPassword = async (req, res) => {
     await client.query('ROLLBACK');
     console.error('[admin.riders] resetRiderPassword:', err);
     res.status(500).json({ message: 'Failed to reset password.' });
+  } finally {
+    client.release();
+  }
+};
+
+// ─── DELETE /api/admin/riders/:id ─────────────────────────────────────────────
+// Permanently remove a rider.
+//
+// Blocked in two cases:
+//   • the rider is currently on a delivery — their status is system-managed and
+//     removing them mid-run would orphan the delivery they are carrying;
+//   • the rider has delivery history — `deliveries.rider_id` is a NO ACTION FK,
+//     so the DELETE raises 23503. Deactivating keeps the history intact.
+// In both cases deactivation is the correct action, so the message says so.
+exports.deleteRider = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const riderId = parseInt(req.params.id, 10);
+    if (Number.isNaN(riderId)) {
+      return res.status(400).json({ message: 'Invalid rider ID.' });
+    }
+
+    const { rows: current } = await client.query(
+      `SELECT id, full_name, mobile_number, email, status FROM riders WHERE id = $1`,
+      [riderId]
+    );
+    if (!current[0]) return res.status(404).json({ message: 'Rider not found.' });
+
+    if (current[0].status === 'on_delivery') {
+      return res.status(409).json({
+        message: 'Cannot delete a rider who is currently on a delivery. Wait until they complete it, or deactivate them.',
+      });
+    }
+
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      `DELETE FROM riders WHERE id = $1 RETURNING id`,
+      [riderId]
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Rider not found.' });
+    }
+
+    await writeAuditLog(client, req.user.sub, 'delete_rider', 'rider', riderId, {
+      full_name: current[0].full_name,
+      mobile_number: current[0].mobile_number,
+      email: current[0].email,
+    });
+
+    await client.query('COMMIT');
+
+    res.json({ message: 'Rider deleted successfully.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err && err.code === '23503') {
+      return res.status(409).json({
+        message: "This rider has delivery history and can't be deleted. Deactivate them instead.",
+      });
+    }
+    console.error('[admin.riders] deleteRider:', err);
+    res.status(500).json({ message: 'Failed to delete rider.' });
   } finally {
     client.release();
   }
