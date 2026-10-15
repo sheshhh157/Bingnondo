@@ -6,11 +6,11 @@ const ctrl = require('./kitchen.controller');
 // All kitchen routes require staff auth
 const staffAuth = [authenticateToken, requireStaff];
 
-// kitchen_staff, staff, owner, admin can view and update kitchen orders/alerts
+// kitchen_staff + admin can view and update kitchen orders/alerts
 const kitchenRoles = [
   authenticateToken,
   requireStaff,
-  requireRoles('kitchen_staff', 'staff', 'owner', 'admin'),
+  requireRoles('kitchen_staff', 'admin'),
 ];
 
 // GET  /api/kitchen/orders                      — kitchen display queue (pending + confirmed + preparing)

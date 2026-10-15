@@ -34,9 +34,7 @@ export default function Login() {
       const routes = {
         cashier:       '/cashier',
         kitchen_staff: '/kitchen',
-        owner:         '/manager',
         admin:         '/admin',
-        manager:       '/manager',
       };
       navigate(routes[userData.role] || '/', { replace: true });
     } catch (err) {

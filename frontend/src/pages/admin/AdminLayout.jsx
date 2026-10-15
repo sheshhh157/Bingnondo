@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { DashboardIcon, SalesIcon, KitchenIcon, StocksIcon, MenuIcon } from '../manager/managerIcons';
+import { DashboardIcon, SalesIcon, KitchenIcon, StocksIcon, MenuIcon } from './oversightIcons';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import logo from '../../assets/logo.png';
 import '../../styles/AdminLayout.css';
@@ -207,6 +207,7 @@ function SidebarInner({ user, onLogout, onNav }) {
 export default function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const drawerRef = useRef(null);
@@ -336,7 +337,7 @@ export default function AdminLayout() {
             </svg>
           </button>
         </header>
-        <div className="al-content">
+        <div className="al-content" key={location.pathname}>
           <Outlet />
         </div>
       </main>

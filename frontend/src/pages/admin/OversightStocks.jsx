@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback, Fragment } from 'react';
-import { inventoryAPI } from '../../services/managerApi';
+import { inventoryAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
 import { stockStatus, stockBadgeVariant, stockStatusText } from '../../utils/format';
 import { toCsv, downloadCsv } from '../../utils/csv';
-import { listEvent, stockPatch, stockCounts } from './managerData';
+import { listEvent, stockPatch, stockCounts } from './oversightData';
 import LiveControls from './LiveControls';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';

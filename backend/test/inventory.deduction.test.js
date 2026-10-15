@@ -51,7 +51,7 @@ const canQuery = async () => {
 // ─── Auth + app (mirrors orders.status.test.js) ───────────────────────────────
 
 let token = null;
-const signIn = async (role = 'owner') => {
+const signIn = async (role = 'admin') => {
   if (token && token[role]) return token[role];
   const account = await db.query(
     `SELECT id FROM staff_accounts WHERE role = $1 AND status = 'active' ORDER BY id LIMIT 1`,
@@ -77,7 +77,7 @@ function buildApp() {
   return app;
 }
 
-async function call(method, path, { body, role = 'owner' } = {}) {
+async function call(method, path, { body, role = 'admin' } = {}) {
   const jwtToken = await signIn(role);
   if (!jwtToken) return { status: 0, body: null };
   const server = buildApp().listen(0);

@@ -167,7 +167,8 @@ async function createItem(req, res, next) {
 
 // ─── PUT /api/inventory/:id ───────────────────────────────────────────────────
 // Admin: edit an ingredient's details (name, unit, reorder level, categories)
-// and set its current stock directly. This replaces the old Adjust flow.
+// and set its current stock directly. (Cashiers correct stock via the dedicated
+// adjustment transaction instead.)
 // Body: { name, unit, current_stock?, reorder_level?, category_ids? }
 async function updateItem(req, res, next) {
   const client = await db.getClient();
@@ -192,8 +193,8 @@ async function updateItem(req, res, next) {
       return res.status(404).json({ message: 'Inventory item not found.' });
     }
 
-    // Stock is editable here (replaces the old Adjust flow). If the caller omits
-    // current_stock, the existing value is preserved.
+    // Stock is editable here. If the caller omits current_stock, the existing
+    // value is preserved.
     const oldStock = parseFloat(existing.rows[0].current_stock);
     const newStock = current_stock === undefined || current_stock === ''
       ? oldStock
@@ -267,7 +268,14 @@ async function createTransaction(req, res, next) {
     if (!VALID.includes(change_type)) {
       return res.status(400).json({ message: `change_type must be one of: ${VALID.join(', ')}.` });
     }
-    if (!quantity || Number(quantity) <= 0) {
+    // An adjustment sets the stock to a counted value, so 0 is valid (a full
+    // correction). Restock/deduction move stock by an amount and must be > 0.
+    const isAdjustment = change_type === 'adjustment';
+    const qty = Number(quantity);
+    if (quantity === undefined || quantity === '' || !Number.isFinite(qty) || qty < 0) {
+      return res.status(400).json({ message: 'Quantity must be zero or greater.' });
+    }
+    if (!isAdjustment && qty <= 0) {
       return res.status(400).json({ message: 'Quantity must be a positive number.' });
     }
 
@@ -286,9 +294,9 @@ async function createTransaction(req, res, next) {
     const item = itemRes.rows[0];
     let newStock = parseFloat(item.current_stock);
 
-    if (change_type === 'restock')     newStock += Number(quantity);
-    else if (change_type === 'deduction') newStock = Math.max(0, newStock - Number(quantity));
-    else if (change_type === 'adjustment') newStock = Number(quantity);
+    if (change_type === 'restock')     newStock += qty;
+    else if (change_type === 'deduction') newStock = Math.max(0, newStock - qty);
+    else if (change_type === 'adjustment') newStock = qty;
 
     await client.query(
       'UPDATE inventory_items SET current_stock = $1, updated_at = NOW() WHERE id = $2',
@@ -298,10 +306,10 @@ async function createTransaction(req, res, next) {
     await client.query(
       `INSERT INTO inventory_transactions (inventory_item_id, change_type, quantity, performed_by)
        VALUES ($1, $2, $3, $4)`,
-      [id, change_type, Number(quantity), req.user?.sub || null]
+      [id, change_type, qty, req.user?.sub || null]
     );
 
-    // Auto-cascade: if this restock brought the ingredient above 0,
+    // Auto-cascade: if this restock/adjustment brought the ingredient above 0,
     // re-enable any menu items where ALL linked ingredients now have stock.
     let autoEnabled = [];
     if (newStock > 0 && (change_type === 'restock' || change_type === 'adjustment')) {
@@ -336,7 +344,7 @@ async function createTransaction(req, res, next) {
       name: item.name,
       current_stock: newStock,
       change_type,
-      quantity: Number(quantity),
+      quantity: qty,
       auto_enabled_menu_items: autoEnabled,
     });
   } catch (err) {

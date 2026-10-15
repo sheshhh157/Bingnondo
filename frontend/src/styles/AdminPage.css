@@ -84,7 +84,13 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   position: relative;
+  transition: opacity 160ms ease;
 }
+/* A reload that isn't the first load keeps the rows on screen and dims them,
+   rather than swapping in a spinner (which collapsed the page and reset the
+   scroll). Clicks are swallowed while busy so a paginate double-tap can't
+   stack two requests. */
+.ap-table-wrap.is-busy { opacity: 0.45; pointer-events: none; }
 .ap-table {
   width: 100%;
   border-collapse: collapse;
@@ -107,6 +113,7 @@
 .ap-table tbody tr {
   border-bottom: 1px solid var(--al-card-border);
   transition: background 100ms ease;
+  animation: ap-fade-in 220ms ease both;
 }
 .ap-table tbody tr:last-child { border-bottom: none; }
 .ap-table tbody tr:hover { background: color-mix(in srgb, var(--color-primary) 5%, var(--color-background)); }
@@ -151,6 +158,32 @@
   justify-content: center;
   padding: 56px 0;
 }
+
+/* ─── Table skeleton (first-load placeholder) ──────────────────────────── */
+.ap-skel {
+  display: flex;
+  flex-direction: column;
+}
+.ap-skel__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--al-card-border);
+  animation: ap-fade-in 320ms ease both;
+}
+.ap-skel__row--head {
+  background: var(--color-muted);
+  border-bottom: 1px solid var(--al-card-border-hi);
+}
+.ap-skel__cell {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-muted) 25%, var(--color-border) 37%, var(--color-muted) 63%);
+  background-size: 400% 100%;
+  animation: ap-shimmer 1.4s ease infinite;
+}
+.ap-skel__row--head .ap-skel__cell { height: 8px; opacity: 0.75; }
 
 /* ─── Field label ────────────────────────────────────────────────────── */
 .ap-label {
@@ -251,11 +284,12 @@
   font-family: var(--font-body);
   font-weight: 500;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 90ms ease;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .ap-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+.ap-btn:active:not(:disabled) { transform: translateY(1px); }
 
 /* sizes */
 .ap-btn--sm  { font-size: 0.75rem;   padding: 4px 10px; height: 28px; }
@@ -341,6 +375,7 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
+  animation: ap-overlay-in 160ms ease both;
 }
 .ap-modal {
   background: var(--color-card);
@@ -350,6 +385,7 @@
   max-height: 90vh;
   max-height: 90dvh;
   overflow-y: auto;
+  animation: ap-modal-in 200ms cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 .ap-modal__head {
   display: flex;
@@ -525,6 +561,10 @@
 /* ─── Keyframes ──────────────────────────────────────────────────────── */
 @keyframes ap-spin     { to { transform: rotate(360deg); } }
 @keyframes ap-slide-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes ap-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ap-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ap-modal-in   { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes ap-shimmer  { from { background-position: 100% 0; } to { background-position: 0 0; } }
 /* ─── 6.4 Customer Restrictions ──────────────────────────────────────
  * All classes prefixed .cr- to avoid any collision.
  * ──────────────────────────────────────────────────────────────────── */
@@ -1091,7 +1131,6 @@
   /* Riders (.rd-* lives in RidersPage.css, which is not in the editable
      set — scope overrides to the admin shell via .ap-page). */
   .ap-page .rd-form-grid { grid-template-columns: 1fr; }
-  .ap-page .rd-drawer { width: min(340px, 85vw); }
 }
 @media (max-width: 480px) {
   .ap-page .rd-stats { grid-template-columns: repeat(2, 1fr); }
@@ -1112,4 +1151,22 @@
   .sys-page .ap-page__header { margin-bottom: 0; }
   .sys-page .ap-card__head,
   .sys-page .ap-card__body { padding: 12px; }
+}
+
+/* ─── Motion preferences ─────────────────────────────────────────────── */
+/* The skeleton shimmer, modal entrance, row fade-in and button press are all
+   decorative. Honour a reduced-motion preference by dropping them entirely —
+   the states still change, they just don't animate. */
+@media (prefers-reduced-motion: reduce) {
+  .ap-skel__row,
+  .ap-skel__cell,
+  .ap-table tbody tr,
+  .ap-overlay,
+  .ap-modal,
+  .ap-spinner,
+  .ap-btn {
+    animation: none !important;
+  }
+  .ap-btn,
+  .ap-table-wrap { transition: none !important; }
 }

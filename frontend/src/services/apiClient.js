@@ -111,7 +111,7 @@ export const del   = (path)       => request('DELETE', path);
  *
  * Response shape: { accessToken, refreshToken, user, message }
  *   user.type: 'staff' | 'rider'
- *   user.role: 'cashier' | 'kitchen_staff' | 'staff' | 'owner' | 'admin' (staff only, undefined for rider)
+ *   user.role: 'cashier' | 'kitchen_staff' | 'admin' (staff only, undefined for rider)
  */
 export const authClient = {
   login: async (credentials) => {

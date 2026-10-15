@@ -1,7 +1,11 @@
 const db         = require('../../config/db');
 const socketHub  = require('../../sockets');
+<<<<<<< HEAD
 const INTERNAL_BRIDGE_URL = process.env.INTERNAL_BRIDGE_URL || 'http://localhost:3000/api/internal';
 const INTERNAL_API_KEY     = process.env.INTERNAL_API_KEY;
+=======
+const { createAlert, emitAlert } = require('../kitchen/kitchen.alert');
+>>>>>>> feat/admin-mobile-filters-online-orders
 
 // ─── POST /api/payments ───────────────────────────────────────────────────────
 // Cashier marks a counter order as paid (Cash or GCash counter).
@@ -66,7 +70,14 @@ async function processPayment(req, res, next) {
       [method, payment_id]
     );
 
+    // Paid -> ring the kitchen buzzer. Same transaction as the payment, so a
+    // paid order always has its alert. If the device row is missing we skip the
+    // alert rather than fail the sale.
+    const alert = await createAlert(client, order_id);
+
     await client.query('COMMIT');
+
+    emitAlert(alert);
 
     const payment = payRows[0];
     const change  = method === 'cash'
@@ -238,9 +249,14 @@ async function verifyPayment(req, res, next) {
       [orderId, req.user.sub]
     );
 
+    // 4. Paid -> ring the kitchen buzzer (same transaction as the payment).
+    const alert = await createAlert(client, orderId);
+
     await client.query('COMMIT');
 
-    // 4. Fetch full order for kitchen socket event (status is now 'preparing')
+    emitAlert(alert);
+
+    // 5. Fetch full order for kitchen socket event (status is now 'preparing')
     const { rows: orderRows } = await db.query(
       `SELECT
           o.*,
@@ -268,12 +284,12 @@ async function verifyPayment(req, res, next) {
     if (order) {
       order.total_amount = parseFloat(order.total_amount);
 
-      // 5. Push to kitchen as 'pending' so it lands in the New Orders banner
+      // 6. Push to kitchen as 'pending' so it lands in the New Orders banner
       //    and requires kitchen acknowledgement (pending → confirmed → preparing).
       //    The DB already has 'confirmed' for audit — this override is socket-only.
       socketHub.emitNewOrder({ ...order, status: 'pending' });
 
-      // 6. Notify the customer — payment verified, order confirmed
+      // 7. Notify the customer — payment verified, order confirmed
       socketHub.emitPaymentVerified({ orderId, orderNumber: order.order_number, customerId: order.customer_id });
 
       // Bridge: create notification in customer app backend + emit in-app push

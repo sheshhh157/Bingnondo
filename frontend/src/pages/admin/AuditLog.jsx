@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import { adminAPI } from '../../services/api';
 import {
-  Spinner, Btn, AppSelect, PageHeader, Pagination, TextInput,
+  TableSkeleton, Btn, AppSelect, PageHeader, Pagination, TextInput,
 } from './adminShared';
 import { useAdminToast } from './useAdminToast';
 import { formatDateTime } from './format';
@@ -139,10 +139,10 @@ export default function AuditLog() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await adminAPI.getAuditLog({ page, limit:20, actor_id:filterActor||undefined, action:filterAction||undefined, from:filterFrom||undefined, to:filterTo||undefined });
+      const { data } = await adminAPI.getAuditLog({ page, limit:10, actor_id:filterActor||undefined, action:filterAction||undefined, from:filterFrom||undefined, to:filterTo||undefined });
       const rows = data.data||data;
       const total = data.total ?? (Array.isArray(rows)?rows.length:0);
-      setLogs(rows); setTotalPages(data.totalPages||Math.max(1,Math.ceil(total/20)));
+      setLogs(rows); setTotalPages(data.totalPages||Math.max(1,Math.ceil(total/10)));
     } catch { toast.error('Failed to load audit log.'); }
     finally { setLoading(false); }
   }, [page, filterActor, filterAction, filterFrom, filterTo, toast]);
@@ -160,6 +160,11 @@ export default function AuditLog() {
 
   function reset() { setFilterActor(''); setFilterAction(''); setFilterFrom(''); setFilterTo(''); setSearch(''); setPage(1); }
   const hasFilters = filterActor||filterAction||filterFrom||filterTo;
+
+  // Only the first load shows the skeleton; paging or changing a filter keeps
+  // the rows on screen and dims them while the next page arrives.
+  const firstLoad = loading && logs.length === 0;
+  const busy = loading && logs.length > 0;
 
   const filterFields = (
     <>
@@ -215,8 +220,8 @@ export default function AuditLog() {
 
         {/* Log table */}
         <div className="ap-card">
-          {loading ? (
-            <div className="ap-loading"><Spinner size={24}/></div>
+          {firstLoad ? (
+            <TableSkeleton rows={6} cols={5}/>
           ) : visible.length===0 ? (
             <div className="ap-empty">
               <div className="ap-empty__title">{term && logs.length>0 ? 'No entries match your search' : 'No entries found'}</div>
@@ -225,7 +230,7 @@ export default function AuditLog() {
                 : 'Try a different filter, or wait for admin actions to be performed.'}</div>
             </div>
           ) : (
-            <div className="ap-table-wrap">
+            <div className={`ap-table-wrap${busy ? ' is-busy' : ''}`} aria-busy={busy}>
               <table className="ap-table">
                 <thead>
                   <tr>
@@ -245,7 +250,7 @@ export default function AuditLog() {
               </table>
             </div>
           )}
-          {!loading&&logs.length>0&&(
+          {!firstLoad&&logs.length>0&&(
             <div className="ap-table-foot">
               <span className="ap-table-foot__info">
                 Page {page} of {totalPages} · {term ? `${visible.length} of ${logs.length}` : logs.length} entries

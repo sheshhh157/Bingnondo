@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { adminRidersAPI } from '../../services/api';
 import {
-  Spinner, Btn, Field, TextInput, PasswordInput,
+  TableSkeleton, Btn, Field, TextInput, PasswordInput,
   Modal, ConfirmModal, PageHeader, Pagination,
 } from './adminShared';
 import { useAdminToast } from './useAdminToast';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import DeliveriesTab from './DeliveriesTab';
 import '../../styles/AdminPage.css';
@@ -319,7 +321,7 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
 }
 
 // ── Rider Detail Drawer ───────────────────────────────────────────────────────
-function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onResetPassword, readOnly = false }) {
+function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onResetPassword, onDelete }) {
   if (!rider) return null;
 
   const created = rider.created_at
@@ -329,10 +331,10 @@ function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onRes
     ? new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(rider.last_login))
     : 'Never';
 
-  return (
+  return createPortal(
     <>
       {open && <div className="rd-drawer-scrim" onClick={onClose} aria-hidden="true" />}
-      <aside className={`rd-drawer${open ? ' rd-drawer--open' : ''}`} role="complementary" aria-label="Rider details">
+      <aside className={`rd-drawer${open ? ' rd-drawer--open' : ''}`} role="dialog" aria-modal="true" aria-label="Rider details">
         <div className="rd-drawer__head">
           <button className="rd-drawer__close" onClick={onClose} aria-label="Close detail panel">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -402,7 +404,7 @@ function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onRes
           </div>
         )}
 
-        {!readOnly && (<div className="rd-drawer__actions">
+        <div className="rd-drawer__actions">
           <Btn
             variant="ghost"
             size="sm"
@@ -438,10 +440,18 @@ function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onRes
               Status locked — rider is currently on a delivery.
             </div>
           )}
+          <Btn
+            variant="danger-ghost"
+            size="sm"
+            onClick={() => onDelete(rider)}
+            icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>}
+          >
+            Delete Rider
+          </Btn>
         </div>
-        )}
       </aside>
-    </>
+    </>,
+    document.body
   );
 }
 
@@ -486,8 +496,8 @@ function RiderRow({ rider, onSelect, isSelected }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function RidersPage({ readOnly = false }) {
-  const [tab, setTab] = useState(readOnly ? 'deliveries' : 'riders');
+export default function RidersPage() {
+  const [tab, setTab] = useState('riders');
 
   return (
     <div className="ap-page ap-page--wide rd-page">
@@ -513,14 +523,14 @@ export default function RidersPage({ readOnly = false }) {
       </div>
 
       {tab === 'riders'
-        ? <RidersTab readOnly={readOnly} />
+        ? <RidersTab />
         : <DeliveriesTab />}
     </div>
   );
 }
 
 // ── Riders Tab ────────────────────────────────────────────────────────────────
-function RidersTab({ readOnly = false }) {
+function RidersTab() {
   const { toast } = useAdminToast();
 
   // data
@@ -532,7 +542,10 @@ function RidersTab({ readOnly = false }) {
   const [search,    setSearch]    = useState('');
   const [statusF,   setStatusF]   = useState('all');
   const [page,      setPage]      = useState(1);
-  const LIMIT = 15;
+  const LIMIT = 10;
+
+  // Debounce the server query so typing doesn't fire a request per keystroke.
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   // UI state
   const [selected,  setSelected]  = useState(null);
@@ -552,19 +565,23 @@ function RidersTab({ readOnly = false }) {
   const [confirmSaving, setConfirmSaving] = useState(false);
   const [filterOpen,    setFilterOpen]    = useState(false);
 
+  const [deleteOpen,   setDeleteOpen]   = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+
   // ── fetch ──────────────────────────────────────────────────────────────────
-  const fetchRiders = useCallback(async () => {
-    setLoading(true);
+  const fetchRiders = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const res = await adminRidersAPI.getAll({ page, limit: LIMIT, search: search || undefined, status: statusF !== 'all' ? statusF : undefined });
+      const res = await adminRidersAPI.getAll({ page, limit: LIMIT, search: debouncedSearch || undefined, status: statusF !== 'all' ? statusF : undefined });
       setRiders(res.data || []);
       setTotal(res.total || 0);
     } catch {
       toast.error('Failed to load riders.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [page, search, statusF, toast]);
+  }, [page, debouncedSearch, statusF, toast]);
 
   // Fetch-on-mount: the sync setLoading inside `fetchRiders` is intentional.
   // oxlint-disable-next-line react/set-state-in-effect
@@ -599,7 +616,7 @@ function RidersTab({ readOnly = false }) {
         toast.success('Rider added successfully.');
       }
       setFormOpen(false);
-      fetchRiders();
+      fetchRiders(true);
     } catch (err) {
       const msg = err?.message || (editRider ? 'Failed to update rider.' : 'Failed to create rider.');
       toast.error(msg);
@@ -635,18 +652,48 @@ function RidersTab({ readOnly = false }) {
 
   const handleConfirmToggle = async () => {
     if (!confirmRider) return;
+    const rider = confirmRider;
+    const prevStatus = rider.status;
+    const newStatus = prevStatus === 'inactive' ? 'available' : 'inactive';
     setConfirmSaving(true);
-    const newStatus = confirmRider.status === 'inactive' ? 'available' : 'inactive';
+    // Optimistic: flip the badge in place so the list doesn't blink behind the
+    // modal. Reverted if the server rejects the change.
+    setRiders(list => list.map(r => (r.id === rider.id ? { ...r, status: newStatus } : r)));
     try {
-      await adminRidersAPI.updateStatus(confirmRider.id, newStatus);
+      await adminRidersAPI.updateStatus(rider.id, newStatus);
       toast.success(`Rider ${newStatus === 'inactive' ? 'deactivated' : 'reactivated'}.`);
       setConfirmOpen(false);
-      if (selected?.id === confirmRider.id) setSelected(s => ({ ...s, status: newStatus }));
-      fetchRiders();
+      if (selected?.id === rider.id) setSelected(s => ({ ...s, status: newStatus }));
+      // A status filter is on, so the row may no longer belong on this page —
+      // reconcile quietly rather than leaving a stale card in the list.
+      if (statusF !== 'all') fetchRiders(true);
     } catch {
+      setRiders(list => list.map(r => (r.id === rider.id ? { ...r, status: prevStatus } : r)));
       toast.error('Failed to update rider status.');
     } finally {
       setConfirmSaving(false);
+    }
+  };
+
+  const handleDelete = (rider) => {
+    setDeleteTarget(rider);
+    setDeleteOpen(true);
+    setDrawerOpen(false);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteSaving(true);
+    try {
+      await adminRidersAPI.remove(deleteTarget.id);
+      toast.success('Rider deleted.');
+      setDeleteOpen(false);
+      if (selected?.id === deleteTarget.id) { setSelected(null); setDrawerOpen(false); }
+      fetchRiders(true);
+    } catch (err) {
+      toast.error(err?.message || 'Failed to delete rider.');
+    } finally {
+      setDeleteSaving(false);
     }
   };
 
@@ -655,6 +702,9 @@ function RidersTab({ readOnly = false }) {
 
   // ── render ─────────────────────────────────────────────────────────────────
   const isEmpty = !loading && riders.length === 0;
+  // First load gets the skeleton; paging/filtering keeps the rows and dims them.
+  const firstLoad = loading && riders.length === 0;
+  const busy = loading && riders.length > 0;
 
   const filterFields = (
     <div className="rd-filter-pills" role="group" aria-label="Filter by status">
@@ -680,7 +730,7 @@ function RidersTab({ readOnly = false }) {
         title="Rider Management"
         chip={`${total} rider${total === 1 ? '' : 's'}`}
         sub="Register, manage, and monitor delivery riders."
-        action={readOnly ? null : <Btn variant="primary" onClick={handleAddNew} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}>Add Rider</Btn>}
+        action={<Btn variant="primary" onClick={handleAddNew} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}>Add Rider</Btn>}
       />
 
       {/* ── Stats bar ───────────────────────────────────────────────────── */}
@@ -710,17 +760,17 @@ function RidersTab({ readOnly = false }) {
         </div>
 
         {/* table */}
-        <div className="ap-table-wrap">
-          {loading ? (
-            <div className="ap-loading"><Spinner size={24} /></div>
+        <div className={`ap-table-wrap${busy ? ' is-busy' : ''}`} aria-busy={busy}>
+          {firstLoad ? (
+            <TableSkeleton rows={6} cols={5} />
           ) : isEmpty ? (
             <div className="ap-empty">
               <div className="rd-empty-icon" aria-hidden="true">
                 <VehicleIcon type="motorcycle" size={32} />
               </div>
               <div className="ap-empty__title">{search || statusF !== 'all' ? 'No riders match your filter.' : 'No riders yet.'}</div>
-              <div className="ap-empty__sub">{!search && statusF === 'all' && (readOnly ? 'No riders have been registered yet.' : 'Add your first rider to get started.')}</div>
-              {!readOnly && !search && statusF === 'all' && (
+              <div className="ap-empty__sub">{!search && statusF === 'all' && 'Add your first rider to get started.'}</div>
+              {!search && statusF === 'all' && (
                 <Btn variant="primary" size="sm" onClick={handleAddNew} style={{ marginTop: 12 }}>
                   Add First Rider
                 </Btn>
@@ -752,7 +802,7 @@ function RidersTab({ readOnly = false }) {
         </div>
 
         {/* footer */}
-        {!loading && !isEmpty && (
+        {!firstLoad && !isEmpty && (
           <div className="ap-table-foot">
             <span className="ap-table-foot__info">
               Showing {((page - 1) * LIMIT) + 1}–{Math.min(page * LIMIT, total)} of {total} rider{total !== 1 ? 's' : ''}
@@ -770,7 +820,7 @@ function RidersTab({ readOnly = false }) {
         onEdit={handleEdit}
         onToggleStatus={handleToggleStatus}
         onResetPassword={handleResetPassword}
-        readOnly={readOnly}
+        onDelete={handleDelete}
       />
 
       {/* ── Modals ────────────────────────────────────────────────────────── */}
@@ -805,6 +855,17 @@ function RidersTab({ readOnly = false }) {
         confirmLabel={confirmRider?.status === 'inactive' ? 'Reactivate' : 'Deactivate'}
         variant={confirmRider?.status === 'inactive' ? 'ghost' : 'danger'}
         loading={confirmSaving}
+      />
+
+      <ConfirmModal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Rider"
+        message={`Permanently delete ${deleteTarget?.full_name || 'this rider'}? This can't be undone. Riders with delivery history can't be deleted — deactivate them instead.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteSaving}
       />
 
       <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter riders">

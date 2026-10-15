@@ -422,6 +422,11 @@
   overflow-y: auto;
   padding: 24px;
   padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  animation: cl-page-in 200ms ease-out;
+}
+@keyframes cl-page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ─── Shell responsive (staff pages) ───────────────────────────────── */
@@ -442,4 +447,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .cl-drawer, .cl-drawer-overlay { animation: none; }
+  .cl-staff-body { animation: none; }
 }

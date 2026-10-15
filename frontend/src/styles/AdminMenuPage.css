@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   Staff Menu Management
-   Mirrors InventoryPage.css (the sibling staff page) so both read as one
+   Admin Menu Management
+   Mirrors InventoryPage.css (the sibling admin page) so both read as one
    system. All colour comes from the .sl-root ochre tokens, so this file
    needs no palette of its own.
 
-   This is the STAFF page only. The read-only cashier/manager menu uses
+   This is the ADMIN page only. The read-only cashier/oversight menu uses
    `.menu-*` in MenuPage.css — a separate namespace, left untouched here.
    ═══════════════════════════════════════════════════════════════════════ */
 

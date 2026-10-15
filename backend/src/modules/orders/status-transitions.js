@@ -16,11 +16,10 @@
  * - Cancellation is only permitted before the kitchen starts cooking
  *   (pending / confirmed). Once an order is `preparing` the food is committed,
  *   so voiding it is a business decision, not a technical one.
- * - `completed` is reachable only from `ready` or `out_for_delivery`. Nothing
- *   in the app currently writes `completed` — the kitchen stops at `ready` and
- *   the delivery page is not backed by a real endpoint — so these entries are
- *   unused today. They are here so the rules are already correct if a
- *   completion action is added, rather than needing to be revisited then.
+ * - `completed` is reachable only from `ready` (a counter order closed at the
+ *   counter) or `out_for_delivery` (a rider marking the drop delivered). Both
+ *   are live paths today: `PATCH /api/orders/:id/status` for counter orders and
+ *   the rider delivery endpoint for online ones.
  * - Terminal states map to an empty list: no further transitions are legal.
  */
 const TRANSITIONS = {

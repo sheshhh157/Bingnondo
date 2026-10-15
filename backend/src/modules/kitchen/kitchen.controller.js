@@ -2,8 +2,13 @@ const db = require('../../config/db');
 const socketHub = require('../../sockets');
 const { canTransition } = require('../orders/status-transitions');
 const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
+<<<<<<< HEAD
 const INTERNAL_BRIDGE_URL = process.env.INTERNAL_BRIDGE_URL || 'http://localhost:3000/api/internal';
 const INTERNAL_API_KEY     = process.env.INTERNAL_API_KEY;
+=======
+// Auto-hand a dispatchable online order to a free rider. See assignment.js.
+const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('../rider/assignment');
+>>>>>>> feat/admin-mobile-filters-online-orders
 
 // The kitchen's own live prep queue. 'ready' is deliberately excluded: the
 // kitchen marks an order ready and is then done with it, so a ready ticket
@@ -220,6 +225,16 @@ async function updateKitchenOrderStatus(req, res, next) {
       usage = await applyOrderIngredientUsage(client, req.params.id, req.user.sub);
     }
 
+    // An online order stays at 'ready' until it is dispatched. If the customer
+    // app already created a pending delivery row, this is the moment it becomes
+    // assignable — hand it to a free rider inside the same transaction.
+    let assigned = [];
+    if (status === 'ready' && current[0].order_type === 'online') {
+      assigned = await autoAssignPendingDeliveries(client, {
+        orderId: parseInt(req.params.id, 10),
+      });
+    }
+
     await client.query('COMMIT');
 
     const order = rows[0];
@@ -237,6 +252,10 @@ async function updateKitchenOrderStatus(req, res, next) {
         orderNumber: order.order_number,
       });
     }
+
+    // Broadcast auto-assignments only after the commit — a rollback must never
+    // send a delivery that does not exist.
+    emitAssignedDeliveries(assigned);
 
     emitIngredientUsage(usage);
 

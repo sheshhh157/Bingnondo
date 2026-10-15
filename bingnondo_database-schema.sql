@@ -1,16 +1,15 @@
---
+﻿--
 -- PostgreSQL database dump
 --
 
-\restrict OYK7cgjuOgd1kAouuT15AfcxF6v1ToBb25BLCAndoJMjhIoln4sL6IB6CDJ9UvI
+\restrict 0qHKc2DSrAUBJrzakVIDbpNOW1FCk29LZG2URVzt1I9cVzbD2KWnM6czeB1gqFt
 
--- Dumped from database version 18.6
--- Dumped by pg_dump version 18.6
+-- Dumped from database version 16.15
+-- Dumped by pg_dump version 16.15
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
-SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -19,12 +18,189 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+ALTER TABLE IF EXISTS ONLY public.support_chats DROP CONSTRAINT IF EXISTS support_chats_customer_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.support_chat_messages DROP CONSTRAINT IF EXISTS support_chat_messages_related_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.support_chat_messages DROP CONSTRAINT IF EXISTS support_chat_messages_chat_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.staff_accounts DROP CONSTRAINT IF EXISTS staff_accounts_created_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.riders DROP CONSTRAINT IF EXISTS riders_created_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.payments DROP CONSTRAINT IF EXISTS payments_verified_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.payments DROP CONSTRAINT IF EXISTS payments_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.orders DROP CONSTRAINT IF EXISTS orders_customer_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.orders DROP CONSTRAINT IF EXISTS orders_cashier_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_status_history DROP CONSTRAINT IF EXISTS order_status_history_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_status_history DROP CONSTRAINT IF EXISTS order_status_history_changed_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_items DROP CONSTRAINT IF EXISTS order_items_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.order_items DROP CONSTRAINT IF EXISTS order_items_menu_item_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.notifications DROP CONSTRAINT IF EXISTS notifications_staff_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.menu_items DROP CONSTRAINT IF EXISTS menu_items_category_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.menu_item_ingredients DROP CONSTRAINT IF EXISTS menu_item_ingredients_menu_item_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.menu_item_ingredients DROP CONSTRAINT IF EXISTS menu_item_ingredients_inventory_item_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.kitchen_alerts DROP CONSTRAINT IF EXISTS kitchen_alerts_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.kitchen_alerts DROP CONSTRAINT IF EXISTS kitchen_alerts_device_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.kitchen_alerts DROP CONSTRAINT IF EXISTS kitchen_alerts_acknowledged_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.inventory_transactions DROP CONSTRAINT IF EXISTS inventory_transactions_performed_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.inventory_transactions DROP CONSTRAINT IF EXISTS inventory_transactions_inventory_item_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.inventory_item_categories DROP CONSTRAINT IF EXISTS inventory_item_categories_item_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.inventory_item_categories DROP CONSTRAINT IF EXISTS inventory_item_categories_category_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.inventory_transactions DROP CONSTRAINT IF EXISTS fk_inventory_txn_order;
+ALTER TABLE IF EXISTS ONLY public.deliveries DROP CONSTRAINT IF EXISTS deliveries_rider_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.deliveries DROP CONSTRAINT IF EXISTS deliveries_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.deliveries DROP CONSTRAINT IF EXISTS deliveries_assigned_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.customer_restrictions DROP CONSTRAINT IF EXISTS customer_restrictions_updated_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.customer_restrictions DROP CONSTRAINT IF EXISTS customer_restrictions_customer_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_flagged_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_customer_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.chatbot_messages DROP CONSTRAINT IF EXISTS chatbot_messages_conversation_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.chatbot_conversations DROP CONSTRAINT IF EXISTS chatbot_conversations_customer_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.business_hours DROP CONSTRAINT IF EXISTS business_hours_updated_by_fkey;
+ALTER TABLE IF EXISTS ONLY public.audit_log DROP CONSTRAINT IF EXISTS audit_log_actor_id_fkey;
+DROP INDEX IF EXISTS public.idx_violations_customer;
+DROP INDEX IF EXISTS public.idx_violations_created;
+DROP INDEX IF EXISTS public.idx_support_chat_messages_chat;
+DROP INDEX IF EXISTS public.idx_riders_status;
+DROP INDEX IF EXISTS public.idx_riders_mobile;
+DROP INDEX IF EXISTS public.idx_riders_email;
+DROP INDEX IF EXISTS public.idx_payments_status;
+DROP INDEX IF EXISTS public.idx_payments_order_id_unique;
+DROP INDEX IF EXISTS public.idx_payments_order_id;
+DROP INDEX IF EXISTS public.idx_payments_gcash_pending;
+DROP INDEX IF EXISTS public.idx_otp_contact_purpose;
+DROP INDEX IF EXISTS public.idx_orders_status;
+DROP INDEX IF EXISTS public.idx_orders_order_number;
+DROP INDEX IF EXISTS public.idx_orders_customer;
+DROP INDEX IF EXISTS public.idx_orders_cashier;
+DROP INDEX IF EXISTS public.idx_order_items_order_id;
+DROP INDEX IF EXISTS public.idx_order_items_order;
+DROP INDEX IF EXISTS public.idx_notifications_staff;
+DROP INDEX IF EXISTS public.idx_menu_items_not_deleted;
+DROP INDEX IF EXISTS public.idx_menu_items_display_order;
+DROP INDEX IF EXISTS public.idx_menu_categories_display_order;
+DROP INDEX IF EXISTS public.idx_kitchen_alerts_order;
+DROP INDEX IF EXISTS public.idx_inventory_txn_item;
+DROP INDEX IF EXISTS public.idx_inventory_item_categories_category_id;
+DROP INDEX IF EXISTS public.idx_esp32_devices_device_code_unique;
+DROP INDEX IF EXISTS public.idx_deliveries_status;
+DROP INDEX IF EXISTS public.idx_deliveries_rider;
+DROP INDEX IF EXISTS public.idx_audit_log_actor;
+ALTER TABLE IF EXISTS ONLY public.support_chats DROP CONSTRAINT IF EXISTS support_chats_pkey;
+ALTER TABLE IF EXISTS ONLY public.support_chats DROP CONSTRAINT IF EXISTS support_chats_customer_id_key;
+ALTER TABLE IF EXISTS ONLY public.support_chat_messages DROP CONSTRAINT IF EXISTS support_chat_messages_pkey;
+ALTER TABLE IF EXISTS ONLY public.staff_accounts DROP CONSTRAINT IF EXISTS staff_accounts_pkey;
+ALTER TABLE IF EXISTS ONLY public.staff_accounts DROP CONSTRAINT IF EXISTS staff_accounts_email_key;
+ALTER TABLE IF EXISTS ONLY public.riders DROP CONSTRAINT IF EXISTS riders_pkey;
+ALTER TABLE IF EXISTS ONLY public.riders DROP CONSTRAINT IF EXISTS riders_mobile_number_key;
+ALTER TABLE IF EXISTS ONLY public.riders DROP CONSTRAINT IF EXISTS riders_email_key;
+ALTER TABLE IF EXISTS ONLY public.pending_registrations DROP CONSTRAINT IF EXISTS pending_registrations_pkey;
+ALTER TABLE IF EXISTS ONLY public.payments DROP CONSTRAINT IF EXISTS payments_pkey;
+ALTER TABLE IF EXISTS ONLY public.payments DROP CONSTRAINT IF EXISTS payments_order_id_key;
+ALTER TABLE IF EXISTS ONLY public.otp_verifications DROP CONSTRAINT IF EXISTS otp_verifications_pkey;
+ALTER TABLE IF EXISTS ONLY public.orders DROP CONSTRAINT IF EXISTS orders_pkey;
+ALTER TABLE IF EXISTS ONLY public.orders DROP CONSTRAINT IF EXISTS orders_order_number_key;
+ALTER TABLE IF EXISTS ONLY public.order_status_history DROP CONSTRAINT IF EXISTS order_status_history_pkey;
+ALTER TABLE IF EXISTS ONLY public.order_items DROP CONSTRAINT IF EXISTS order_items_pkey;
+ALTER TABLE IF EXISTS ONLY public.notifications DROP CONSTRAINT IF EXISTS notifications_pkey;
+ALTER TABLE IF EXISTS ONLY public.menu_items DROP CONSTRAINT IF EXISTS menu_items_pkey;
+ALTER TABLE IF EXISTS ONLY public.menu_item_ingredients DROP CONSTRAINT IF EXISTS menu_item_ingredients_pkey;
+ALTER TABLE IF EXISTS ONLY public.menu_categories DROP CONSTRAINT IF EXISTS menu_categories_pkey;
+ALTER TABLE IF EXISTS ONLY public.menu_categories DROP CONSTRAINT IF EXISTS menu_categories_name_key;
+ALTER TABLE IF EXISTS ONLY public.kitchen_alerts DROP CONSTRAINT IF EXISTS kitchen_alerts_pkey;
+ALTER TABLE IF EXISTS ONLY public.inventory_transactions DROP CONSTRAINT IF EXISTS inventory_transactions_pkey;
+ALTER TABLE IF EXISTS ONLY public.inventory_items DROP CONSTRAINT IF EXISTS inventory_items_pkey;
+ALTER TABLE IF EXISTS ONLY public.inventory_items DROP CONSTRAINT IF EXISTS inventory_items_name_key;
+ALTER TABLE IF EXISTS ONLY public.inventory_item_categories DROP CONSTRAINT IF EXISTS inventory_item_categories_pkey;
+ALTER TABLE IF EXISTS ONLY public.esp32_devices DROP CONSTRAINT IF EXISTS esp32_devices_pkey;
+ALTER TABLE IF EXISTS ONLY public.deliveries DROP CONSTRAINT IF EXISTS deliveries_pkey;
+ALTER TABLE IF EXISTS ONLY public.deliveries DROP CONSTRAINT IF EXISTS deliveries_order_id_key;
+ALTER TABLE IF EXISTS ONLY public.customers DROP CONSTRAINT IF EXISTS customers_pkey;
+ALTER TABLE IF EXISTS ONLY public.customers DROP CONSTRAINT IF EXISTS customers_mobile_number_key;
+ALTER TABLE IF EXISTS ONLY public.customers DROP CONSTRAINT IF EXISTS customers_email_key;
+ALTER TABLE IF EXISTS ONLY public.customer_restrictions DROP CONSTRAINT IF EXISTS customer_restrictions_pkey;
+ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_pkey;
+ALTER TABLE IF EXISTS ONLY public.chatbot_messages DROP CONSTRAINT IF EXISTS chatbot_messages_pkey;
+ALTER TABLE IF EXISTS ONLY public.chatbot_conversations DROP CONSTRAINT IF EXISTS chatbot_conversations_pkey;
+ALTER TABLE IF EXISTS ONLY public.business_hours DROP CONSTRAINT IF EXISTS business_hours_pkey;
+ALTER TABLE IF EXISTS ONLY public.business_hours DROP CONSTRAINT IF EXISTS business_hours_day_of_week_key;
+ALTER TABLE IF EXISTS ONLY public.audit_log DROP CONSTRAINT IF EXISTS audit_log_pkey;
+ALTER TABLE IF EXISTS public.support_chats ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.support_chat_messages ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.staff_accounts ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.riders ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.payments ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.otp_verifications ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.orders ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.order_status_history ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.order_items ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.notifications ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.menu_items ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.menu_categories ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.kitchen_alerts ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.inventory_transactions ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.inventory_items ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.esp32_devices ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.deliveries ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.customers ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.customer_order_violations ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.chatbot_messages ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.chatbot_conversations ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.business_hours ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.audit_log ALTER COLUMN id DROP DEFAULT;
+DROP SEQUENCE IF EXISTS public.support_chats_id_seq;
+DROP TABLE IF EXISTS public.support_chats;
+DROP SEQUENCE IF EXISTS public.support_chat_messages_id_seq;
+DROP TABLE IF EXISTS public.support_chat_messages;
+DROP SEQUENCE IF EXISTS public.staff_accounts_id_seq;
+DROP TABLE IF EXISTS public.staff_accounts;
+DROP SEQUENCE IF EXISTS public.riders_id_seq;
+DROP TABLE IF EXISTS public.riders;
+DROP TABLE IF EXISTS public.pending_registrations;
+DROP SEQUENCE IF EXISTS public.payments_id_seq;
+DROP TABLE IF EXISTS public.payments;
+DROP SEQUENCE IF EXISTS public.otp_verifications_id_seq;
+DROP TABLE IF EXISTS public.otp_verifications;
+DROP SEQUENCE IF EXISTS public.orders_id_seq;
+DROP TABLE IF EXISTS public.orders;
+DROP SEQUENCE IF EXISTS public.order_status_history_id_seq;
+DROP TABLE IF EXISTS public.order_status_history;
+DROP SEQUENCE IF EXISTS public.order_items_id_seq;
+DROP TABLE IF EXISTS public.order_items;
+DROP SEQUENCE IF EXISTS public.notifications_id_seq;
+DROP TABLE IF EXISTS public.notifications;
+DROP SEQUENCE IF EXISTS public.menu_items_id_seq;
+DROP TABLE IF EXISTS public.menu_items;
+DROP TABLE IF EXISTS public.menu_item_ingredients;
+DROP SEQUENCE IF EXISTS public.menu_categories_id_seq;
+DROP TABLE IF EXISTS public.menu_categories;
+DROP SEQUENCE IF EXISTS public.kitchen_alerts_id_seq;
+DROP TABLE IF EXISTS public.kitchen_alerts;
+DROP SEQUENCE IF EXISTS public.inventory_transactions_id_seq;
+DROP TABLE IF EXISTS public.inventory_transactions;
+DROP SEQUENCE IF EXISTS public.inventory_items_id_seq;
+DROP TABLE IF EXISTS public.inventory_items;
+DROP TABLE IF EXISTS public.inventory_item_categories;
+DROP SEQUENCE IF EXISTS public.esp32_devices_id_seq;
+DROP TABLE IF EXISTS public.esp32_devices;
+DROP SEQUENCE IF EXISTS public.deliveries_id_seq;
+DROP TABLE IF EXISTS public.deliveries;
+DROP SEQUENCE IF EXISTS public.customers_id_seq;
+DROP TABLE IF EXISTS public.customers;
+DROP TABLE IF EXISTS public.customer_restrictions;
+DROP SEQUENCE IF EXISTS public.customer_order_violations_id_seq;
+DROP TABLE IF EXISTS public.customer_order_violations;
+DROP SEQUENCE IF EXISTS public.chatbot_messages_id_seq;
+DROP TABLE IF EXISTS public.chatbot_messages;
+DROP SEQUENCE IF EXISTS public.chatbot_conversations_id_seq;
+DROP TABLE IF EXISTS public.chatbot_conversations;
+DROP SEQUENCE IF EXISTS public.business_hours_id_seq;
+DROP TABLE IF EXISTS public.business_hours;
+DROP SEQUENCE IF EXISTS public.audit_log_id_seq;
+DROP TABLE IF EXISTS public.audit_log;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
 --
--- Name: audit_log; Type: TABLE; Schema: public; Owner: postgres
+-- Name: audit_log; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.audit_log (
@@ -38,10 +214,8 @@ CREATE TABLE public.audit_log (
 );
 
 
-ALTER TABLE public.audit_log OWNER TO postgres;
-
 --
--- Name: audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.audit_log_id_seq
@@ -53,17 +227,15 @@ CREATE SEQUENCE public.audit_log_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.audit_log_id_seq OWNER TO postgres;
-
 --
--- Name: audit_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: audit_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.audit_log_id_seq OWNED BY public.audit_log.id;
 
 
 --
--- Name: business_hours; Type: TABLE; Schema: public; Owner: postgres
+-- Name: business_hours; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.business_hours (
@@ -78,10 +250,8 @@ CREATE TABLE public.business_hours (
 );
 
 
-ALTER TABLE public.business_hours OWNER TO postgres;
-
 --
--- Name: business_hours_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: business_hours_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.business_hours_id_seq
@@ -93,17 +263,15 @@ CREATE SEQUENCE public.business_hours_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.business_hours_id_seq OWNER TO postgres;
-
 --
--- Name: business_hours_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: business_hours_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.business_hours_id_seq OWNED BY public.business_hours.id;
 
 
 --
--- Name: chatbot_conversations; Type: TABLE; Schema: public; Owner: postgres
+-- Name: chatbot_conversations; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.chatbot_conversations (
@@ -113,10 +281,8 @@ CREATE TABLE public.chatbot_conversations (
 );
 
 
-ALTER TABLE public.chatbot_conversations OWNER TO postgres;
-
 --
--- Name: chatbot_conversations_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: chatbot_conversations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.chatbot_conversations_id_seq
@@ -128,17 +294,15 @@ CREATE SEQUENCE public.chatbot_conversations_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.chatbot_conversations_id_seq OWNER TO postgres;
-
 --
--- Name: chatbot_conversations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: chatbot_conversations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.chatbot_conversations_id_seq OWNED BY public.chatbot_conversations.id;
 
 
 --
--- Name: chatbot_messages; Type: TABLE; Schema: public; Owner: postgres
+-- Name: chatbot_messages; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.chatbot_messages (
@@ -147,14 +311,12 @@ CREATE TABLE public.chatbot_messages (
     sender character varying(10) NOT NULL,
     content text NOT NULL,
     sent_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chatbot_messages_sender_check CHECK (((sender)::text = ANY ((ARRAY['customer'::character varying, 'bot'::character varying])::text[])))
+    CONSTRAINT chatbot_messages_sender_check CHECK (((sender)::text = ANY (ARRAY[('customer'::character varying)::text, ('bot'::character varying)::text])))
 );
 
 
-ALTER TABLE public.chatbot_messages OWNER TO postgres;
-
 --
--- Name: chatbot_messages_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: chatbot_messages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.chatbot_messages_id_seq
@@ -166,17 +328,15 @@ CREATE SEQUENCE public.chatbot_messages_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.chatbot_messages_id_seq OWNER TO postgres;
-
 --
--- Name: chatbot_messages_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: chatbot_messages_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.chatbot_messages_id_seq OWNED BY public.chatbot_messages.id;
 
 
 --
--- Name: customer_order_violations; Type: TABLE; Schema: public; Owner: postgres
+-- Name: customer_order_violations; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.customer_order_violations (
@@ -186,14 +346,12 @@ CREATE TABLE public.customer_order_violations (
     violation_type character varying(30) NOT NULL,
     flagged_by integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT customer_order_violations_violation_type_check CHECK (((violation_type)::text = ANY ((ARRAY['cancelled_before_prep'::character varying, 'cancelled_after_prep'::character varying, 'no_show'::character varying])::text[])))
+    CONSTRAINT customer_order_violations_violation_type_check CHECK (((violation_type)::text = ANY (ARRAY[('cancelled_before_prep'::character varying)::text, ('cancelled_after_prep'::character varying)::text, ('no_show'::character varying)::text])))
 );
 
 
-ALTER TABLE public.customer_order_violations OWNER TO postgres;
-
 --
--- Name: customer_order_violations_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: customer_order_violations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.customer_order_violations_id_seq
@@ -205,17 +363,15 @@ CREATE SEQUENCE public.customer_order_violations_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.customer_order_violations_id_seq OWNER TO postgres;
-
 --
--- Name: customer_order_violations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: customer_order_violations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.customer_order_violations_id_seq OWNED BY public.customer_order_violations.id;
 
 
 --
--- Name: customer_restrictions; Type: TABLE; Schema: public; Owner: postgres
+-- Name: customer_restrictions; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.customer_restrictions (
@@ -224,14 +380,12 @@ CREATE TABLE public.customer_restrictions (
     reason text,
     updated_by integer,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT customer_restrictions_restriction_level_check CHECK (((restriction_level)::text = ANY ((ARRAY['none'::character varying, 'warned'::character varying, 'cod_restricted'::character varying, 'suspended'::character varying])::text[])))
+    CONSTRAINT customer_restrictions_restriction_level_check CHECK (((restriction_level)::text = ANY (ARRAY[('none'::character varying)::text, ('warned'::character varying)::text, ('cod_restricted'::character varying)::text, ('suspended'::character varying)::text])))
 );
 
 
-ALTER TABLE public.customer_restrictions OWNER TO postgres;
-
 --
--- Name: customers; Type: TABLE; Schema: public; Owner: postgres
+-- Name: customers; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.customers (
@@ -248,14 +402,12 @@ CREATE TABLE public.customers (
     status character varying(30) DEFAULT 'awaiting_verification'::character varying,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT customers_status_check CHECK (((status)::text = ANY ((ARRAY['awaiting_verification'::character varying, 'active'::character varying, 'suspended'::character varying])::text[])))
+    CONSTRAINT customers_status_check CHECK (((status)::text = ANY (ARRAY[('awaiting_verification'::character varying)::text, ('active'::character varying)::text, ('suspended'::character varying)::text])))
 );
 
 
-ALTER TABLE public.customers OWNER TO postgres;
-
 --
--- Name: customers_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: customers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.customers_id_seq
@@ -267,66 +419,15 @@ CREATE SEQUENCE public.customers_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.customers_id_seq OWNER TO postgres;
-
 --
--- Name: customers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: customers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.customers_id_seq OWNED BY public.customers.id;
 
 
 --
--- Name: dashboard_switch_config; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.dashboard_switch_config (
-    id integer NOT NULL,
-    scope character varying(20) NOT NULL,
-    staff_id integer,
-    target_dashboard character varying(20),
-    requires_pin boolean DEFAULT false NOT NULL,
-    configured_by integer NOT NULL,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_scope_fields CHECK (((((scope)::text = 'per_staff'::text) AND (staff_id IS NOT NULL) AND (target_dashboard IS NULL)) OR (((scope)::text = 'per_dashboard'::text) AND (target_dashboard IS NOT NULL) AND (staff_id IS NULL)))),
-    CONSTRAINT dashboard_switch_config_scope_check CHECK (((scope)::text = ANY ((ARRAY['per_staff'::character varying, 'per_dashboard'::character varying])::text[]))),
-    CONSTRAINT dashboard_switch_config_target_dashboard_check CHECK (((target_dashboard)::text = ANY ((ARRAY['cashier'::character varying, 'kitchen_staff'::character varying, 'staff'::character varying, 'owner'::character varying])::text[])))
-);
-
-
-ALTER TABLE public.dashboard_switch_config OWNER TO postgres;
-
---
--- Name: TABLE dashboard_switch_config; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE public.dashboard_switch_config IS 'Controls whether PIN verification is required on switch — scoped per staff member or per target dashboard.';
-
-
---
--- Name: dashboard_switch_config_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.dashboard_switch_config_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.dashboard_switch_config_id_seq OWNER TO postgres;
-
---
--- Name: dashboard_switch_config_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.dashboard_switch_config_id_seq OWNED BY public.dashboard_switch_config.id;
-
-
---
--- Name: deliveries; Type: TABLE; Schema: public; Owner: postgres
+-- Name: deliveries; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.deliveries (
@@ -341,15 +442,13 @@ CREATE TABLE public.deliveries (
     assigned_at timestamp without time zone,
     delivered_at timestamp without time zone,
     rider_id integer,
-    CONSTRAINT deliveries_delivery_preference_check CHECK (((delivery_preference)::text = ANY ((ARRAY['own_delivery'::character varying, 'lalamove'::character varying])::text[]))),
-    CONSTRAINT deliveries_status_check CHECK (((status)::text = ANY ((ARRAY['pending_assignment'::character varying, 'assigned'::character varying, 'out_for_delivery'::character varying, 'delivered'::character varying, 'cancelled'::character varying])::text[])))
+    CONSTRAINT deliveries_delivery_preference_check CHECK (((delivery_preference)::text = ANY (ARRAY[('own_delivery'::character varying)::text, ('lalamove'::character varying)::text]))),
+    CONSTRAINT deliveries_status_check CHECK (((status)::text = ANY (ARRAY[('pending_assignment'::character varying)::text, ('assigned'::character varying)::text, ('out_for_delivery'::character varying)::text, ('delivered'::character varying)::text, ('cancelled'::character varying)::text])))
 );
 
 
-ALTER TABLE public.deliveries OWNER TO postgres;
-
 --
--- Name: deliveries_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: deliveries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.deliveries_id_seq
@@ -361,17 +460,59 @@ CREATE SEQUENCE public.deliveries_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.deliveries_id_seq OWNER TO postgres;
-
 --
--- Name: deliveries_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: deliveries_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.deliveries_id_seq OWNED BY public.deliveries.id;
 
 
 --
--- Name: inventory_items; Type: TABLE; Schema: public; Owner: postgres
+-- Name: esp32_devices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.esp32_devices (
+    id integer NOT NULL,
+    device_code text NOT NULL,
+    location_label text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    status text DEFAULT 'offline'::text NOT NULL,
+    last_ping_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: esp32_devices_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.esp32_devices_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: esp32_devices_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.esp32_devices_id_seq OWNED BY public.esp32_devices.id;
+
+
+--
+-- Name: inventory_item_categories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_item_categories (
+    inventory_item_id integer NOT NULL,
+    category_id integer NOT NULL
+);
+
+
+--
+-- Name: inventory_items; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.inventory_items (
@@ -384,10 +525,8 @@ CREATE TABLE public.inventory_items (
 );
 
 
-ALTER TABLE public.inventory_items OWNER TO postgres;
-
 --
--- Name: inventory_items_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: inventory_items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.inventory_items_id_seq
@@ -399,17 +538,15 @@ CREATE SEQUENCE public.inventory_items_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.inventory_items_id_seq OWNER TO postgres;
-
 --
--- Name: inventory_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: inventory_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.inventory_items_id_seq OWNED BY public.inventory_items.id;
 
 
 --
--- Name: inventory_transactions; Type: TABLE; Schema: public; Owner: postgres
+-- Name: inventory_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.inventory_transactions (
@@ -420,14 +557,12 @@ CREATE TABLE public.inventory_transactions (
     reference_order_id integer,
     performed_by integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT inventory_transactions_change_type_check CHECK (((change_type)::text = ANY ((ARRAY['restock'::character varying, 'deduction'::character varying, 'adjustment'::character varying])::text[])))
+    CONSTRAINT inventory_transactions_change_type_check CHECK (((change_type)::text = ANY (ARRAY[('restock'::character varying)::text, ('deduction'::character varying)::text, ('adjustment'::character varying)::text])))
 );
 
 
-ALTER TABLE public.inventory_transactions OWNER TO postgres;
-
 --
--- Name: inventory_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: inventory_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.inventory_transactions_id_seq
@@ -439,17 +574,15 @@ CREATE SEQUENCE public.inventory_transactions_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.inventory_transactions_id_seq OWNER TO postgres;
-
 --
--- Name: inventory_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: inventory_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.inventory_transactions_id_seq OWNED BY public.inventory_transactions.id;
 
 
 --
--- Name: kitchen_alerts; Type: TABLE; Schema: public; Owner: postgres
+-- Name: kitchen_alerts; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.kitchen_alerts (
@@ -462,10 +595,8 @@ CREATE TABLE public.kitchen_alerts (
 );
 
 
-ALTER TABLE public.kitchen_alerts OWNER TO postgres;
-
 --
--- Name: kitchen_alerts_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: kitchen_alerts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.kitchen_alerts_id_seq
@@ -477,17 +608,15 @@ CREATE SEQUENCE public.kitchen_alerts_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.kitchen_alerts_id_seq OWNER TO postgres;
-
 --
--- Name: kitchen_alerts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: kitchen_alerts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.kitchen_alerts_id_seq OWNED BY public.kitchen_alerts.id;
 
 
 --
--- Name: menu_categories; Type: TABLE; Schema: public; Owner: postgres
+-- Name: menu_categories; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.menu_categories (
@@ -497,10 +626,8 @@ CREATE TABLE public.menu_categories (
 );
 
 
-ALTER TABLE public.menu_categories OWNER TO postgres;
-
 --
--- Name: menu_categories_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: menu_categories_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.menu_categories_id_seq
@@ -512,17 +639,15 @@ CREATE SEQUENCE public.menu_categories_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.menu_categories_id_seq OWNER TO postgres;
-
 --
--- Name: menu_categories_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: menu_categories_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.menu_categories_id_seq OWNED BY public.menu_categories.id;
 
 
 --
--- Name: menu_item_ingredients; Type: TABLE; Schema: public; Owner: postgres
+-- Name: menu_item_ingredients; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.menu_item_ingredients (
@@ -532,10 +657,8 @@ CREATE TABLE public.menu_item_ingredients (
 );
 
 
-ALTER TABLE public.menu_item_ingredients OWNER TO postgres;
-
 --
--- Name: menu_items; Type: TABLE; Schema: public; Owner: postgres
+-- Name: menu_items; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.menu_items (
@@ -555,10 +678,8 @@ CREATE TABLE public.menu_items (
 );
 
 
-ALTER TABLE public.menu_items OWNER TO postgres;
-
 --
--- Name: menu_items_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: menu_items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.menu_items_id_seq
@@ -570,17 +691,15 @@ CREATE SEQUENCE public.menu_items_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.menu_items_id_seq OWNER TO postgres;
-
 --
--- Name: menu_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: menu_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.menu_items_id_seq OWNED BY public.menu_items.id;
 
 
 --
--- Name: notifications; Type: TABLE; Schema: public; Owner: postgres
+-- Name: notifications; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.notifications (
@@ -594,10 +713,8 @@ CREATE TABLE public.notifications (
 );
 
 
-ALTER TABLE public.notifications OWNER TO postgres;
-
 --
--- Name: notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.notifications_id_seq
@@ -609,17 +726,15 @@ CREATE SEQUENCE public.notifications_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.notifications_id_seq OWNER TO postgres;
-
 --
--- Name: notifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: notifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.notifications_id_seq OWNED BY public.notifications.id;
 
 
 --
--- Name: order_items; Type: TABLE; Schema: public; Owner: postgres
+-- Name: order_items; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.order_items (
@@ -633,10 +748,8 @@ CREATE TABLE public.order_items (
 );
 
 
-ALTER TABLE public.order_items OWNER TO postgres;
-
 --
--- Name: order_items_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: order_items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.order_items_id_seq
@@ -648,17 +761,15 @@ CREATE SEQUENCE public.order_items_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.order_items_id_seq OWNER TO postgres;
-
 --
--- Name: order_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: order_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.order_items_id_seq OWNED BY public.order_items.id;
 
 
 --
--- Name: order_status_history; Type: TABLE; Schema: public; Owner: postgres
+-- Name: order_status_history; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.order_status_history (
@@ -670,10 +781,8 @@ CREATE TABLE public.order_status_history (
 );
 
 
-ALTER TABLE public.order_status_history OWNER TO postgres;
-
 --
--- Name: order_status_history_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: order_status_history_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.order_status_history_id_seq
@@ -685,17 +794,15 @@ CREATE SEQUENCE public.order_status_history_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.order_status_history_id_seq OWNER TO postgres;
-
 --
--- Name: order_status_history_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: order_status_history_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.order_status_history_id_seq OWNED BY public.order_status_history.id;
 
 
 --
--- Name: orders; Type: TABLE; Schema: public; Owner: postgres
+-- Name: orders; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.orders (
@@ -710,15 +817,13 @@ CREATE TABLE public.orders (
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     order_number character varying(30),
-    CONSTRAINT orders_order_type_check CHECK (((order_type)::text = ANY ((ARRAY['online'::character varying, 'counter'::character varying])::text[]))),
-    CONSTRAINT orders_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'confirmed'::character varying, 'preparing'::character varying, 'ready'::character varying, 'out_for_delivery'::character varying, 'completed'::character varying, 'cancelled'::character varying])::text[])))
+    CONSTRAINT orders_order_type_check CHECK (((order_type)::text = ANY (ARRAY[('online'::character varying)::text, ('counter'::character varying)::text]))),
+    CONSTRAINT orders_status_check CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('confirmed'::character varying)::text, ('preparing'::character varying)::text, ('ready'::character varying)::text, ('out_for_delivery'::character varying)::text, ('completed'::character varying)::text, ('cancelled'::character varying)::text])))
 );
 
 
-ALTER TABLE public.orders OWNER TO postgres;
-
 --
--- Name: orders_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: orders_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.orders_id_seq
@@ -730,17 +835,15 @@ CREATE SEQUENCE public.orders_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.orders_id_seq OWNER TO postgres;
-
 --
--- Name: orders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: orders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.orders_id_seq OWNED BY public.orders.id;
 
 
 --
--- Name: otp_verifications; Type: TABLE; Schema: public; Owner: postgres
+-- Name: otp_verifications; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.otp_verifications (
@@ -751,14 +854,12 @@ CREATE TABLE public.otp_verifications (
     expires_at timestamp without time zone NOT NULL,
     verified_at timestamp without time zone,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT otp_verifications_purpose_check CHECK (((purpose)::text = ANY ((ARRAY['email_verification'::character varying, 'mobile_verification'::character varying, 'password_reset'::character varying])::text[])))
+    CONSTRAINT otp_verifications_purpose_check CHECK (((purpose)::text = ANY (ARRAY[('email_verification'::character varying)::text, ('mobile_verification'::character varying)::text, ('password_reset'::character varying)::text])))
 );
 
 
-ALTER TABLE public.otp_verifications OWNER TO postgres;
-
 --
--- Name: otp_verifications_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: otp_verifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.otp_verifications_id_seq
@@ -770,17 +871,15 @@ CREATE SEQUENCE public.otp_verifications_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.otp_verifications_id_seq OWNER TO postgres;
-
 --
--- Name: otp_verifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: otp_verifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.otp_verifications_id_seq OWNED BY public.otp_verifications.id;
 
 
 --
--- Name: payments; Type: TABLE; Schema: public; Owner: postgres
+-- Name: payments; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.payments (
@@ -798,15 +897,13 @@ CREATE TABLE public.payments (
     verified_by integer,
     verified_at timestamp without time zone,
     rejection_reason character varying(255) DEFAULT NULL::character varying,
-    CONSTRAINT payments_method_check CHECK (((method)::text = ANY ((ARRAY['gcash'::character varying, 'cash'::character varying, 'cash_on_delivery'::character varying])::text[]))),
+    CONSTRAINT payments_method_check CHECK (((method)::text = ANY (ARRAY[('gcash'::character varying)::text, ('cash'::character varying)::text, ('cash_on_delivery'::character varying)::text]))),
     CONSTRAINT payments_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'awaiting_verification'::character varying, 'paid'::character varying, 'rejected'::character varying, 'refunded'::character varying])::text[])))
 );
 
 
-ALTER TABLE public.payments OWNER TO postgres;
-
 --
--- Name: payments_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: payments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.payments_id_seq
@@ -818,17 +915,15 @@ CREATE SEQUENCE public.payments_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.payments_id_seq OWNER TO postgres;
-
 --
--- Name: payments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: payments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.payments_id_seq OWNED BY public.payments.id;
 
 
 --
--- Name: pending_registrations; Type: TABLE; Schema: public; Owner: postgres
+-- Name: pending_registrations; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.pending_registrations (
@@ -839,10 +934,8 @@ CREATE TABLE public.pending_registrations (
 );
 
 
-ALTER TABLE public.pending_registrations OWNER TO postgres;
-
 --
--- Name: riders; Type: TABLE; Schema: public; Owner: postgres
+-- Name: riders; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.riders (
@@ -859,14 +952,12 @@ CREATE TABLE public.riders (
     email character varying(150),
     password_hash text,
     last_login timestamp without time zone,
-    CONSTRAINT riders_status_check CHECK (((status)::text = ANY ((ARRAY['available'::character varying, 'on_delivery'::character varying, 'inactive'::character varying])::text[])))
+    CONSTRAINT riders_status_check CHECK (((status)::text = ANY (ARRAY[('available'::character varying)::text, ('on_delivery'::character varying)::text, ('inactive'::character varying)::text])))
 );
 
 
-ALTER TABLE public.riders OWNER TO postgres;
-
 --
--- Name: riders_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: riders_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.riders_id_seq
@@ -878,17 +969,15 @@ CREATE SEQUENCE public.riders_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.riders_id_seq OWNER TO postgres;
-
 --
--- Name: riders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: riders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.riders_id_seq OWNED BY public.riders.id;
 
 
 --
--- Name: staff_accounts; Type: TABLE; Schema: public; Owner: postgres
+-- Name: staff_accounts; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.staff_accounts (
@@ -901,15 +990,13 @@ CREATE TABLE public.staff_accounts (
     created_by integer,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT staff_accounts_role_check CHECK (((role)::text = ANY ((ARRAY['cashier'::character varying, 'kitchen_staff'::character varying, 'staff'::character varying, 'owner'::character varying, 'admin'::character varying])::text[]))),
-    CONSTRAINT staff_accounts_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'deactivated'::character varying])::text[])))
+    CONSTRAINT staff_accounts_role_check CHECK (((role)::text = ANY (ARRAY[('cashier'::character varying)::text, ('kitchen_staff'::character varying)::text, ('staff'::character varying)::text, ('owner'::character varying)::text, ('admin'::character varying)::text]))),
+    CONSTRAINT staff_accounts_status_check CHECK (((status)::text = ANY (ARRAY[('active'::character varying)::text, ('deactivated'::character varying)::text])))
 );
 
 
-ALTER TABLE public.staff_accounts OWNER TO postgres;
-
 --
--- Name: staff_accounts_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: staff_accounts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.staff_accounts_id_seq
@@ -921,83 +1008,15 @@ CREATE SEQUENCE public.staff_accounts_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.staff_accounts_id_seq OWNER TO postgres;
-
 --
--- Name: staff_accounts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: staff_accounts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.staff_accounts_id_seq OWNED BY public.staff_accounts.id;
 
 
 --
--- Name: staff_dashboard_access; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.staff_dashboard_access (
-    id integer NOT NULL,
-    staff_id integer NOT NULL,
-    target_dashboard character varying(20) NOT NULL,
-    granted_by integer NOT NULL,
-    granted_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT staff_dashboard_access_target_dashboard_check CHECK (((target_dashboard)::text = ANY ((ARRAY['cashier'::character varying, 'kitchen_staff'::character varying, 'staff'::character varying, 'owner'::character varying])::text[])))
-);
-
-
-ALTER TABLE public.staff_dashboard_access OWNER TO postgres;
-
---
--- Name: TABLE staff_dashboard_access; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE public.staff_dashboard_access IS 'Admin-granted permission for a staff member to switch into a dashboard without logging out.';
-
-
---
--- Name: staff_dashboard_access_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE public.staff_dashboard_access_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.staff_dashboard_access_id_seq OWNER TO postgres;
-
---
--- Name: staff_dashboard_access_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE public.staff_dashboard_access_id_seq OWNED BY public.staff_dashboard_access.id;
-
-
---
--- Name: staff_switch_pin; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.staff_switch_pin (
-    staff_id integer NOT NULL,
-    pin_hash character varying(255) NOT NULL,
-    set_by_admin boolean DEFAULT true,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
-);
-
-
-ALTER TABLE public.staff_switch_pin OWNER TO postgres;
-
---
--- Name: TABLE staff_switch_pin; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE public.staff_switch_pin IS 'Bcrypt-hashed PIN used to authenticate a dashboard switch. Set by Admin; changeable by staff.';
-
-
---
--- Name: support_chat_messages; Type: TABLE; Schema: public; Owner: postgres
+-- Name: support_chat_messages; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.support_chat_messages (
@@ -1008,14 +1027,12 @@ CREATE TABLE public.support_chat_messages (
     related_order_id integer,
     content text NOT NULL,
     sent_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT support_chat_messages_sender_type_check CHECK (((sender_type)::text = ANY ((ARRAY['customer'::character varying, 'staff'::character varying])::text[])))
+    CONSTRAINT support_chat_messages_sender_type_check CHECK (((sender_type)::text = ANY (ARRAY[('customer'::character varying)::text, ('staff'::character varying)::text])))
 );
 
 
-ALTER TABLE public.support_chat_messages OWNER TO postgres;
-
 --
--- Name: support_chat_messages_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: support_chat_messages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.support_chat_messages_id_seq
@@ -1027,17 +1044,15 @@ CREATE SEQUENCE public.support_chat_messages_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.support_chat_messages_id_seq OWNER TO postgres;
-
 --
--- Name: support_chat_messages_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: support_chat_messages_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.support_chat_messages_id_seq OWNED BY public.support_chat_messages.id;
 
 
 --
--- Name: support_chats; Type: TABLE; Schema: public; Owner: postgres
+-- Name: support_chats; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.support_chats (
@@ -1046,14 +1061,12 @@ CREATE TABLE public.support_chats (
     status character varying(10) DEFAULT 'locked'::character varying,
     opened_at timestamp without time zone,
     locked_at timestamp without time zone,
-    CONSTRAINT support_chats_status_check CHECK (((status)::text = ANY ((ARRAY['unlocked'::character varying, 'locked'::character varying])::text[])))
+    CONSTRAINT support_chats_status_check CHECK (((status)::text = ANY (ARRAY[('unlocked'::character varying)::text, ('locked'::character varying)::text])))
 );
 
 
-ALTER TABLE public.support_chats OWNER TO postgres;
-
 --
--- Name: support_chats_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: support_chats_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.support_chats_id_seq
@@ -1065,185 +1078,694 @@ CREATE SEQUENCE public.support_chats_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.support_chats_id_seq OWNER TO postgres;
-
 --
--- Name: support_chats_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: support_chats_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.support_chats_id_seq OWNED BY public.support_chats.id;
 
 
 --
--- Name: audit_log id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: audit_log id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log ALTER COLUMN id SET DEFAULT nextval('public.audit_log_id_seq'::regclass);
 
 
 --
--- Name: business_hours id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: business_hours id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.business_hours ALTER COLUMN id SET DEFAULT nextval('public.business_hours_id_seq'::regclass);
 
 
 --
--- Name: chatbot_conversations id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: chatbot_conversations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.chatbot_conversations ALTER COLUMN id SET DEFAULT nextval('public.chatbot_conversations_id_seq'::regclass);
 
 
 --
--- Name: chatbot_messages id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: chatbot_messages id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.chatbot_messages ALTER COLUMN id SET DEFAULT nextval('public.chatbot_messages_id_seq'::regclass);
 
 
 --
--- Name: customer_order_violations id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: customer_order_violations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customer_order_violations ALTER COLUMN id SET DEFAULT nextval('public.customer_order_violations_id_seq'::regclass);
 
 
 --
--- Name: customers id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: customers id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customers ALTER COLUMN id SET DEFAULT nextval('public.customers_id_seq'::regclass);
 
 
 --
--- Name: dashboard_switch_config id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.dashboard_switch_config ALTER COLUMN id SET DEFAULT nextval('public.dashboard_switch_config_id_seq'::regclass);
-
-
---
--- Name: deliveries id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: deliveries id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.deliveries ALTER COLUMN id SET DEFAULT nextval('public.deliveries_id_seq'::regclass);
 
 
 --
--- Name: inventory_items id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: esp32_devices id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.esp32_devices ALTER COLUMN id SET DEFAULT nextval('public.esp32_devices_id_seq'::regclass);
+
+
+--
+-- Name: inventory_items id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.inventory_items ALTER COLUMN id SET DEFAULT nextval('public.inventory_items_id_seq'::regclass);
 
 
 --
--- Name: inventory_transactions id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: inventory_transactions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.inventory_transactions ALTER COLUMN id SET DEFAULT nextval('public.inventory_transactions_id_seq'::regclass);
 
 
 --
--- Name: kitchen_alerts id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: kitchen_alerts id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.kitchen_alerts ALTER COLUMN id SET DEFAULT nextval('public.kitchen_alerts_id_seq'::regclass);
 
 
 --
--- Name: menu_categories id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: menu_categories id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_categories ALTER COLUMN id SET DEFAULT nextval('public.menu_categories_id_seq'::regclass);
 
 
 --
--- Name: menu_items id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: menu_items id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_items ALTER COLUMN id SET DEFAULT nextval('public.menu_items_id_seq'::regclass);
 
 
 --
--- Name: notifications id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: notifications id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.notifications ALTER COLUMN id SET DEFAULT nextval('public.notifications_id_seq'::regclass);
 
 
 --
--- Name: order_items id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: order_items id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.order_items ALTER COLUMN id SET DEFAULT nextval('public.order_items_id_seq'::regclass);
 
 
 --
--- Name: order_status_history id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: order_status_history id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.order_status_history ALTER COLUMN id SET DEFAULT nextval('public.order_status_history_id_seq'::regclass);
 
 
 --
--- Name: orders id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: orders id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.orders ALTER COLUMN id SET DEFAULT nextval('public.orders_id_seq'::regclass);
 
 
 --
--- Name: otp_verifications id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: otp_verifications id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.otp_verifications ALTER COLUMN id SET DEFAULT nextval('public.otp_verifications_id_seq'::regclass);
 
 
 --
--- Name: payments id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: payments id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payments ALTER COLUMN id SET DEFAULT nextval('public.payments_id_seq'::regclass);
 
 
 --
--- Name: riders id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: riders id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.riders ALTER COLUMN id SET DEFAULT nextval('public.riders_id_seq'::regclass);
 
 
 --
--- Name: staff_accounts id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: staff_accounts id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.staff_accounts ALTER COLUMN id SET DEFAULT nextval('public.staff_accounts_id_seq'::regclass);
 
 
 --
--- Name: staff_dashboard_access id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.staff_dashboard_access ALTER COLUMN id SET DEFAULT nextval('public.staff_dashboard_access_id_seq'::regclass);
-
-
---
--- Name: support_chat_messages id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: support_chat_messages id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.support_chat_messages ALTER COLUMN id SET DEFAULT nextval('public.support_chat_messages_id_seq'::regclass);
 
 
 --
--- Name: support_chats id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: support_chats id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.support_chats ALTER COLUMN id SET DEFAULT nextval('public.support_chats_id_seq'::regclass);
 
 
 --
--- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Data for Name: audit_log; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.audit_log (id, actor_id, action, target_type, target_id, details, created_at) FROM stdin;
+1	1	create_menu_category	menu_categories	8	{"name": "Student Meal"}	2026-10-13 18:29:34.600723
+2	1	create_menu_category	menu_categories	9	{"name": "Non-Caffenated"}	2026-10-13 21:54:36.744049
+3	1	create_menu_category	menu_categories	10	{"name": "Caffenated"}	2026-10-13 21:54:46.561016
+4	1	delete_menu_category	menu_categories	9	{"name": "Non-Caffenated"}	2026-10-13 21:55:26.699953
+5	1	delete_menu_category	menu_categories	10	{"name": "Caffenated"}	2026-10-13 21:55:27.479426
+6	1	create_menu_category	menu_categories	11	{"name": "Non Caffenated Drinks"}	2026-10-13 21:57:10.72833
+7	1	create_menu_category	menu_categories	12	{"name": "Caffenated Drinks"}	2026-10-13 21:57:23.140212
+8	1	create_menu_category	menu_categories	13	{"name": "Matcha Drinks"}	2026-10-13 21:57:30.572821
+9	1	create_menu_category	menu_categories	14	{"name": "Ala Carte"}	2026-10-13 22:08:17.597712
+10	1	create_menu_category	menu_categories	15	{"name": "Platter"}	2026-10-13 22:08:23.889876
+11	1	update_inventory_item	inventory_items	49	{"name": "Burger Steak Silog", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [8]}	2026-10-14 15:32:30.722315
+12	1	update_inventory_item	inventory_items	49	{"name": "Burger Steak Silog", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [8]}	2026-10-14 15:32:38.38336
+13	1	update_inventory_item	inventory_items	48	{"name": "Chicken Bites", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [8]}	2026-10-14 15:33:03.361738
+14	1	update_inventory_item	inventory_items	45	{"name": "Chicken Siomai Rice", "unit": "pack", "new_stock": 0, "old_stock": 0, "category_ids": [8]}	2026-10-14 15:33:09.825279
+15	1	update_inventory_item	inventory_items	51	{"name": "Hot Silog", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [8]}	2026-10-14 15:33:17.0739
+16	1	update_inventory_item	inventory_items	52	{"name": "Long Silog", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [14, 12, 13, 11, 15]}	2026-10-14 15:34:16.501741
+17	1	update_inventory_item	inventory_items	52	{"name": "Long Silog", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [8]}	2026-10-14 15:34:36.324179
+18	1	update_inventory_item	inventory_items	46	{"name": "Pork Siomai Rice", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [8]}	2026-10-14 15:34:45.580145
+19	1	update_inventory_item	inventory_items	50	{"name": "Shanghai Silog", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [8]}	2026-10-14 15:34:55.291478
+20	1	update_inventory_item	inventory_items	47	{"name": "Sharksfin Rice", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [8]}	2026-10-14 15:35:20.668954
+21	1	update_inventory_item	inventory_items	53	{"name": "Spam Silog", "unit": "pack", "new_stock": 50, "old_stock": 50, "category_ids": [8]}	2026-10-14 15:35:28.829519
+22	1	update_business_hours	business_hours	\N	{"days_updated": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]}	2026-10-14 19:28:04.11529
+23	1	update_business_hours	business_hours	\N	{"days_updated": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]}	2026-10-14 19:35:21.362944
+24	1	deactivate_staff_account	staff_accounts	4	{"new_status": "deactivated"}	2026-10-14 22:48:32.907217
+25	1	activate_staff_account	staff_accounts	4	{"new_status": "active"}	2026-10-14 22:48:37.696996
+26	1	update_inventory_item	inventory_items	49	{"name": "Burger Steak Silog", "unit": "pack", "new_stock": 20, "old_stock": 99, "category_ids": [8]}	2026-10-14 22:54:19.616476
+27	1	create_rider	rider	1	{"email": "rider@bingnondo.com", "full_name": "RiderNyoko", "mobile_number": "09482785422"}	2026-10-15 14:13:11.814234
+30	1	update_rider	rider	1	{"after": {"email": "rider@bingnondo.com", "full_name": "RiderNyoko", "plate_number": "ABC 1234", "vehicle_type": "motorcycle", "mobile_number": "09482785422"}, "before": {"email": "rider@bingnondo.com", "full_name": "RiderNyoko", "plate_number": "ABC 1234", "vehicle_type": "motorcycle", "mobile_number": "09482785422"}}	2026-10-15 15:42:29.445893
+33	1	reset_rider_password	rider	1	{"rider_name": "RiderNyoko"}	2026-10-15 16:15:58.404767
+\.
+
+
+--
+-- Data for Name: business_hours; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.business_hours (id, day_of_week, open_time, close_time, is_closed, updated_by, updated_at) FROM stdin;
+2	1	08:00:00	21:00:00	f	1	2026-10-14 19:35:21.362944
+3	2	08:00:00	21:00:00	f	1	2026-10-14 19:35:21.362944
+4	3	08:00:00	21:00:00	f	1	2026-10-14 19:35:21.362944
+5	4	08:00:00	21:00:00	f	1	2026-10-14 19:35:21.362944
+6	5	08:00:00	21:00:00	f	1	2026-10-14 19:35:21.362944
+7	6	08:00:00	21:00:00	f	1	2026-10-14 19:35:21.362944
+1	0	08:00:00	21:00:00	f	1	2026-10-14 19:35:21.362944
+\.
+
+
+--
+-- Data for Name: chatbot_conversations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.chatbot_conversations (id, customer_id, started_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: chatbot_messages; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.chatbot_messages (id, conversation_id, sender, content, sent_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: customer_order_violations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.customer_order_violations (id, customer_id, order_id, violation_type, flagged_by, created_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: customer_restrictions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.customer_restrictions (customer_id, restriction_level, reason, updated_by, updated_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: customers; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.customers (id, email, password_hash, email_verified, first_name, last_name, mobile_number, mobile_verified, address, profile_completed, status, created_at, updated_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: deliveries; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.deliveries (id, order_id, delivery_preference, assigned_by, rider_name, rider_contact, lalamove_booking_id, status, assigned_at, delivered_at, rider_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: esp32_devices; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.esp32_devices (id, device_code, location_label, created_at, status, last_ping_at) FROM stdin;
+1	ESP32-KitchenA	Kitchen Counter A	2026-10-13 00:17:38.674952+08	online	2026-10-13 00:17:38.674952+08
+\.
+
+
+--
+-- Data for Name: inventory_item_categories; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.inventory_item_categories (inventory_item_id, category_id) FROM stdin;
+48	8
+45	8
+51	8
+52	8
+46	8
+50	8
+47	8
+53	8
+49	8
+\.
+
+
+--
+-- Data for Name: inventory_items; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.inventory_items (id, name, unit, current_stock, reorder_level, updated_at) FROM stdin;
+52	Long Silog	pack	50.00	0.00	2026-10-14 15:34:36.324179
+50	Shanghai Silog	pack	50.00	0.00	2026-10-14 15:34:55.291478
+47	Sharksfin Rice	pack	50.00	0.00	2026-10-14 15:35:20.668954
+53	Spam Silog	pack	50.00	0.00	2026-10-14 15:35:28.829519
+49	Burger Steak Silog	pack	19.00	0.00	2026-10-15 12:51:01.553445
+45	Chicken Siomai Rice	pack	24.00	0.00	2026-10-15 12:51:03.177398
+46	Pork Siomai Rice	pack	49.00	0.00	2026-10-15 12:51:03.97809
+48	Chicken Bites	pack	0.00	0.00	2026-10-15 12:51:05.465004
+51	Hot Silog	pack	48.00	0.00	2026-10-15 12:51:06.106107
+\.
+
+
+--
+-- Data for Name: inventory_transactions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.inventory_transactions (id, inventory_item_id, change_type, quantity, reference_order_id, performed_by, created_at) FROM stdin;
+23	49	adjustment	50.00	\N	3	2026-10-13 21:37:28.750449
+24	49	restock	50.00	\N	3	2026-10-13 21:37:41.035315
+25	45	adjustment	50.00	\N	3	2026-10-13 21:40:27.418496
+26	48	adjustment	50.00	\N	3	2026-10-14 22:46:03.072782
+27	49	restock	49.00	\N	3	2026-10-14 22:46:44.543356
+28	49	adjustment	20.00	\N	1	2026-10-14 22:54:19.616476
+29	48	restock	3.00	\N	1	2026-10-14 22:54:33.402363
+30	45	restock	25.00	\N	1	2026-10-14 22:54:45.091702
+31	49	deduction	1.00	253	4	2026-10-15 12:51:01.553445
+32	51	deduction	1.00	254	4	2026-10-15 12:51:03.177398
+33	48	deduction	1.00	254	4	2026-10-15 12:51:03.177398
+34	45	deduction	1.00	254	4	2026-10-15 12:51:03.177398
+35	46	deduction	1.00	255	4	2026-10-15 12:51:03.97809
+36	48	deduction	2.00	256	4	2026-10-15 12:51:05.465004
+37	51	deduction	1.00	257	4	2026-10-15 12:51:06.106107
+\.
+
+
+--
+-- Data for Name: kitchen_alerts; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.kitchen_alerts (id, order_id, device_id, triggered_at, acknowledged_at, acknowledged_by) FROM stdin;
+\.
+
+
+--
+-- Data for Name: menu_categories; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.menu_categories (id, name, display_order) FROM stdin;
+8	Student Meal	0
+11	Non Caffenated Drinks	0
+12	Caffenated Drinks	0
+13	Matcha Drinks	0
+14	Ala Carte	0
+15	Platter	0
+\.
+
+
+--
+-- Data for Name: menu_item_ingredients; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required) FROM stdin;
+119	49	1.00
+116	46	1.00
+117	47	1.00
+120	51	1.00
+121	52	\N
+123	50	\N
+115	45	1.00
+118	48	1.00
+122	53	1.00
+\.
+
+
+--
+-- Data for Name: menu_items; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.menu_items (id, category_id, name, description, price, image_url, is_available, created_at, updated_at, is_deleted, deleted_at, display_order, image_public_id) FROM stdin;
+119	8	Burger Steak Silog		95.00	https://res.cloudinary.com/roumuyf1/image/upload/v1791963803/bingnondo/menu/uytp3ozegmpucdtwye8l.png	t	2026-10-13 21:43:00.70016	2026-10-15 19:45:52.353231	f	\N	0	bingnondo/menu/uytp3ozegmpucdtwye8l
+122	8	Spam Silog		90.00	\N	t	2026-10-13 21:52:45.01285	2026-10-15 16:14:07.009259	f	\N	0	\N
+117	8	Sharksfin Rice		90.00	\N	t	2026-10-13 18:32:50.661132	2026-10-14 22:52:53.75422	f	\N	0	\N
+123	8	Shanghai Silog		90.00	\N	t	2026-10-13 21:53:23.791188	2026-10-14 22:52:56.579502	f	\N	0	\N
+116	8	Pork Shomai Rice		90.00	\N	t	2026-10-13 18:31:23.325148	2026-10-14 22:52:59.752574	f	\N	0	\N
+121	8	Long Silog		80.00	\N	t	2026-10-13 21:52:23.622124	2026-10-14 22:53:02.354424	f	\N	0	\N
+120	8	Hot Silog		90.00	\N	t	2026-10-13 21:51:27.43207	2026-10-14 22:53:22.400405	f	\N	0	\N
+115	8	Chicken Shomai Rice		85.00	\N	t	2026-10-13 18:30:39.830341	2026-10-14 22:54:45.091702	f	\N	0	\N
+118	8	Chicken Bites		90.00	\N	f	2026-10-13 18:33:54.133543	2026-10-15 12:51:05.465004	f	\N	0	\N
+\.
+
+
+--
+-- Data for Name: notifications; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.notifications (id, staff_id, target_role, type, reference_id, is_read, created_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: order_items; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.order_items (id, order_id, menu_item_id, quantity, unit_price, notes) FROM stdin;
+263	253	119	1	95.00	\N
+264	254	118	1	90.00	\N
+265	254	115	1	85.00	\N
+266	254	120	1	90.00	\N
+267	255	116	1	90.00	\N
+268	255	123	2	90.00	\N
+269	256	118	3	90.00	\N
+270	257	120	1	90.00	\N
+\.
+
+
+--
+-- Data for Name: order_status_history; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.order_status_history (id, order_id, status, changed_by, changed_at) FROM stdin;
+122	253	pending	3	2026-10-14 22:45:31.900671
+123	254	pending	3	2026-10-15 12:49:24.98439
+124	255	pending	3	2026-10-15 12:49:32.848972
+125	256	pending	3	2026-10-15 12:49:40.128487
+126	257	pending	3	2026-10-15 12:49:45.897507
+127	253	confirmed	4	2026-10-15 12:50:15.256883
+128	254	confirmed	4	2026-10-15 12:50:16.08741
+129	255	confirmed	4	2026-10-15 12:50:16.816317
+130	256	confirmed	4	2026-10-15 12:50:17.567271
+131	257	confirmed	4	2026-10-15 12:50:18.215715
+132	253	preparing	4	2026-10-15 12:51:01.553445
+133	253	ready	4	2026-10-15 12:51:01.73854
+134	253	completed	4	2026-10-15 12:51:01.73854
+135	254	preparing	4	2026-10-15 12:51:03.177398
+136	254	ready	4	2026-10-15 12:51:03.362346
+137	254	completed	4	2026-10-15 12:51:03.362346
+138	255	preparing	4	2026-10-15 12:51:03.97809
+139	255	ready	4	2026-10-15 12:51:04.265539
+140	255	completed	4	2026-10-15 12:51:04.265539
+141	256	preparing	4	2026-10-15 12:51:05.465004
+142	256	ready	4	2026-10-15 12:51:05.657501
+143	256	completed	4	2026-10-15 12:51:05.657501
+144	257	preparing	4	2026-10-15 12:51:06.106107
+145	257	ready	4	2026-10-15 12:51:06.289737
+146	257	completed	4	2026-10-15 12:51:06.289737
+\.
+
+
+--
+-- Data for Name: orders; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.orders (id, order_type, customer_id, cashier_id, status, order_channel, total_amount, special_request, created_at, updated_at, order_number) FROM stdin;
+253	counter	\N	3	completed	web_counter	95.00	\N	2026-10-14 22:45:31.900671	2026-10-15 12:51:01.73854	\N
+254	counter	\N	3	completed	web_counter	265.00	\N	2026-10-15 12:49:24.98439	2026-10-15 12:51:03.362346	\N
+255	counter	\N	3	completed	web_counter	270.00	\N	2026-10-15 12:49:32.848972	2026-10-15 12:51:04.265539	\N
+256	counter	\N	3	completed	web_counter	270.00	\N	2026-10-15 12:49:40.128487	2026-10-15 12:51:05.657501	\N
+257	counter	\N	3	completed	web_counter	90.00	\N	2026-10-15 12:49:45.897507	2026-10-15 12:51:06.289737	\N
+\.
+
+
+--
+-- Data for Name: otp_verifications; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verified_at, created_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: payments; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.payments (id, order_id, method, amount, paymongo_payment_id, status, paid_at, created_at, gcash_ref_number, receipt_image_url, receipt_uploaded_at, verified_by, verified_at, rejection_reason) FROM stdin;
+235	253	cash	95.00	\N	paid	2026-10-14 22:45:31.900671	2026-10-14 22:45:31.900671	\N	\N	\N	\N	\N	\N
+236	254	cash	265.00	\N	paid	2026-10-15 12:49:24.98439	2026-10-15 12:49:24.98439	\N	\N	\N	\N	\N	\N
+237	255	cash	270.00	\N	paid	2026-10-15 12:49:32.848972	2026-10-15 12:49:32.848972	\N	\N	\N	\N	\N	\N
+238	256	cash	270.00	\N	paid	2026-10-15 12:49:40.128487	2026-10-15 12:49:40.128487	\N	\N	\N	\N	\N	\N
+239	257	cash	90.00	\N	paid	2026-10-15 12:49:45.897507	2026-10-15 12:49:45.897507	\N	\N	\N	\N	\N	\N
+\.
+
+
+--
+-- Data for Name: pending_registrations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.pending_registrations (email, password_hash, expires_at, created_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: riders; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.riders (id, full_name, mobile_number, plate_number, vehicle_type, notes, status, created_by, created_at, updated_at, email, password_hash, last_login) FROM stdin;
+1	RiderNyoko	09482785422	ABC 1234	motorcycle	\N	available	1	2026-10-15 14:13:11.814234	2026-10-15 19:01:56.515006	rider@bingnondo.com	$2b$12$bxYm9KwA5JYHjxXk1GIk/OU/EPev2wJ3LfULlb/0vvnXuXtxuXjKy	2026-10-15 19:37:11.329796
+\.
+
+
+--
+-- Data for Name: staff_accounts; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.staff_accounts (id, full_name, email, password_hash, role, status, created_by, created_at, updated_at) FROM stdin;
+1	Admin User	admin@bingnondo.com	$2b$12$JURyzssCxXhchWcJPHNOPOC.8Kx9w/S7CpsyIb9JnNYzosvNY3D0e	admin	active	\N	2026-10-13 00:02:23.780245	2026-10-13 00:02:23.780245
+3	Cashier One	cashier@bingnondo.com	$2b$12$VHxWiJDzMyy9..udZAG.4uZMIIyw8Knb01KQZ8LICYXj2e90M2ksK	cashier	active	\N	2026-10-13 00:02:24.280064	2026-10-13 00:02:24.280064
+4	Kitchen Staff	kitchen@bingnondo.com	$2b$12$1Cwh2bqIxanUIrZC8vRbfOTsZar9oba1kwkbiSnT./qFUqmw5LAXi	kitchen_staff	active	\N	2026-10-13 00:02:24.520095	2026-10-14 22:48:37.696996
+\.
+
+
+--
+-- Data for Name: support_chat_messages; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.support_chat_messages (id, chat_id, sender_type, sender_id, related_order_id, content, sent_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: support_chats; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.support_chats (id, customer_id, status, opened_at, locked_at) FROM stdin;
+\.
+
+
+--
+-- Name: audit_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.audit_log_id_seq', 43, true);
+
+
+--
+-- Name: business_hours_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.business_hours_id_seq', 7, true);
+
+
+--
+-- Name: chatbot_conversations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.chatbot_conversations_id_seq', 1, false);
+
+
+--
+-- Name: chatbot_messages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.chatbot_messages_id_seq', 1, false);
+
+
+--
+-- Name: customer_order_violations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.customer_order_violations_id_seq', 1, false);
+
+
+--
+-- Name: customers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.customers_id_seq', 3, true);
+
+
+--
+-- Name: deliveries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.deliveries_id_seq', 101, true);
+
+
+--
+-- Name: esp32_devices_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.esp32_devices_id_seq', 5, true);
+
+
+--
+-- Name: inventory_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.inventory_items_id_seq', 140, true);
+
+
+--
+-- Name: inventory_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 96, true);
+
+
+--
+-- Name: kitchen_alerts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.kitchen_alerts_id_seq', 1, false);
+
+
+--
+-- Name: menu_categories_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.menu_categories_id_seq', 15, true);
+
+
+--
+-- Name: menu_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.menu_items_id_seq', 505, true);
+
+
+--
+-- Name: notifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.notifications_id_seq', 1, false);
+
+
+--
+-- Name: order_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.order_items_id_seq', 717, true);
+
+
+--
+-- Name: order_status_history_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.order_status_history_id_seq', 355, true);
+
+
+--
+-- Name: orders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.orders_id_seq', 673, true);
+
+
+--
+-- Name: otp_verifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.otp_verifications_id_seq', 1, false);
+
+
+--
+-- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.payments_id_seq', 540, true);
+
+
+--
+-- Name: riders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.riders_id_seq', 62, true);
+
+
+--
+-- Name: staff_accounts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.staff_accounts_id_seq', 5, true);
+
+
+--
+-- Name: support_chat_messages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.support_chat_messages_id_seq', 1, false);
+
+
+--
+-- Name: support_chats_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.support_chats_id_seq', 1, false);
+
+
+--
+-- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log
@@ -1251,7 +1773,7 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
--- Name: business_hours business_hours_day_of_week_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: business_hours business_hours_day_of_week_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.business_hours
@@ -1259,7 +1781,7 @@ ALTER TABLE ONLY public.business_hours
 
 
 --
--- Name: business_hours business_hours_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: business_hours business_hours_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.business_hours
@@ -1267,7 +1789,7 @@ ALTER TABLE ONLY public.business_hours
 
 
 --
--- Name: chatbot_conversations chatbot_conversations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: chatbot_conversations chatbot_conversations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.chatbot_conversations
@@ -1275,7 +1797,7 @@ ALTER TABLE ONLY public.chatbot_conversations
 
 
 --
--- Name: chatbot_messages chatbot_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: chatbot_messages chatbot_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.chatbot_messages
@@ -1283,7 +1805,7 @@ ALTER TABLE ONLY public.chatbot_messages
 
 
 --
--- Name: customer_order_violations customer_order_violations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customer_order_violations customer_order_violations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customer_order_violations
@@ -1291,7 +1813,7 @@ ALTER TABLE ONLY public.customer_order_violations
 
 
 --
--- Name: customer_restrictions customer_restrictions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customer_restrictions customer_restrictions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customer_restrictions
@@ -1299,7 +1821,7 @@ ALTER TABLE ONLY public.customer_restrictions
 
 
 --
--- Name: customers customers_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customers customers_email_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customers
@@ -1307,7 +1829,7 @@ ALTER TABLE ONLY public.customers
 
 
 --
--- Name: customers customers_mobile_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customers customers_mobile_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customers
@@ -1315,7 +1837,7 @@ ALTER TABLE ONLY public.customers
 
 
 --
--- Name: customers customers_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customers customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customers
@@ -1323,15 +1845,7 @@ ALTER TABLE ONLY public.customers
 
 
 --
--- Name: dashboard_switch_config dashboard_switch_config_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.dashboard_switch_config
-    ADD CONSTRAINT dashboard_switch_config_pkey PRIMARY KEY (id);
-
-
---
--- Name: deliveries deliveries_order_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: deliveries deliveries_order_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.deliveries
@@ -1339,7 +1853,7 @@ ALTER TABLE ONLY public.deliveries
 
 
 --
--- Name: deliveries deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: deliveries deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.deliveries
@@ -1347,7 +1861,23 @@ ALTER TABLE ONLY public.deliveries
 
 
 --
--- Name: inventory_items inventory_items_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: esp32_devices esp32_devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.esp32_devices
+    ADD CONSTRAINT esp32_devices_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: inventory_item_categories inventory_item_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_item_categories
+    ADD CONSTRAINT inventory_item_categories_pkey PRIMARY KEY (inventory_item_id, category_id);
+
+
+--
+-- Name: inventory_items inventory_items_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.inventory_items
@@ -1355,7 +1885,7 @@ ALTER TABLE ONLY public.inventory_items
 
 
 --
--- Name: inventory_items inventory_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: inventory_items inventory_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.inventory_items
@@ -1363,7 +1893,7 @@ ALTER TABLE ONLY public.inventory_items
 
 
 --
--- Name: inventory_transactions inventory_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: inventory_transactions inventory_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.inventory_transactions
@@ -1371,7 +1901,7 @@ ALTER TABLE ONLY public.inventory_transactions
 
 
 --
--- Name: kitchen_alerts kitchen_alerts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: kitchen_alerts kitchen_alerts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.kitchen_alerts
@@ -1379,7 +1909,7 @@ ALTER TABLE ONLY public.kitchen_alerts
 
 
 --
--- Name: menu_categories menu_categories_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: menu_categories menu_categories_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_categories
@@ -1387,7 +1917,7 @@ ALTER TABLE ONLY public.menu_categories
 
 
 --
--- Name: menu_categories menu_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: menu_categories menu_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_categories
@@ -1395,7 +1925,7 @@ ALTER TABLE ONLY public.menu_categories
 
 
 --
--- Name: menu_item_ingredients menu_item_ingredients_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: menu_item_ingredients menu_item_ingredients_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_item_ingredients
@@ -1403,7 +1933,7 @@ ALTER TABLE ONLY public.menu_item_ingredients
 
 
 --
--- Name: menu_items menu_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: menu_items menu_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_items
@@ -1411,7 +1941,7 @@ ALTER TABLE ONLY public.menu_items
 
 
 --
--- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.notifications
@@ -1419,7 +1949,7 @@ ALTER TABLE ONLY public.notifications
 
 
 --
--- Name: order_items order_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: order_items order_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.order_items
@@ -1427,7 +1957,7 @@ ALTER TABLE ONLY public.order_items
 
 
 --
--- Name: order_status_history order_status_history_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: order_status_history order_status_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.order_status_history
@@ -1435,7 +1965,7 @@ ALTER TABLE ONLY public.order_status_history
 
 
 --
--- Name: orders orders_order_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: orders orders_order_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.orders
@@ -1443,7 +1973,7 @@ ALTER TABLE ONLY public.orders
 
 
 --
--- Name: orders orders_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: orders orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.orders
@@ -1451,7 +1981,7 @@ ALTER TABLE ONLY public.orders
 
 
 --
--- Name: otp_verifications otp_verifications_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: otp_verifications otp_verifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.otp_verifications
@@ -1459,7 +1989,7 @@ ALTER TABLE ONLY public.otp_verifications
 
 
 --
--- Name: payments payments_order_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: payments payments_order_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payments
@@ -1467,7 +1997,7 @@ ALTER TABLE ONLY public.payments
 
 
 --
--- Name: payments payments_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: payments payments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payments
@@ -1475,7 +2005,7 @@ ALTER TABLE ONLY public.payments
 
 
 --
--- Name: pending_registrations pending_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: pending_registrations pending_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.pending_registrations
@@ -1483,7 +2013,7 @@ ALTER TABLE ONLY public.pending_registrations
 
 
 --
--- Name: riders riders_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: riders riders_email_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.riders
@@ -1491,7 +2021,7 @@ ALTER TABLE ONLY public.riders
 
 
 --
--- Name: riders riders_mobile_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: riders riders_mobile_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.riders
@@ -1499,7 +2029,7 @@ ALTER TABLE ONLY public.riders
 
 
 --
--- Name: riders riders_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: riders riders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.riders
@@ -1507,7 +2037,7 @@ ALTER TABLE ONLY public.riders
 
 
 --
--- Name: staff_accounts staff_accounts_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: staff_accounts staff_accounts_email_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.staff_accounts
@@ -1515,7 +2045,7 @@ ALTER TABLE ONLY public.staff_accounts
 
 
 --
--- Name: staff_accounts staff_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: staff_accounts staff_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.staff_accounts
@@ -1523,31 +2053,7 @@ ALTER TABLE ONLY public.staff_accounts
 
 
 --
--- Name: staff_dashboard_access staff_dashboard_access_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.staff_dashboard_access
-    ADD CONSTRAINT staff_dashboard_access_pkey PRIMARY KEY (id);
-
-
---
--- Name: staff_dashboard_access staff_dashboard_access_staff_id_target_dashboard_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.staff_dashboard_access
-    ADD CONSTRAINT staff_dashboard_access_staff_id_target_dashboard_key UNIQUE (staff_id, target_dashboard);
-
-
---
--- Name: staff_switch_pin staff_switch_pin_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.staff_switch_pin
-    ADD CONSTRAINT staff_switch_pin_pkey PRIMARY KEY (staff_id);
-
-
---
--- Name: support_chat_messages support_chat_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: support_chat_messages support_chat_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.support_chat_messages
@@ -1555,7 +2061,7 @@ ALTER TABLE ONLY public.support_chat_messages
 
 
 --
--- Name: support_chats support_chats_customer_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: support_chats support_chats_customer_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.support_chats
@@ -1563,7 +2069,7 @@ ALTER TABLE ONLY public.support_chats
 
 
 --
--- Name: support_chats support_chats_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: support_chats support_chats_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.support_chats
@@ -1571,205 +2077,203 @@ ALTER TABLE ONLY public.support_chats
 
 
 --
--- Name: dashboard_switch_config uq_switch_config_dashboard; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.dashboard_switch_config
-    ADD CONSTRAINT uq_switch_config_dashboard UNIQUE (target_dashboard) DEFERRABLE INITIALLY DEFERRED;
-
-
---
--- Name: dashboard_switch_config uq_switch_config_staff; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.dashboard_switch_config
-    ADD CONSTRAINT uq_switch_config_staff UNIQUE (staff_id) DEFERRABLE INITIALLY DEFERRED;
-
-
---
--- Name: idx_audit_log_actor; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_audit_log_actor; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_audit_log_actor ON public.audit_log USING btree (actor_id);
 
 
 --
--- Name: idx_deliveries_rider; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_deliveries_rider; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_deliveries_rider ON public.deliveries USING btree (rider_id);
 
 
 --
--- Name: idx_deliveries_status; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_deliveries_status; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_deliveries_status ON public.deliveries USING btree (status);
 
 
 --
--- Name: idx_dsc_staff_id; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_esp32_devices_device_code_unique; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_dsc_staff_id ON public.dashboard_switch_config USING btree (staff_id) WHERE (staff_id IS NOT NULL);
-
-
---
--- Name: idx_dsc_target_dashboard; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_dsc_target_dashboard ON public.dashboard_switch_config USING btree (target_dashboard) WHERE (target_dashboard IS NOT NULL);
+CREATE UNIQUE INDEX idx_esp32_devices_device_code_unique ON public.esp32_devices USING btree (device_code);
 
 
 --
--- Name: idx_inventory_txn_item; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_inventory_item_categories_category_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_inventory_item_categories_category_id ON public.inventory_item_categories USING btree (category_id);
+
+
+--
+-- Name: idx_inventory_txn_item; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_inventory_txn_item ON public.inventory_transactions USING btree (inventory_item_id);
 
 
 --
--- Name: idx_kitchen_alerts_order; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_kitchen_alerts_order; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_kitchen_alerts_order ON public.kitchen_alerts USING btree (order_id);
 
 
 --
--- Name: idx_menu_categories_display_order; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_menu_categories_display_order; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_menu_categories_display_order ON public.menu_categories USING btree (display_order, id);
 
 
 --
--- Name: idx_menu_items_display_order; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_menu_items_display_order; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_menu_items_display_order ON public.menu_items USING btree (category_id, display_order, id);
 
 
 --
--- Name: idx_menu_items_not_deleted; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_menu_items_not_deleted; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_menu_items_not_deleted ON public.menu_items USING btree (is_deleted) WHERE (is_deleted = false);
 
 
 --
--- Name: idx_notifications_staff; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_notifications_staff; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_notifications_staff ON public.notifications USING btree (staff_id);
 
 
 --
--- Name: idx_order_items_order; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_order_items_order; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_order_items_order ON public.order_items USING btree (order_id);
 
 
 --
--- Name: idx_orders_cashier; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_order_items_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_order_items_order_id ON public.order_items USING btree (order_id);
+
+
+--
+-- Name: idx_orders_cashier; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_orders_cashier ON public.orders USING btree (cashier_id);
 
 
 --
--- Name: idx_orders_customer; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_orders_customer; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_orders_customer ON public.orders USING btree (customer_id);
 
 
 --
--- Name: idx_orders_order_number; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_orders_order_number; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_orders_order_number ON public.orders USING btree (order_number);
 
 
 --
--- Name: idx_orders_status; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_orders_status; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_orders_status ON public.orders USING btree (status);
 
 
 --
--- Name: idx_otp_contact_purpose; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_otp_contact_purpose; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_otp_contact_purpose ON public.otp_verifications USING btree (contact, purpose);
 
 
 --
--- Name: idx_payments_gcash_pending; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_payments_gcash_pending; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_payments_gcash_pending ON public.payments USING btree (status) WHERE ((status)::text = ANY (ARRAY[('awaiting_verification'::character varying)::text, ('rejected'::character varying)::text]));
 
 
 --
--- Name: idx_payments_status; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_payments_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_payments_order_id ON public.payments USING btree (order_id);
+
+
+--
+-- Name: idx_payments_order_id_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_payments_order_id_unique ON public.payments USING btree (order_id);
+
+
+--
+-- Name: idx_payments_status; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_payments_status ON public.payments USING btree (status);
 
 
 --
--- Name: idx_riders_email; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_riders_email; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_riders_email ON public.riders USING btree (email);
 
 
 --
--- Name: idx_riders_mobile; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_riders_mobile; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_riders_mobile ON public.riders USING btree (mobile_number);
 
 
 --
--- Name: idx_riders_status; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_riders_status; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_riders_status ON public.riders USING btree (status);
 
 
 --
--- Name: idx_sda_staff_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_sda_staff_id ON public.staff_dashboard_access USING btree (staff_id);
-
-
---
--- Name: idx_support_chat_messages_chat; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_support_chat_messages_chat; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_support_chat_messages_chat ON public.support_chat_messages USING btree (chat_id);
 
 
 --
--- Name: idx_violations_created; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_violations_created; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_violations_created ON public.customer_order_violations USING btree (created_at);
 
 
 --
--- Name: idx_violations_customer; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_violations_customer; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_violations_customer ON public.customer_order_violations USING btree (customer_id);
 
 
 --
--- Name: audit_log audit_log_actor_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: audit_log audit_log_actor_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log
@@ -1777,7 +2281,7 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
--- Name: business_hours business_hours_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: business_hours business_hours_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.business_hours
@@ -1785,7 +2289,7 @@ ALTER TABLE ONLY public.business_hours
 
 
 --
--- Name: chatbot_conversations chatbot_conversations_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: chatbot_conversations chatbot_conversations_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.chatbot_conversations
@@ -1793,7 +2297,7 @@ ALTER TABLE ONLY public.chatbot_conversations
 
 
 --
--- Name: chatbot_messages chatbot_messages_conversation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: chatbot_messages chatbot_messages_conversation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.chatbot_messages
@@ -1801,7 +2305,7 @@ ALTER TABLE ONLY public.chatbot_messages
 
 
 --
--- Name: customer_order_violations customer_order_violations_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customer_order_violations customer_order_violations_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customer_order_violations
@@ -1809,7 +2313,7 @@ ALTER TABLE ONLY public.customer_order_violations
 
 
 --
--- Name: customer_order_violations customer_order_violations_flagged_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customer_order_violations customer_order_violations_flagged_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customer_order_violations
@@ -1817,7 +2321,7 @@ ALTER TABLE ONLY public.customer_order_violations
 
 
 --
--- Name: customer_order_violations customer_order_violations_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customer_order_violations customer_order_violations_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customer_order_violations
@@ -1825,7 +2329,7 @@ ALTER TABLE ONLY public.customer_order_violations
 
 
 --
--- Name: customer_restrictions customer_restrictions_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customer_restrictions customer_restrictions_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customer_restrictions
@@ -1833,7 +2337,7 @@ ALTER TABLE ONLY public.customer_restrictions
 
 
 --
--- Name: customer_restrictions customer_restrictions_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: customer_restrictions customer_restrictions_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.customer_restrictions
@@ -1841,23 +2345,7 @@ ALTER TABLE ONLY public.customer_restrictions
 
 
 --
--- Name: dashboard_switch_config dashboard_switch_config_configured_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.dashboard_switch_config
-    ADD CONSTRAINT dashboard_switch_config_configured_by_fkey FOREIGN KEY (configured_by) REFERENCES public.staff_accounts(id);
-
-
---
--- Name: dashboard_switch_config dashboard_switch_config_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.dashboard_switch_config
-    ADD CONSTRAINT dashboard_switch_config_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff_accounts(id) ON DELETE CASCADE;
-
-
---
--- Name: deliveries deliveries_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: deliveries deliveries_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.deliveries
@@ -1865,7 +2353,7 @@ ALTER TABLE ONLY public.deliveries
 
 
 --
--- Name: deliveries deliveries_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: deliveries deliveries_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.deliveries
@@ -1873,7 +2361,7 @@ ALTER TABLE ONLY public.deliveries
 
 
 --
--- Name: deliveries deliveries_rider_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: deliveries deliveries_rider_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.deliveries
@@ -1881,7 +2369,7 @@ ALTER TABLE ONLY public.deliveries
 
 
 --
--- Name: inventory_transactions fk_inventory_txn_order; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: inventory_transactions fk_inventory_txn_order; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.inventory_transactions
@@ -1889,7 +2377,23 @@ ALTER TABLE ONLY public.inventory_transactions
 
 
 --
--- Name: inventory_transactions inventory_transactions_inventory_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: inventory_item_categories inventory_item_categories_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_item_categories
+    ADD CONSTRAINT inventory_item_categories_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.menu_categories(id) ON DELETE CASCADE;
+
+
+--
+-- Name: inventory_item_categories inventory_item_categories_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_item_categories
+    ADD CONSTRAINT inventory_item_categories_item_id_fkey FOREIGN KEY (inventory_item_id) REFERENCES public.inventory_items(id) ON DELETE CASCADE;
+
+
+--
+-- Name: inventory_transactions inventory_transactions_inventory_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.inventory_transactions
@@ -1897,7 +2401,7 @@ ALTER TABLE ONLY public.inventory_transactions
 
 
 --
--- Name: inventory_transactions inventory_transactions_performed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: inventory_transactions inventory_transactions_performed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.inventory_transactions
@@ -1905,7 +2409,7 @@ ALTER TABLE ONLY public.inventory_transactions
 
 
 --
--- Name: kitchen_alerts kitchen_alerts_acknowledged_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: kitchen_alerts kitchen_alerts_acknowledged_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.kitchen_alerts
@@ -1913,7 +2417,15 @@ ALTER TABLE ONLY public.kitchen_alerts
 
 
 --
--- Name: kitchen_alerts kitchen_alerts_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: kitchen_alerts kitchen_alerts_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.kitchen_alerts
+    ADD CONSTRAINT kitchen_alerts_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.esp32_devices(id);
+
+
+--
+-- Name: kitchen_alerts kitchen_alerts_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.kitchen_alerts
@@ -1921,7 +2433,7 @@ ALTER TABLE ONLY public.kitchen_alerts
 
 
 --
--- Name: menu_item_ingredients menu_item_ingredients_inventory_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: menu_item_ingredients menu_item_ingredients_inventory_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_item_ingredients
@@ -1929,7 +2441,7 @@ ALTER TABLE ONLY public.menu_item_ingredients
 
 
 --
--- Name: menu_item_ingredients menu_item_ingredients_menu_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: menu_item_ingredients menu_item_ingredients_menu_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_item_ingredients
@@ -1937,7 +2449,7 @@ ALTER TABLE ONLY public.menu_item_ingredients
 
 
 --
--- Name: menu_items menu_items_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: menu_items menu_items_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_items
@@ -1945,7 +2457,7 @@ ALTER TABLE ONLY public.menu_items
 
 
 --
--- Name: notifications notifications_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: notifications notifications_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.notifications
@@ -1953,7 +2465,7 @@ ALTER TABLE ONLY public.notifications
 
 
 --
--- Name: order_items order_items_menu_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: order_items order_items_menu_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.order_items
@@ -1961,7 +2473,7 @@ ALTER TABLE ONLY public.order_items
 
 
 --
--- Name: order_items order_items_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: order_items order_items_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.order_items
@@ -1969,7 +2481,7 @@ ALTER TABLE ONLY public.order_items
 
 
 --
--- Name: order_status_history order_status_history_changed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: order_status_history order_status_history_changed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.order_status_history
@@ -1977,7 +2489,7 @@ ALTER TABLE ONLY public.order_status_history
 
 
 --
--- Name: order_status_history order_status_history_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: order_status_history order_status_history_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.order_status_history
@@ -1985,7 +2497,7 @@ ALTER TABLE ONLY public.order_status_history
 
 
 --
--- Name: orders orders_cashier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: orders orders_cashier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.orders
@@ -1993,7 +2505,7 @@ ALTER TABLE ONLY public.orders
 
 
 --
--- Name: orders orders_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: orders orders_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.orders
@@ -2001,7 +2513,7 @@ ALTER TABLE ONLY public.orders
 
 
 --
--- Name: payments payments_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: payments payments_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payments
@@ -2009,7 +2521,7 @@ ALTER TABLE ONLY public.payments
 
 
 --
--- Name: payments payments_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: payments payments_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payments
@@ -2017,7 +2529,7 @@ ALTER TABLE ONLY public.payments
 
 
 --
--- Name: riders riders_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: riders riders_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.riders
@@ -2025,7 +2537,7 @@ ALTER TABLE ONLY public.riders
 
 
 --
--- Name: staff_accounts staff_accounts_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: staff_accounts staff_accounts_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.staff_accounts
@@ -2033,31 +2545,7 @@ ALTER TABLE ONLY public.staff_accounts
 
 
 --
--- Name: staff_dashboard_access staff_dashboard_access_granted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.staff_dashboard_access
-    ADD CONSTRAINT staff_dashboard_access_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.staff_accounts(id);
-
-
---
--- Name: staff_dashboard_access staff_dashboard_access_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.staff_dashboard_access
-    ADD CONSTRAINT staff_dashboard_access_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff_accounts(id) ON DELETE CASCADE;
-
-
---
--- Name: staff_switch_pin staff_switch_pin_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.staff_switch_pin
-    ADD CONSTRAINT staff_switch_pin_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff_accounts(id) ON DELETE CASCADE;
-
-
---
--- Name: support_chat_messages support_chat_messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: support_chat_messages support_chat_messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.support_chat_messages
@@ -2065,7 +2553,7 @@ ALTER TABLE ONLY public.support_chat_messages
 
 
 --
--- Name: support_chat_messages support_chat_messages_related_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: support_chat_messages support_chat_messages_related_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.support_chat_messages
@@ -2073,7 +2561,7 @@ ALTER TABLE ONLY public.support_chat_messages
 
 
 --
--- Name: support_chats support_chats_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: support_chats support_chats_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.support_chats
@@ -2084,5 +2572,5 @@ ALTER TABLE ONLY public.support_chats
 -- PostgreSQL database dump complete
 --
 
-\unrestrict OYK7cgjuOgd1kAouuT15AfcxF6v1ToBb25BLCAndoJMjhIoln4sL6IB6CDJ9UvI
+\unrestrict 0qHKc2DSrAUBJrzakVIDbpNOW1FCk29LZG2URVzt1I9cVzbD2KWnM6czeB1gqFt
 

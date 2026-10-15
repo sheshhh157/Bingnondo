@@ -437,10 +437,11 @@ async function getOrderTotals(req, res, next) {
 //
 // ── What "revenue" means here ──
 // A payment marked 'paid' on an order that was not cancelled. This is
-// intentionally different from `orders.status = 'completed'`, which is what the
-// page previously counted. Nothing in the application ever sets 'completed' —
-// `updateOrderStatus` accepts it, but no screen offers it — so the old
-// definition reported ₱0 on a working till.
+// intentionally different from `orders.status = 'completed'`: completion means
+// the order was handed off (counter order closed at the till, or a rider marking
+// a delivery delivered), not that it was paid — and an online order still out
+// for delivery is revenue before it ever reaches 'completed'. The status-based
+// definition the page previously used therefore under-reported an active till.
 //
 // Paid money on a cancelled order is excluded, so it currently appears in no
 // figure at all: there is no refund concept in the schema. That is a known gap,

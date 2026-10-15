@@ -137,7 +137,7 @@ const canQuery = async () => {
 };
 
 let token = null;
-const signIn = async (role = 'owner') => {
+const signIn = async (role = 'admin') => {
   const key = role;
   if (token && token[key]) return token[key];
   const account = await db.query(
@@ -170,7 +170,7 @@ function buildApp() {
   return app;
 }
 
-async function call(method, path, { body, role = 'owner' } = {}) {
+async function call(method, path, { body, role = 'admin' } = {}) {
   const jwtToken = await signIn(role);
   if (!jwtToken) return { status: 0, body: null };
   const server = buildApp().listen(0);

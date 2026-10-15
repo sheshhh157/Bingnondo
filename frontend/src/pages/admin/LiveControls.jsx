@@ -1,9 +1,9 @@
 import { useToast } from '../../context/ToastContext';
 import { timeStamp } from '../../utils/format';
-import { RefreshIcon } from './managerIcons';
+import { RefreshIcon } from './oversightIcons';
 
 // LiveControls — "Last updated" stamp + quiet refresh button shared by every
-// live manager page. The button spins (via .ui-live__refresh--busy) while a
+// live oversight page. The button spins (via .ui-live__refresh--busy) while a
 // manual refresh is in flight, and a toast confirms the outcome.
 export default function LiveControls({ lastUpdated, onRefresh, refreshing, label = 'Refresh' }) {
   const { toast } = useToast();

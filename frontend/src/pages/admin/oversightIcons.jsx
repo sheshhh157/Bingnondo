@@ -1,8 +1,8 @@
 /**
- * managerIcons.jsx — the manager navigation/overview icons.
+ * oversightIcons.jsx — the admin oversight navigation/overview icons.
  *
- * KitchenIcon, StocksIcon and DeliveryIcon were defined twice (once in
- * ManagerLayout for the sidebar, once in OversightPage for the module cards)
+ * KitchenIcon, StocksIcon and DeliveryIcon were defined twice (once for the
+ * sidebar, once for the module cards)
  * with identical paths. They live here now with the one difference that
  * actually mattered — call sites pick their own size and stroke weight.
  *

@@ -4,8 +4,8 @@ const router  = express.Router();
 const { authenticateToken, requireRoles } = require('../../middleware/auth.middleware');
 const ctrl = require('./admin.deliveries.controller');
 
-// Read-only: admins manage riders, managers/owners get a read-only delivery view.
-router.use(authenticateToken, requireRoles('admin', 'owner', 'manager'));
+// Read-only delivery view (admin only).
+router.use(authenticateToken, requireRoles('admin'));
 
 // GET /api/admin/deliveries — list deliveries (filterable by ?status=, ?search=)
 router.get('/', ctrl.listDeliveries);

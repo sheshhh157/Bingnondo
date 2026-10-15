@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 // ── SpinSkeleton / button etc — small primitives ─────────────────────────
 export function Spinner({ size = 16 }) {
@@ -113,14 +114,18 @@ export function Modal({ open, onClose, title, width = 520, headingId = 'modal-ti
     if (m) { if (!m.disabled) m.focus(); }
     else if (dialog) dialog.focus();
 
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     return () => {
       document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
       if (prevFocus.current && prevFocus.current.focus) prevFocus.current.focus();
     };
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="ap-overlay" ref={ref} onClick={e => e.target === ref.current && onClose()} role="presentation">
       <div className="ap-modal" style={{ maxWidth: width }} role="dialog" aria-modal="true" aria-labelledby={headingId} tabIndex={-1}>
         <div className="ap-modal__head">
@@ -131,7 +136,8 @@ export function Modal({ open, onClose, title, width = 520, headingId = 'modal-ti
         </div>
         <div className="ap-modal__body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -174,6 +180,26 @@ export function Pagination({ page = 1, total = 1, onPage, label = 'Pagination' }
       )}
       <Btn variant="ghost" size="sm" disabled={page >= total} onClick={() => onPage(page + 1)} aria-label="Next page">→</Btn>
     </nav>
+  );
+}
+
+// ── Table skeleton (first-load placeholder) ────────────────────────────────
+// Rendered instead of the spinner on a list's *first* load. It mirrors the
+// shape of the table it stands in for, so the layout doesn't collapse (and the
+// scroll position doesn't jump) when the real rows arrive. Later loads keep the
+// rows on screen and dim them instead — see `.is-busy`.
+export function TableSkeleton({ rows = 6, cols = 5 }) {
+  const cells = (keyPrefix) =>
+    Array.from({ length: cols }, (_, i) => (
+      <span key={`${keyPrefix}${i}`} className="ap-skel__cell" style={{ flexGrow: i === 0 ? 2 : 1, flexBasis: 0 }} />
+    ));
+  return (
+    <div className="ap-skel" role="status" aria-label="Loading">
+      <div className="ap-skel__row ap-skel__row--head">{cells('h')}</div>
+      {Array.from({ length: rows }, (_, r) => (
+        <div key={r} className="ap-skel__row" style={{ animationDelay: `${r * 55}ms` }}>{cells(`r${r}c`)}</div>
+      ))}
+    </div>
   );
 }
 

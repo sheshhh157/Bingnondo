@@ -518,11 +518,16 @@ export default function TransactionHistory() {
     </>
   );
 
+  // Keep the previous rows on screen while a new range loads (stale-while-
+  // revalidate) so switching ranges doesn't blank the table and jump.
+  const firstLoad = loading && orders.length === 0;
+  const busy = loading && orders.length > 0;
+
   return (
     <div className="th-root">
       <div className="th-head">
         <h2 className="th-title">My Transactions</h2>
-        {!loading && !error && <span className="th-count">{countLabel}</span>}
+        {!firstLoad && !error && <span className="th-count">{countLabel}</span>}
       </div>
 
       <div className="th-controls">
@@ -577,8 +582,8 @@ export default function TransactionHistory() {
         </div>
       )}
 
-      <div className="th-content">
-        {loading ? (
+      <div className={`th-content${busy ? ' th-content--busy' : ''}`} aria-busy={busy}>
+        {firstLoad ? (
           <TransactionSkeleton />
         ) : error ? (
           <div className="th-state th-state--error">

@@ -5,7 +5,7 @@ const { upload } = require('../../config/cloudinary');
 const ctrl = require('./upload.controller');
 
 // 'cashier' added — cashier can now upload menu images via the Staff Portal tab
-const staffWrite = [authenticateToken, requireStaff, requireRoles('cashier', 'staff', 'owner', 'admin')];
+const staffWrite = [authenticateToken, requireStaff, requireRoles('cashier', 'admin')];
 
 // Multer error handler — converts multer errors to clean JSON responses
 function handleMulterError(err, req, res, next) {
