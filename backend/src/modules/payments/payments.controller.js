@@ -1,5 +1,7 @@
 const db         = require('../../config/db');
 const socketHub  = require('../../sockets');
+const INTERNAL_BRIDGE_URL = process.env.INTERNAL_BRIDGE_URL || 'http://localhost:3000/api/internal';
+const INTERNAL_API_KEY     = process.env.INTERNAL_API_KEY;
 
 // ─── POST /api/payments ───────────────────────────────────────────────────────
 // Cashier marks a counter order as paid (Cash or GCash counter).
@@ -273,6 +275,13 @@ async function verifyPayment(req, res, next) {
 
       // 6. Notify the customer — payment verified, order confirmed
       socketHub.emitPaymentVerified({ orderId, orderNumber: order.order_number, customerId: order.customer_id });
+
+      // Bridge: create notification in customer app backend + emit in-app push
+      try {
+        const bridge = require('../../utils/internalBridge');
+        bridge.notifyPaymentStatus(orderId, 'approved');
+        bridge.notifyOrderStatus(orderId, 'confirmed');
+      } catch (_) {}
     }
 
     res.json({ success: true, message: 'Payment verified. Order sent to kitchen.' });
@@ -348,6 +357,12 @@ async function rejectPayment(req, res, next) {
       customerId: customer_id,
       reason: reason.trim(),
     });
+
+    // Bridge to customer app
+    try {
+      const bridge = require('../../utils/internalBridge');
+      bridge.notifyPaymentStatus(orderId, 'rejected', { reason: reason.trim() });
+    } catch (_) {}
 
     res.json({ success: true, message: 'Receipt rejected. Customer notified to re-upload.' });
   } catch (err) {

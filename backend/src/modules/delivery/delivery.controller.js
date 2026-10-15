@@ -32,7 +32,7 @@ const DELIVERY_SELECT = `
     -- Customer info (snapshotted at query time — not stored)
     c.first_name || ' ' || c.last_name         AS customer_name,
     c.mobile_number                             AS customer_contact,
-    c.address                                   AS customer_address,
+    COALESCE(o.delivery_address, c.address)     AS customer_address,
     -- Registered rider info (if assigned via rider_id)
     r.full_name                                 AS registered_rider_name,
     r.mobile_number                             AS registered_rider_contact,
