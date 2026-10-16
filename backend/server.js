@@ -14,7 +14,6 @@ const inventoryRoutes   = require('./src/modules/inventory/inventory.routes');
 const ordersRoutes      = require('./src/modules/orders/orders.routes');
 const paymentsRoutes    = require('./src/modules/payments/payments.routes');
 const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
-const esp32Routes       = require('./src/modules/kitchen/esp32.routes');
 // Admin + Staff routes
 const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 
@@ -65,7 +64,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/orders',   ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/kitchen',  kitchenRoutes);
-app.use('/api/esp32',    esp32Routes);   // ESP32 kitchen buzzer: GET /alert (polled), POST /ack (button)
+app.use('/api/esp32',    require('./src/modules/kitchen/esp32.routes'));   // ESP32 buzzer device
 
 // ─── Rider Routes ─────────────────────────────────────────────────────────────
 // Requires JWT type='rider' — enforced by requireRider middleware inside the router

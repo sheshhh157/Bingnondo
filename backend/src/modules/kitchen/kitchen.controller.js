@@ -125,6 +125,14 @@ async function acknowledgeOrder(req, res, next) {
       usage = await applyOrderIngredientUsage(client, req.params.id, req.user.sub);
     }
 
+    const { rows: ackedAlerts } = await client.query(
+      `UPDATE kitchen_alerts
+          SET acknowledged_at = NOW(), acknowledged_by = $1
+        WHERE order_id = $2 AND acknowledged_at IS NULL
+        RETURNING id, device_id`,
+      [req.user.sub, req.params.id]
+    );
+
     await client.query('COMMIT');
 
     const order = rows[0];
@@ -134,6 +142,9 @@ async function acknowledgeOrder(req, res, next) {
       orderNumber: order.order_number,
       status: nextStatus,
     });
+    ackedAlerts.forEach((alert) =>
+      socketHub.emitKitchenAlertAck({ alertId: alert.id, deviceId: alert.device_id })
+    );
     emitIngredientUsage(usage);
 
     res.json(order);

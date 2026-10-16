@@ -24,9 +24,7 @@ function deviceAuth(req, res, next) {
 //   { buzz, pending, alert_id, orders: ["ORD-0012", ...] }
 //   buzz   -> true while any alert is unacknowledged
 //   alert_id / orders[0] -> the oldest waiting alert (what the button will acknowledge)
-//   orders -> up to MAX_ORDERS waiting order numbers, oldest first, for the screen
-const MAX_ORDERS = 8;
-
+//   orders -> up to 6 waiting order numbers, oldest first, for the screen
 router.get('/alert', deviceAuth, async (req, res, next) => {
   try {
     const code = req.query.device_code;
@@ -54,7 +52,7 @@ router.get('/alert', deviceAuth, async (req, res, next) => {
       buzz: rows.length > 0,
       pending: rows.length,
       alert_id: rows[0] ? rows[0].alert_id : null,
-      orders: rows.slice(0, MAX_ORDERS).map((r) => r.order_number),
+      orders: rows.slice(0, 6).map((r) => r.order_number),
     });
   } catch (err) {
     next(err);

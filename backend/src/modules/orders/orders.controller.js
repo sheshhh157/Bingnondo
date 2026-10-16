@@ -1,5 +1,6 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
+const { createKitchenAlert, announceKitchenAlert } = require('../kitchen/kitchen-alert');
 const { ALL_STATUSES, isKnownStatus, canTransition } = require('./status-transitions');
 // Flowchart 2: preparing an order consumes its ingredients. See deduction.js.
 const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
@@ -140,6 +141,9 @@ async function createOrder(req, res, next) {
       [order.id, payment.method, totalAmount]
     );
 
+    // 5b. Paid -> ring the kitchen ESP32 buzzer (same transaction as the order).
+    const kitchenAlert = await createKitchenAlert(client, order.id);
+
     await client.query('COMMIT');
 
     // 6. Attach items + payment to the response and emit to kitchen
@@ -151,6 +155,7 @@ async function createOrder(req, res, next) {
       : null;
 
     socketHub.emitNewOrder(order);
+    announceKitchenAlert(kitchenAlert);
 
     res.status(201).json(order);
   } catch (err) {

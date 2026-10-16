@@ -20,7 +20,7 @@
  *   inventory:update   → cashier/staff/manager: stock level changed
  *   inventory:low_stock→ cashier/staff/manager: stock crossed into low/out
  *   kitchen_alert      → kitchen + esp32:<id>: new alert, fire buzzer
- *   kitchen_alert:ack  → kitchen + esp32:<id>: alert acknowledged, stop buzzer
+ *   kitchen_alert:ack  → esp32:<id>: alert acknowledged, stop buzzer
  *   delivery:new       → rider:<id>: a delivery was auto-assigned to that rider
  *   delivery:update    → staff/manager + rider:<id>: delivery status changed
  *
@@ -243,7 +243,16 @@ function emitLowStock(payload) {
 
 function emitKitchenAlert({ alertId, orderId, orderNumber, deviceId, locationLabel }) {
   if (!_io) return;
-  const payload = { alertId, orderId, orderNumber, deviceId, locationLabel };
+  // Includes the shape the kitchen AlertPanel reads (id, order, esp32_device)
+  // alongside the original camelCase fields.
+  const payload = {
+    id: alertId, alertId,
+    order_id: orderId, orderId, orderNumber,
+    order: { order_number: orderNumber },
+    deviceId, locationLabel,
+    esp32_device: deviceId ? { id: deviceId, location_label: locationLabel } : null,
+    acknowledged_at: null,
+  };
   _io.to('kitchen').emit('kitchen_alert', payload);
   if (deviceId) _io.to(`esp32:${deviceId}`).emit('kitchen_alert', payload);
   console.log(`[socket] → kitchen_alert: ${orderNumber}`);
@@ -251,8 +260,10 @@ function emitKitchenAlert({ alertId, orderId, orderNumber, deviceId, locationLab
 
 function emitKitchenAlertAck({ alertId, deviceId }) {
   if (!_io) return;
+  _io.to(`esp32:${deviceId}`).emit('kitchen_alert:ack', { alertId });
+  // Also tell kitchen screens, so an alert acknowledged with the ESP32 button
+  // disappears from the Incoming Alerts panel without a refresh.
   _io.to('kitchen').emit('kitchen_alert:ack', { alertId });
-  if (deviceId) _io.to(`esp32:${deviceId}`).emit('kitchen_alert:ack', { alertId });
 }
 
 function emitDeliveryNew(delivery) {

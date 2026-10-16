@@ -190,11 +190,6 @@ export const kitchenAPI = {
 
   updateOrderStatus: (orderId, status) =>
     apiClient.patch(`/api/kitchen/orders/${orderId}/status`, { status }),
-
-  getAlerts: () => apiClient.get('/api/kitchen/alerts'),
-
-  acknowledgeAlert: (alertId) =>
-    apiClient.post(`/api/kitchen/alerts/${alertId}/acknowledge`),
 };
 
 // ─── ADMIN API ────────────────────────────────────────────────────────────────

@@ -44,14 +44,6 @@ export default function OversightKitchen() {
     ],
   });
 
-  // Unacknowledged kitchen (ESP32) alerts. Queried, not socket-pushed: the
-  // backend only buzzes the kitchen + device rooms, and an alert needs its
-  // hardware source — polling the existing endpoint is the manager's view.
-  const { data: alerts } = useLiveData({
-    fetchFn: async () => (await kitchenAPI.getAlerts()).data,
-    pollMs: 15000,
-  });
-
   // The queue is two independent lanes — counter and online — kept separate so
   // the kitchen can read one channel at a time. Ready orders are waiting to be
   // handed over rather than being made, so they get their own section below
@@ -89,33 +81,6 @@ export default function OversightKitchen() {
       )}
 
       <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh kitchen queue" />
-
-      {alerts.length > 0 && (
-        <section className="kit-alerts" aria-label={`${alerts.length} active kitchen alert${alerts.length === 1 ? '' : 's'}`} role="status">
-          <div className="kit-alerts__header">
-            <span className="kit-alerts__count">{alerts.length}</span>
-            <span className="kit-alerts__title">Active kitchen alerts</span>
-            <span className="kit-alerts__hint">awaiting kitchen acknowledgment</span>
-          </div>
-          <div className="kit-alerts__list">
-            {alerts.map((a) => (
-              <div key={a.id} className="kit-alert" role="alert">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                </svg>
-                <div className="kit-alert__body">
-                  <span className="kit-alert__order">#{a.order?.order_number}</span>
-                  <span className="kit-alert__loc">{a.esp32_device?.location_label || 'Unassigned device'}</span>
-                </div>
-                <time className="kit-alert__time" dateTime={a.triggered_at} title={new Date(a.triggered_at).toLocaleString('en-PH')}>
-                  {elapsedSince(a.triggered_at, now)}
-                </time>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       {loading ? (
         <PageSkeleton stats={2} cards={4} />
