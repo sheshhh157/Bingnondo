@@ -1,11 +1,6 @@
 const db         = require('../../config/db');
 const socketHub  = require('../../sockets');
-<<<<<<< HEAD
-const INTERNAL_BRIDGE_URL = process.env.INTERNAL_BRIDGE_URL || 'http://localhost:3000/api/internal';
-const INTERNAL_API_KEY     = process.env.INTERNAL_API_KEY;
-=======
 const { createAlert, emitAlert } = require('../kitchen/kitchen.alert');
->>>>>>> feat/admin-mobile-filters-online-orders
 
 // ─── POST /api/payments ───────────────────────────────────────────────────────
 // Cashier marks a counter order as paid (Cash or GCash counter).

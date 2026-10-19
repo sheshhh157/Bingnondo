@@ -2,13 +2,8 @@ const db = require('../../config/db');
 const socketHub = require('../../sockets');
 const { canTransition } = require('../orders/status-transitions');
 const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
-<<<<<<< HEAD
-const INTERNAL_BRIDGE_URL = process.env.INTERNAL_BRIDGE_URL || 'http://localhost:3000/api/internal';
-const INTERNAL_API_KEY     = process.env.INTERNAL_API_KEY;
-=======
 // Auto-hand a dispatchable online order to a free rider. See assignment.js.
 const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('../rider/assignment');
->>>>>>> feat/admin-mobile-filters-online-orders
 
 // The kitchen's own live prep queue. 'ready' is deliberately excluded: the
 // kitchen marks an order ready and is then done with it, so a ready ticket

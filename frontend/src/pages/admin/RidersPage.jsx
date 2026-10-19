@@ -28,6 +28,16 @@ const STATUS_OPTIONS = [
   { value: 'inactive',   label: 'Inactive'    },
 ];
 
+// ── name uniqueness ───────────────────────────────────────────────────────────
+// Compared case- and whitespace-insensitively, e.g. "Juan  Cruz" == "juan cruz".
+const normalizeName = (name) => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+function isNameTaken(name, riders, selfId) {
+  const normalized = normalizeName(name);
+  if (!normalized) return false;
+  return riders.some((r) => r.id !== selfId && normalizeName(r.full_name) === normalized);
+}
+
 // ── Vehicle Icon SVG ──────────────────────────────────────────────────────────
 function VehicleIcon({ type, size = 20 }) {
   if (type === 'motorcycle' || type === 'e_bike') {
@@ -144,7 +154,7 @@ function StatsBar({ riders }) {
 }
 
 // ── Rider Form Modal ──────────────────────────────────────────────────────────
-function RiderFormModal({ open, onClose, onSave, initial = null, loading }) {
+function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders = [] }) {
   const isEdit = Boolean(initial);
   // Initialised from `initial` on mount; the parent remounts this modal via
   // `key` whenever the open/edit target changes, so no reset effect is needed.
@@ -158,6 +168,7 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading }) {
   const validate = () => {
     const e = {};
     if (!form.full_name.trim())         e.full_name      = 'Full name is required.';
+    else if (isNameTaken(form.full_name, riders, initial?.id)) e.full_name = 'This name is already in use.';
     if (!form.mobile_number.trim())     e.mobile_number  = 'Mobile number is required.';
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email format.';
     if (!isEdit && !form.temp_password) e.temp_password  = 'Temporary password is required.';
@@ -831,6 +842,7 @@ function RidersTab() {
         onSave={handleFormSave}
         initial={editRider}
         loading={formSaving}
+        riders={riders}
       />
 
       <ResetPasswordModal

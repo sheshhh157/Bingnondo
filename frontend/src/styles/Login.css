@@ -362,6 +362,33 @@
   box-shadow: 0 0 0 3px rgba(224,123,0,0.1);
 }
 
+/* Password input — leave room for the show/hide toggle on the right */
+.login-field__input--has-toggle {
+  padding-right: 2.75rem;
+}
+
+.login-field__toggle {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #78553A;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.login-field__toggle:hover { color: #2D0000; background: rgba(224,123,0,0.12); }
+.login-field__toggle:focus-visible { outline: 3px solid #E07B00; outline-offset: 1px; }
+
 /* ─── Error ──────────────────────────────────────────────────────── */
 .login-form__error {
   display: flex;

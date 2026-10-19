@@ -468,6 +468,24 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
                     <dd>{order.gcash_ref_number}</dd>
                   </div>
                 )}
+                {order.payment_method === 'gcash' && (
+                  <div className="oo-detail__row">
+                    <dt>Amount Sent</dt>
+                    <dd>
+                      {order.gcash_amount_sent != null
+                        ? (
+                          <>
+                            {currency(order.gcash_amount_sent)}
+                            {order.gcash_amount_sent < order.total_amount && (
+                              <span className="oo-detail__shortpay" title="Amount sent is less than the order total">Short</span>
+                            )}
+                          </>
+                        )
+                        : <span className="oo-detail__unread">Not yet read</span>
+                      }
+                    </dd>
+                  </div>
+                )}
                 {order.rejection_reason && (
                   <div className="oo-detail__row oo-detail__row--rejection">
                     <dt>Last Rejection</dt>
