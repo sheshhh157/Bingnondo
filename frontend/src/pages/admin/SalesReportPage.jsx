@@ -1,16 +1,18 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { ordersAPI } from '../../services/managerApi';
+import { ordersAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
 import { currency, STATUS_LABEL, periodBounds } from '../../utils/format';
 import { toCsv, downloadCsv } from '../../utils/csv';
-import { listEvent, orderUpsert } from './managerData';
+import { listEvent, orderUpsert } from './oversightData';
 import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
 import StatCard from '../../components/StatCard';
 import CardPanel from '../../components/CardPanel';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import ErrorBanner from '../../components/ErrorBanner';
+import Pagination from '../../components/Pagination';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/SalesReportPage.css';
 import {
@@ -29,7 +31,7 @@ const PERIODS = [
 const SALES_CSV_HEADERS = ['Order #', 'Items', 'Payment', 'Total', 'Status', 'Time'];
 
 /** Rows per page in the transactions table. */
-const TABLE_PAGE_SIZE = 50;
+const TABLE_PAGE_SIZE = 10;
 
 /**
  * Stable empty values. `data?.x || []` allocates a fresh array on every render,
@@ -84,6 +86,7 @@ export default function SalesReportPage() {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   // Horizontal scroll position of the period strip. `visible` only when the
   // strip overflows; `ratio` (0..1) and `thumb` (%) drive the scrollbar thumb.
@@ -102,6 +105,9 @@ export default function SalesReportPage() {
   );
 
   const query = search.trim();
+  // 'all' is the select's "every method" option, not a method name — collapse it
+  // to undefined so the API omits the filter entirely.
+  const paymentParam = paymentFilter === 'all' ? undefined : paymentFilter;
 
   // Every filter and period switch starts at page 1. Done in the handlers
   // rather than an effect, so a stale page number never survives a change.
@@ -117,8 +123,8 @@ export default function SalesReportPage() {
   // but understated total — and the search box could only match items inside
   // the rows that happened to be loaded.
   const fetchReport = useCallback(
-    () => ordersAPI.getReport({ ...bounds, payment: paymentFilter, search: query }),
-    [bounds, paymentFilter, query],
+    () => ordersAPI.getReport({ ...bounds, payment: paymentParam, search: query }),
+    [bounds, paymentParam, query],
   );
 
   const {
@@ -157,17 +163,17 @@ export default function SalesReportPage() {
   // ── Transactions table ──────────────────────────────────────────────────────
   // A page of rows at a time, with `status` applied server-side. The previous
   // build paged the full period in the browser, which required downloading
-  // every matching order before it could show the first 50.
+  // every matching order before it could show the first page.
   const fetchPage = useCallback(
     () => ordersAPI.getRange({
       ...bounds,
       limit: TABLE_PAGE_SIZE,
       offset: (page - 1) * TABLE_PAGE_SIZE,
       status: statusFilter === 'all' ? undefined : statusFilter,
-      payment: paymentFilter,
+      payment: paymentParam,
       search: query,
     }),
-    [bounds, page, statusFilter, paymentFilter, query],
+    [bounds, page, statusFilter, paymentParam, query],
   );
 
   const {
@@ -186,13 +192,24 @@ export default function SalesReportPage() {
 
   const pageRows = tableData?.data ?? NO_ORDERS;
   const matchCount = tableData?.total ?? 0;
+  // Rows that match the filters but sit on another page: the export only ever
+  // writes the page on screen, so the confirmation has to say how many are left out.
+  const unmatchedOnOtherPages = Math.max(0, matchCount - pageRows.length);
 
   // `total` is the unpaged match count, so the pager doesn't need every row to
   // know how many pages exist.
   const totalPages = Math.max(1, Math.ceil(matchCount / TABLE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
 
-  const loading = reportLoading || tableLoading;
+  // The summary and the table load independently, and paging / filtering only
+  // reloads one of them. The full-page skeleton is therefore reserved for the
+  // first paint: once either half has data, a reload keeps the current view in
+  // place rather than collapsing the page and throwing the scroll back to the
+  // top. `tableBusy` drives a quiet overlay on the table for later reloads.
+  const firstPaint = report?.data == null || tableData === EMPTY_PAGE;
+  const showSkeleton = firstPaint && (reportLoading || tableLoading);
+  const tableBusy = tableLoading && !showSkeleton;
+
   const error = reportError || tableError;
 
   // Track the period strip's overflow. The ResizeObserver callback fires once on
@@ -292,6 +309,7 @@ export default function SalesReportPage() {
       buildSalesCsv(pageRows),
       `sales-report-${period}-${new Date().toISOString().slice(0, 10)}.csv`,
     );
+    setExportOpen(false);
   };
 
   const hasFilters = statusFilter !== 'all' || paymentFilter !== 'all';
@@ -346,7 +364,7 @@ export default function SalesReportPage() {
           )}
           <button
             className="ui-btn ui-btn--primary sales-export"
-            onClick={handleExport}
+            onClick={() => setExportOpen(true)}
             disabled={pageRows.length === 0}
             title={matchCount > pageRows.length
               ? `Exports the ${pageRows.length} orders on this page, not all ${matchCount} matches.`
@@ -371,7 +389,7 @@ export default function SalesReportPage() {
 
       <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh sales report" />
 
-      {loading ? (
+      {showSkeleton ? (
         <PageSkeleton stats={3} charts={2} rows={5} />
       ) : (
         <>
@@ -475,8 +493,8 @@ export default function SalesReportPage() {
             )}
           </CardPanel>
 
-          <CardPanel title="Transactions">
-            <div className="sales-table-wrap">
+          <CardPanel title="Transactions" className="sales-card">
+            <div className={`sales-table-wrap${tableBusy ? ' sales-table-wrap--busy' : ''}`} aria-busy={tableBusy}>
               <table className="sales-table" aria-label="Sales transactions">
                 <thead>
                   <tr>
@@ -499,29 +517,15 @@ export default function SalesReportPage() {
               </table>
             </div>
 
-            {totalPages > 1 && (
-              <nav className="sales-pager" aria-label="Transactions pages">
-                <button
-                  type="button"
-                  className="ui-btn"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </button>
-                <span className="sales-pager__status">
-                  Page {currentPage} of {totalPages} · {matchCount.toLocaleString('en-PH')} order{matchCount === 1 ? '' : 's'}
-                </span>
-                <button
-                  type="button"
-                  className="ui-btn"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </button>
-              </nav>
-            )}
+            <Pagination
+              page={currentPage}
+              totalPages={totalPages}
+              total={matchCount}
+              from={pageRows.length ? (currentPage - 1) * TABLE_PAGE_SIZE + 1 : 0}
+              to={(currentPage - 1) * TABLE_PAGE_SIZE + pageRows.length}
+              onPage={setPage}
+              label="Transactions pagination"
+            />
           </CardPanel>
         </>
       )}
@@ -529,6 +533,21 @@ export default function SalesReportPage() {
       <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter orders">
         {filterFields}
       </FilterModal>
+
+      <ConfirmDialog
+        open={exportOpen}
+        title="Export this page?"
+        message={
+          unmatchedOnOtherPages > 0
+            ? `This downloads the ${pageRows.length} order${pageRows.length === 1 ? '' : 's'} currently shown as a CSV file (order number, items, payment, total, status, time). Only this page is exported — ${unmatchedOnOtherPages} more order${unmatchedOnOtherPages === 1 ? '' : 's'} match your filters but sit on other pages and won't be included. To export those, change the period, filters, or go to another page first.`
+            : `This downloads ${pageRows.length === 1 ? 'the one matching order' : `all ${pageRows.length} matching orders`} as a CSV file (order number, items, payment, total, status, time). Every order matching your current filters is included.`
+        }
+        confirmLabel="Export CSV"
+        cancelLabel="Cancel"
+        tone="primary"
+        onConfirm={handleExport}
+        onCancel={() => setExportOpen(false)}
+      />
     </div>
   );
 }

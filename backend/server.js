@@ -14,6 +14,7 @@ const inventoryRoutes   = require('./src/modules/inventory/inventory.routes');
 const ordersRoutes      = require('./src/modules/orders/orders.routes');
 const paymentsRoutes    = require('./src/modules/payments/payments.routes');
 const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
+const esp32Routes       = require('./src/modules/kitchen/esp32.routes');
 // Admin + Staff routes
 const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 
@@ -30,8 +31,8 @@ const riderRoutes         = require('./src/modules/rider/rider.routes');      //
 const menuCtrl   = require('./src/modules/menu/menu.controller');
 const socketHub  = require('./src/sockets');
 
-// ── Legacy mock data (Manager dashboard — keep until full backend is ready) ────
-const db = require('./data');
+// Idempotent schema top-ups (address pin columns) — shared DB with the app backend
+const ensureSchema = require('./src/config/ensureSchema');
 
 const app    = express();
 const server = http.createServer(app);
@@ -67,6 +68,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/orders',   ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/kitchen',  kitchenRoutes);
+app.use('/api/esp32',    esp32Routes);   // ESP32 kitchen buzzer: GET /alert (polled), POST /ack (button)
 
 // ─── Rider Routes ─────────────────────────────────────────────────────────────
 // Requires JWT type='rider' — enforced by requireRider middleware inside the router
@@ -87,7 +89,7 @@ app.use('/api/admin/system-settings', adminSettingsRoutes);
 app.use('/api/admin/riders',          adminRiderRoutes);   // §6.5 Rider CRUD (admin)
 app.use('/api/admin/deliveries',      adminDeliveryRoutes); // Riders & Deliveries — read-only list
 app.use('/api/admin/audit-log',       adminAuditRoutes);  // §6.6 Admin audit trail
-// Customer Restrictions (§6.4) — Admin + Owner only
+// Customer Restrictions (§6.4) — Admin only
 app.use('/api/admin/customer-restrictions', adminCustomerRestrictionsRoutes);
 app.use('/api/support-chat',          supportChatRoutes);
 // PayMongo webhook — no auth middleware (signed by PayMongo header)
@@ -98,26 +100,6 @@ app.post('/api/webhooks/paymongo', paymentsCtrl.paymongoWebhook);
 app.get('/api/test', (_req, res) => {
   res.json({ message: 'Bingnondo backend is running.' });
 });
-
-app.get('/api/manager/health', (_req, res) => {
-  res.json({
-    socketConnected: io.engine.clientsCount > 0,
-    connectedClients: io.engine.clientsCount,
-    uptime: process.uptime(),
-  });
-});
-
-// ─── Manager Read-only Endpoints (mock — replace per module) ───────────────────
-app.get('/api/manager/orders',         (_req, res) => res.json({ data: db.getOrders() }));
-app.get('/api/manager/orders/:id',      (req, res) => {
-  const order = db.getOrder(req.params.id);
-  if (!order) return res.status(404).json({ message: 'Order not found.' });
-  res.json({ data: order });
-});
-app.get('/api/manager/inventory',      (_req, res) => res.json({ data: { items: db.getInventory() } }));
-app.get('/api/manager/kitchen',        (_req, res) => res.json({ data: db.getKitchenOrders() }));
-app.get('/api/manager/kitchen/alerts', (_req, res) => res.json({ data: db.getKitchenAlerts() }));
-app.get('/api/manager/deliveries',     (_req, res) => res.json({ data: db.getDeliveries() }));
 
 // ─── 404 for unknown routes ────────────────────────────────────────────────────
 app.use((req, res) => {
@@ -131,24 +113,6 @@ app.use((err, req, res, next) => {
   console.error('[server error]', err);
   res.status(err.status || 500).json({ message: err.message || 'Something went wrong. Please try again.' });
 });
-
-// ─── Simulated live events (Manager dashboard) ─────────────────────────────────
-function runSimulatedEvent() {
-  const events = [
-    () => db.advanceKitchenOrder(),
-    () => db.addNewKitchenOrder(),
-    () => db.adjustInventory(),
-    () => db.advanceDelivery(),
-    () => db.maybeAddDelivery(),
-  ];
-  const result = events[Math.floor(Math.random() * events.length)]();
-  if (result) {
-    io.emit(result.type, result.payload);
-    console.log(`[socket] Emitted: ${result.type}`);
-  }
-  setTimeout(runSimulatedEvent, 8000 + Math.floor(Math.random() * 7000));
-}
-setTimeout(runSimulatedEvent, 5000);
 
 // ─── Start Server ───────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
@@ -176,3 +140,8 @@ server.listen(PORT, () => {
   console.log(`Settings:     GET/PUT              /api/admin/system-settings/business-hours`);
   console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);
 });
+
+// Idempotent schema top-ups (address pin columns). Non-fatal if it fails.
+ensureSchema().catch((err) =>
+  console.error('[schema] ensureSchema failed:', err.message)
+);

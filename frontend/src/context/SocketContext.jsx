@@ -15,7 +15,12 @@ function currentRoom() {
   try {
     const stored = localStorage.getItem('bingnondo_user');
     if (!stored) return null;
-    return SOCKET_ROOM_BY_ROLE[JSON.parse(stored)?.role] ?? null;
+    const user = JSON.parse(stored);
+    // A rider's room is their private `rider:<id>`. Assignment and status
+    // events are addressed to it, and the server only lets a rider claim their
+    // own — the role map has no entry for them.
+    if (user?.type === 'rider' && user?.id != null) return `rider:${user.id}`;
+    return SOCKET_ROOM_BY_ROLE[user?.role] ?? null;
   } catch {
     // Malformed storage — treat it as signed out rather than throwing.
     return null;
@@ -24,6 +29,9 @@ function currentRoom() {
 
 /** Room the backend token-checks. Only this one is auth-gated today. */
 const MANAGER_ROOM = 'manager';
+
+/** True for rooms the backend grants from the handshake token, not a bare join. */
+const isTokenRoom = (room) => room === MANAGER_ROOM || room.startsWith('rider:');
 
 /**
  * The token this socket last presented on a connection attempt.
@@ -42,8 +50,8 @@ let lastHandshakeToken = null;
  * Point the socket at the current token and force a fresh connection so the
  * server re-evaluates the handshake. No-ops when nothing changed.
  *
- * Scoped to the `manager` room on purpose: cashier/staff/kitchen join
- * unauthenticated and are unaffected.
+ * Scoped to the token-derived rooms (`manager`, `rider:<id>`) on purpose:
+ * cashier/staff/kitchen join unauthenticated and are unaffected.
  */
 function reauthenticate(socket) {
   const token = getToken() ?? null;
@@ -74,10 +82,10 @@ export function joinSocketRoom(socket = globalSocket) {
   const room = currentRoom();
   if (!room || !socket) return;
 
-  // The `manager` room is granted from the handshake token, so an already-open
-  // socket authenticated as nobody (or as a previous user) has to reconnect
-  // before the join will be honoured.
-  if (room === MANAGER_ROOM) {
+  // `manager` and `rider:<id>` are granted from the handshake token, so an
+  // already-open socket authenticated as nobody (or as a previous user) has to
+  // reconnect before the join will be honoured.
+  if (isTokenRoom(room)) {
     if (reauthenticate(socket)) return;
   }
   socket.emit('join', { room });
@@ -174,7 +182,8 @@ export function SocketProvider({ children }) {
       // redirect follows immediately after.
       const onAuthExpired = () => {
         lastHandshakeToken = null;
-        socket.emit('leave', { room: MANAGER_ROOM });
+        const room = currentRoom();
+        if (room) socket.emit('leave', { room });
       };
       window.addEventListener('auth:expired', onAuthExpired);
 

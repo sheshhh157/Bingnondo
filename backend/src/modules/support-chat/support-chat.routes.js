@@ -48,7 +48,7 @@ router.get(
   '/threads',
   authenticateToken,
   requireStaff,
-  requireRoles('staff', 'cashier', 'owner', 'admin'),
+  requireRoles('cashier', 'admin'),
   ctrl.getAllThreads
 );
 
@@ -58,7 +58,7 @@ router.get(
   '/threads/:chatId/messages',
   authenticateToken,
   requireStaff,
-  requireRoles('staff', 'cashier', 'owner', 'admin'),
+  requireRoles('cashier', 'admin'),
   ctrl.getThreadMessages
 );
 
@@ -69,7 +69,7 @@ router.post(
   '/reply',
   authenticateToken,
   requireStaff,
-  requireRoles('staff', 'cashier', 'owner', 'admin'),
+  requireRoles('cashier', 'admin'),
   ctrl.sendStaffReply
 );
 

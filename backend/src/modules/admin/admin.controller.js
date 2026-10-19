@@ -116,6 +116,18 @@ exports.createStaffAccount = async (req, res) => {
       return res.status(409).json({ message: 'An account with this email already exists.' });
     }
 
+    // Check full name uniqueness (case- and whitespace-insensitive)
+    const { rows: nameTaken } = await client.query(
+      `SELECT id FROM staff_accounts
+        WHERE lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
+            = lower(regexp_replace(btrim($1),        '[[:space:]]+', ' ', 'g'))`,
+      [full_name]
+    );
+    if (nameTaken.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'That name is already in use by another account.' });
+    }
+
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const { rows } = await client.query(
@@ -305,6 +317,21 @@ exports.updateStaffAccount = async (req, res) => {
       }
     }
 
+    // Full name uniqueness (case- and whitespace-insensitive), ignoring this account.
+    if (nextName !== null) {
+      const { rows: nameDup } = await client.query(
+        `SELECT id FROM staff_accounts
+          WHERE id <> $2
+            AND lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
+              = lower(regexp_replace(btrim($1),        '[[:space:]]+', ' ', 'g'))`,
+        [nextName, staffId]
+      );
+      if (nameDup.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'That name is already in use by another account.' });
+      }
+    }
+
     const { rows } = await client.query(
       `UPDATE staff_accounts SET
          full_name  = COALESCE($1, full_name),
@@ -364,10 +391,6 @@ exports.deleteStaffAccount = async (req, res) => {
     }
 
     await client.query('BEGIN');
-
-    // Account-scoped configuration is safe to remove alongside the account.
-    await client.query('DELETE FROM staff_dashboard_access WHERE staff_id = $1', [staffId]);
-    await client.query('DELETE FROM staff_switch_pin      WHERE staff_id = $1', [staffId]);
 
     const { rows } = await client.query(
       `DELETE FROM staff_accounts WHERE id = $1 AND role != 'admin'

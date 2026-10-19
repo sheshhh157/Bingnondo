@@ -49,7 +49,7 @@ export default function useLiveData({ fetchFn, events = [], refetchEvents = [], 
   useEffect(() => { reloadKeyRef.current = reloadKey; });
 
   // ── Lifecycle guards ────────────────────────────────────────────────────────
-  // The manager pages fetch multi-megabyte payloads, so a request routinely
+  // The oversight pages fetch multi-megabyte payloads, so a request routinely
   // outlives the route that started it. Without `mountedRef` the response would
   // set state on an unmounted component.
   const mountedRef = useRef(true);

@@ -1,5 +1,7 @@
 const db = require('../../config/db');
 const { emitOrderStatus, emitDeliveryUpdate } = require('../../sockets');
+const { canTransition } = require('../orders/status-transitions');
+const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('./assignment');
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 function orderNumber(id) {
@@ -36,7 +38,7 @@ exports.getCurrentDelivery = async (req, res) => {
           c.first_name,
           c.last_name,
           c.mobile_number     AS customer_mobile,
-          c.address           AS delivery_address
+          COALESCE(o.delivery_address, c.address) AS delivery_address
        FROM deliveries d
        JOIN orders     o ON o.id = d.order_id
        LEFT JOIN customers c ON c.id = o.customer_id
@@ -98,11 +100,11 @@ exports.getCurrentDelivery = async (req, res) => {
 //   assigned         → out_for_delivery
 //   out_for_delivery → delivered
 //
-// Side effects on 'delivered':
-//   orders.status      → 'completed'
-//   order_status_history row inserted
-//   riders.status      → 'available'
-//   Socket.io events emitted
+// Side effects:
+//   out_for_delivery → orders.status 'out_for_delivery' + history row
+//   delivered        → orders.status 'completed', history row,
+//                      riders.status 'available', next pending delivery
+//                      auto-assigned to the freed rider, Socket.io events
 //
 // Response (used by ActiveDelivery.jsx):
 // {
@@ -128,8 +130,9 @@ exports.updateDeliveryStatus = async (req, res) => {
 
     // 1. Load delivery — verify it belongs to this rider
     const { rows } = await client.query(
-      `SELECT d.id, d.status, d.order_id, d.rider_id
+      `SELECT d.id, d.status, d.order_id, d.rider_id, o.status AS order_status
          FROM deliveries d
+         JOIN orders o ON o.id = d.order_id
         WHERE d.id = $1`,
       [deliveryId]
     );
@@ -151,6 +154,27 @@ exports.updateDeliveryStatus = async (req, res) => {
       });
     }
 
+    // Mirror a rider move onto the linked order too. Guarded by the shared
+    // transition table so an order the cashier already closed is not dragged
+    // backwards; when it is not a legal move the order keeps its status.
+    //
+    // `changed_by` stays NULL: its foreign key points at staff_accounts, so a
+    // rider id would be rejected. The delivery row is the record of who acted.
+    const syncOrderStatus = async (target) => {
+      if (!canTransition(delivery.order_status, target)) return;
+      await client.query(
+        `UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2`,
+        [target, delivery.order_id]
+      );
+      await client.query(
+        `INSERT INTO order_status_history (order_id, status, changed_by)
+         VALUES ($1, $2, NULL)`,
+        [delivery.order_id, target]
+      );
+    };
+
+    let assigned = [];
+
     await client.query('BEGIN');
 
     // 3. Update delivery row
@@ -161,30 +185,24 @@ exports.updateDeliveryStatus = async (req, res) => {
       [newStatus, deliveryId]
     );
 
-    // 4. Side effects when delivered
-    if (newStatus === 'delivered') {
+    // 4. Side effects
+    if (newStatus === 'out_for_delivery') {
+      // The order leaves 'ready' and is now in transit.
+      await syncOrderStatus('out_for_delivery');
+    } else if (newStatus === 'delivered') {
       // a. Complete the linked order
-      await client.query(
-        `UPDATE orders
-            SET status = 'completed', updated_at = NOW()
-          WHERE id = $1`,
-        [delivery.order_id]
-      );
+      await syncOrderStatus('completed');
 
-      // b. Audit trail
-      await client.query(
-        `INSERT INTO order_status_history (order_id, status, changed_by)
-         VALUES ($1, 'completed', NULL)`,
-        [delivery.order_id]
-      );
-
-      // c. Free the rider
+      // b. Free the rider
       await client.query(
         `UPDATE riders
             SET status = 'available', updated_at = NOW()
           WHERE id = $1`,
         [riderId]
       );
+
+      // c. Hand the oldest waiting delivery to this now-free rider.
+      assigned = await autoAssignPendingDeliveries(client);
     }
 
     await client.query('COMMIT');
@@ -199,9 +217,13 @@ exports.updateDeliveryStatus = async (req, res) => {
     emitDeliveryUpdate({
       delivery_id:     deliveryId,
       order_id:        delivery.order_id,
+      rider_id:        riderId,
       delivery_status: newStatus,
       order_status:    orderStatus,
     });
+
+    // Any delivery handed to a freed rider is broadcast now that we've committed.
+    emitAssignedDeliveries(assigned);
 
     // 6. Build the full delivery response the frontend needs.
     //    Frontend does: setDelivery(res.delivery || { ...delivery, status })
@@ -223,7 +245,7 @@ exports.updateDeliveryStatus = async (req, res) => {
             c.first_name,
             c.last_name,
             c.mobile_number AS customer_mobile,
-            c.address       AS delivery_address
+            COALESCE(o.delivery_address, c.address) AS delivery_address
            FROM deliveries d
            JOIN orders     o ON o.id = d.order_id
            LEFT JOIN customers c ON c.id = o.customer_id
@@ -318,7 +340,7 @@ exports.getDeliveryHistory = async (req, res) => {
           o.total_amount,
           c.first_name,
           c.last_name,
-          c.address       AS delivery_address
+          COALESCE(o.delivery_address, c.address) AS delivery_address
          FROM deliveries d
          JOIN orders     o ON o.id = d.order_id
          LEFT JOIN customers c ON c.id = o.customer_id

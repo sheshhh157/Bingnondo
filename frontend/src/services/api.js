@@ -1,138 +1,10 @@
 import apiClient from './apiClient';
-// ─── MOCK DATA ────────────────────────────────────────────────────────────────
-// Pansamantala lang ito habang wala pang backend.
-// Palitan mo ito ng tunay na API calls pag ready na ang backend.
-
-const MOCK_CATEGORIES = [
-  { id: 1, name: 'Silog Meals' },
-  { id: 2, name: 'Rice Meals' },
-  { id: 3, name: 'Merienda' },
-  { id: 4, name: 'Drinks' },
-  { id: 5, name: 'Add-ons' },
-];
-
-let MOCK_MENU_ITEMS = [
-  // Silog Meals
-  { id: 1,  category_id: 1, name: 'Tapsilog',      description: 'Beef tapa, sinangag, itlog',      price: 120, is_available: true,  image_url: null },
-  { id: 2,  category_id: 1, name: 'Longsilog',     description: 'Longganisa, sinangag, itlog',     price: 110, is_available: true,  image_url: null },
-  { id: 3,  category_id: 1, name: 'Tocilog',       description: 'Tocino, sinangag, itlog',         price: 110, is_available: true,  image_url: null },
-  { id: 4,  category_id: 1, name: 'Bangsilog',     description: 'Bangus, sinangag, itlog',         price: 130, is_available: true,  image_url: null },
-  { id: 5,  category_id: 1, name: 'Spamsilog',     description: 'Spam, sinangag, itlog',           price: 140, is_available: false, image_url: null },
-  { id: 6,  category_id: 1, name: 'Cornsilog',     description: 'Corned beef, sinangag, itlog',    price: 115, is_available: true,  image_url: null },
-
-  // Rice Meals
-  { id: 7,  category_id: 2, name: 'Adobo Rice',    description: 'Chicken adobo with steamed rice', price: 105, is_available: true,  image_url: null },
-  { id: 8,  category_id: 2, name: 'Sinigang Set',  description: 'Pork sinigang with rice',         price: 150, is_available: true,  image_url: null },
-  { id: 9,  category_id: 2, name: 'Fried Chicken', description: 'Crispy fried chicken with rice',  price: 135, is_available: true,  image_url: null },
-  { id: 10, category_id: 2, name: 'Bistek Rice',   description: 'Beef bistek with steamed rice',   price: 145, is_available: false, image_url: null },
-
-  // Merienda
-  { id: 11, category_id: 3, name: 'Pancit Bihon',      description: 'Stir-fried rice noodles',         price: 75,  is_available: true,  image_url: null },
-  { id: 12, category_id: 3, name: 'Lumpiang Shanghai',  description: '5 pcs with sweet chili sauce',    price: 65,  is_available: true,  image_url: null },
-  { id: 13, category_id: 3, name: 'Goto',               description: 'Rice congee with beef tripe',     price: 85,  is_available: true,  image_url: null },
-  { id: 14, category_id: 3, name: 'Arroz Caldo',        description: 'Chicken congee with ginger',      price: 80,  is_available: true,  image_url: null },
-
-  // Drinks
-  { id: 15, category_id: 4, name: 'Coke Regular',    description: '12oz bottle',       price: 40,  is_available: true,  image_url: null },
-  { id: 16, category_id: 4, name: 'Coke Zero',       description: '12oz bottle',       price: 40,  is_available: true,  image_url: null },
-  { id: 17, category_id: 4, name: 'Iced Tea',        description: 'House blend, 16oz', price: 45,  is_available: true,  image_url: null },
-  { id: 18, category_id: 4, name: 'Bottled Water',   description: '500ml',             price: 25,  is_available: true,  image_url: null },
-  { id: 19, category_id: 4, name: 'Pineapple Juice', description: 'Fresh, 16oz',       price: 55,  is_available: true,  image_url: null },
-  { id: 20, category_id: 4, name: 'Hot Coffee',      description: 'Brewed coffee',     price: 60,  is_available: true,  image_url: null },
-
-  // Add-ons
-  { id: 21, category_id: 5, name: 'Extra Rice',  description: '', price: 20, is_available: true, image_url: null },
-  { id: 22, category_id: 5, name: 'Extra Egg',   description: '', price: 20, is_available: true, image_url: null },
-  { id: 23, category_id: 5, name: 'Extra Sauce', description: '', price: 10, is_available: true, image_url: null },
-];
-
-let menuItemCounter = 24;
-
-// Mock transaction history — mga lumang orders para sa TransactionHistory tab
-const today = new Date();
-const hrsAgo = (h) => new Date(today.getTime() - h * 60 * 60 * 1000).toISOString();
-
-let MOCK_ORDERS = [
-  {
-    id: 1001, order_number: 'ORD-1001', status: 'completed', payment_method: 'cash',
-    total_amount: 240, created_at: hrsAgo(1),
-    items: [
-      { name: 'Tapsilog', quantity: 1, unit_price: 120 },
-      { name: 'Iced Tea', quantity: 1, unit_price: 45 },
-      { name: 'Extra Rice', quantity: 1, unit_price: 20 },
-      { name: 'Coke Regular', quantity: 1, unit_price: 40 },
-    ],
-  },
-  {
-    id: 1002, order_number: 'ORD-1002', status: 'completed', payment_method: 'gcash',
-    total_amount: 175, created_at: hrsAgo(2),
-    items: [
-      { name: 'Longsilog', quantity: 1, unit_price: 110 },
-      { name: 'Bottled Water', quantity: 1, unit_price: 25 },
-      { name: 'Extra Egg', quantity: 1, unit_price: 20 },
-    ],
-  },
-  {
-    id: 1003, order_number: 'ORD-1003', status: 'preparing', payment_method: 'cash',
-    total_amount: 285, created_at: hrsAgo(0.25),
-    items: [
-      { name: 'Sinigang Set', quantity: 1, unit_price: 150 },
-      { name: 'Iced Tea', quantity: 1, unit_price: 45 },
-      { name: 'Lumpiang Shanghai', quantity: 1, unit_price: 65 },
-    ],
-  },
-  {
-    id: 1004, order_number: 'ORD-1004', status: 'completed', payment_method: 'cash',
-    total_amount: 130, created_at: hrsAgo(3),
-    items: [
-      { name: 'Goto', quantity: 1, unit_price: 85 },
-      { name: 'Extra Rice', quantity: 1, unit_price: 20 },
-      { name: 'Hot Coffee', quantity: 1, unit_price: 60 },
-    ],
-  },
-  {
-    id: 1005, order_number: 'ORD-1005', status: 'cancelled', payment_method: 'cash',
-    total_amount: 110, created_at: hrsAgo(4),
-    items: [
-      { name: 'Tocilog', quantity: 1, unit_price: 110 },
-    ],
-  },
-];
-
-let orderCounter = 1006;
-
-// Mock inventory
-let MOCK_INVENTORY = [
-  { id: 1,  name: 'Beef Tapa',       unit: 'g',   current_stock: 2400, reorder_level: 500  },
-  { id: 2,  name: 'Longganisa',      unit: 'pcs', current_stock: 80,   reorder_level: 20   },
-  { id: 3,  name: 'Tocino',          unit: 'g',   current_stock: 1800, reorder_level: 400  },
-  { id: 4,  name: 'Bangus',          unit: 'pcs', current_stock: 12,   reorder_level: 10   },
-  { id: 5,  name: 'Spam',            unit: 'can', current_stock: 4,    reorder_level: 6    },
-  { id: 6,  name: 'Corned Beef',     unit: 'can', current_stock: 18,   reorder_level: 6    },
-  { id: 7,  name: 'Chicken',         unit: 'g',   current_stock: 3200, reorder_level: 800  },
-  { id: 8,  name: 'Pork',            unit: 'g',   current_stock: 0,    reorder_level: 600  },
-  { id: 9,  name: 'Eggs',            unit: 'pcs', current_stock: 55,   reorder_level: 24   },
-  { id: 10, name: 'Jasmine Rice',    unit: 'kg',  current_stock: 22,   reorder_level: 5    },
-  { id: 11, name: 'Garlic',          unit: 'g',   current_stock: 350,  reorder_level: 150  },
-  { id: 12, name: 'Cooking Oil',     unit: 'ml',  current_stock: 1200, reorder_level: 500  },
-  { id: 13, name: 'Soy Sauce',       unit: 'ml',  current_stock: 800,  reorder_level: 300  },
-  { id: 14, name: 'Calamansi',       unit: 'pcs', current_stock: 30,   reorder_level: 20   },
-  { id: 15, name: 'Tamarind',        unit: 'g',   current_stock: 0,    reorder_level: 100  },
-  { id: 16, name: 'Rice Noodles',    unit: 'g',   current_stock: 900,  reorder_level: 250  },
-  { id: 17, name: 'Spring Roll Wrap',unit: 'pcs', current_stock: 60,   reorder_level: 30   },
-  { id: 18, name: 'Ground Pork',     unit: 'g',   current_stock: 1100, reorder_level: 300  },
-  { id: 19, name: 'Ginger',          unit: 'g',   current_stock: 180,  reorder_level: 80   },
-  { id: 20, name: 'Brewed Coffee',   unit: 'g',   current_stock: 450,  reorder_level: 100  },
-];
-
-// ─── HELPER: simulate network delay ──────────────────────────────────────────
-const delay = (ms = 300) => new Promise((res) => setTimeout(res, ms));
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 const BASE_URL = `${import.meta.env.VITE_API_URL || ''}/api`;
 
 // Token helpers — keys match AuthContext and socket.js
-export const tokenStorage = {
+const tokenStorage = {
   getAccess:   () => localStorage.getItem('bingnondo_access_token'),
   getRefresh:  () => localStorage.getItem('bingnondo_refresh_token'),
   setTokens:   (access, refresh) => {
@@ -200,108 +72,6 @@ async function apiRequest(endpoint, options = {}, retry = true) {
   // Wrap in { data } to match the shape the existing pages expect
   return { data };
 }
-
-export const authAPI = {
-  staffLogin: async ({ email, password }) => {
-    const res = await apiRequest('/auth/staff/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    // Store tokens on successful login
-    tokenStorage.setTokens(res.data.accessToken, res.data.refreshToken);
-    tokenStorage.saveUser(res.data.user);
-    return res;
-  },
-
-  forgotPassword: (email) =>
-    apiRequest('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
-
-  resetPassword: (data) =>
-    apiRequest('/auth/reset-password', { method: 'POST', body: JSON.stringify(data) }),
-
-  me: () => apiRequest('/auth/me'),
-
-  logout: async () => {
-    try { await apiRequest('/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
-    tokenStorage.clearTokens();
-    return { data: { message: 'Logged out.' } };
-  },
-};
-
-// ─── MENU (cashier read) ──────────────────────────────────────────────────────
-export const menuAPI = {
-  getAll: async () => {
-    await delay(400);
-    return { data: { categories: MOCK_CATEGORIES, items: MOCK_MENU_ITEMS } };
-  },
-};
-
-// ─── ORDERS ───────────────────────────────────────────────────────────────────
-export const ordersAPI = {
-  create: async (payload) => {
-    await delay(500);
-    const newOrder = {
-      id: orderCounter,
-      order_number: `ORD-${orderCounter}`,
-      status: 'confirmed',
-      payment_method: null,
-      total_amount: payload.items.reduce((sum, i) => {
-        const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
-        return sum + (menuItem?.price || 0) * i.quantity;
-      }, 0),
-      created_at: new Date().toISOString(),
-      items: payload.items.map((i) => {
-        const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
-        return { name: menuItem?.name || 'Unknown', quantity: i.quantity, unit_price: menuItem?.price || 0 };
-      }),
-    };
-    MOCK_ORDERS = [newOrder, ...MOCK_ORDERS];
-    orderCounter++;
-    return { data: newOrder };
-  },
-
-  updateItems: async (orderId, items) => {
-    await delay(350);
-    const order = MOCK_ORDERS.find((o) => o.id === orderId);
-    if (!order) throw { response: { data: { message: 'Order not found.' } } };
-    order.items = items.map((i) => {
-      const menuItem = MOCK_MENU_ITEMS.find((m) => m.id === i.menu_item_id);
-      return { name: menuItem?.name || 'Unknown', quantity: i.quantity, unit_price: menuItem?.price || 0 };
-    });
-    order.total_amount = order.items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
-    return { data: order };
-  },
-
-  getMyTransactions: async () => {
-    await delay(400);
-    return { data: MOCK_ORDERS };
-  },
-
-  getAll: async () => {
-    await delay(400);
-    return { data: MOCK_ORDERS };
-  },
-
-  getById: async (id) => {
-    await delay(200);
-    const order = MOCK_ORDERS.find((o) => o.id === Number(id));
-    if (!order) throw { response: { status: 404, data: { message: 'Order not found.' } } };
-    return { data: order };
-  },
-};
-
-// ─── PAYMENTS ─────────────────────────────────────────────────────────────────
-export const paymentsAPI = {
-  process: async ({ order_id, method }) => {
-    await delay(600);
-    const order = MOCK_ORDERS.find((o) => o.id === Number(order_id));
-    if (order) {
-      order.status = 'completed';
-      order.payment_method = method || 'cash';
-    }
-    return { data: { success: true, message: 'Payment processed.' } };
-  },
-};
 
 // ─── INVENTORY (§4.1) ─────────────────────────────────────────────────────────
 export const inventoryAPI = {
@@ -411,7 +181,6 @@ export const uploadAPI = {
     }),
 };
 
-export default { authAPI, menuAPI, ordersAPI, paymentsAPI, inventoryAPI, staffMenuAPI, categoriesAPI, uploadAPI };
 // ─── KITCHEN ──────────────────────────────────────────────────────────────────
 export const kitchenAPI = {
   getOrders: () => apiClient.get('/api/kitchen/orders'),
@@ -428,71 +197,7 @@ export const kitchenAPI = {
     apiClient.post(`/api/kitchen/alerts/${alertId}/acknowledge`),
 };
 
-// ─── ADMIN API ─────────────────────────────────────────────────────────────────
-// Mock data — replace with real API calls when backend is ready.
-
-let MOCK_STAFF_ACCOUNTS = [
-  { id: 101, full_name: 'Maria Santos',   email: 'maria@bingnondo.com',  role: 'cashier',       status: 'active',   created_at: new Date(Date.now()-86400000*10).toISOString() },
-  { id: 102, full_name: 'Juan Dela Cruz', email: 'juan@bingnondo.com',   role: 'kitchen_staff', status: 'active',   created_at: new Date(Date.now()-86400000*20).toISOString() },
-  { id: 103, full_name: 'Ana Reyes',      email: 'ana@bingnondo.com',    role: 'staff',         status: 'inactive', created_at: new Date(Date.now()-86400000*30).toISOString() },
-  { id: 104, full_name: 'Pedro Bautista', email: 'pedro@bingnondo.com',  role: 'cashier',       status: 'active',   created_at: new Date(Date.now()-86400000*5).toISOString()  },
-  { id: 105, full_name: 'Rosa Mendoza',   email: 'rosa@bingnondo.com',   role: 'owner',         status: 'active',   created_at: new Date(Date.now()-86400000*60).toISOString() },
-];
-let staffAccountCounter = 200;
-
-// MOCK_SETTINGS removed — business_hours and menu_categories now use real API endpoints.
-
-let MOCK_DEVICES = [
-  { id: 1, device_code: 'ESP32-KITCHEN-01', location_label: 'Main Kitchen', is_online: true  },
-  { id: 2, device_code: 'ESP32-TABLE-01',   location_label: 'Table Counter', is_online: false },
-];
-let deviceCounter = 10;
-
-let MOCK_AUDIT_LOG = [
-  { id: 1, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'create',         target_type:'staff_account', target_id:101, details:{ role:'cashier' },              created_at: new Date(Date.now()-86400000*10).toISOString() },
-  { id: 2, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'register_device',target_type:'esp32_device',  target_id:1,   details:{ label:'Main Kitchen' },        created_at: new Date(Date.now()-86400000*8).toISOString()  },
-  { id: 3, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'update_settings',target_type:'settings',       target_id:null, details:{ field:'business_hours' },   created_at: new Date(Date.now()-86400000*5).toISOString()  },
-  { id: 4, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'deactivate',     target_type:'staff_account', target_id:103, details:{ reason:'resignation' },        created_at: new Date(Date.now()-86400000*2).toISOString()  },
-  { id: 5, actor_id:1, actor_name:'System Admin', actor_role:'admin', action:'reset_password', target_type:'staff_account', target_id:104, details:{},                              created_at: new Date(Date.now()-3600000).toISOString()     },
-];
-let auditCounter = 100;
-
-function addAuditEntry(action, targetType, targetId, details={}) {
-  MOCK_AUDIT_LOG.unshift({
-    id: ++auditCounter, actor_id:1, actor_name:'System Admin', actor_role:'admin',
-    action, target_type:targetType, target_id:targetId, details,
-    created_at: new Date().toISOString(),
-  });
-}
-
-function paginate(arr, page=1, limit=10) {
-  const start = (page-1)*limit;
-  return { data: arr.slice(start, start+limit), totalPages: Math.max(1, Math.ceil(arr.length/limit)), total: arr.length };
-}
-
-
-// ─── SWITCH DASHBOARD API ─────────────────────────────────────────────────────
-// These hit the real backend — no mock needed.
-export const switchAPI = {
-  /** GET /api/auth/staff/switch-options — dashboards this staff can switch to */
-  getOptions: () => apiRequest('/auth/staff/switch-options'),
-
-  /** POST /api/auth/staff/switch-dashboard — perform the switch */
-  switch: (body) =>
-    apiRequest('/auth/staff/switch-dashboard', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  /** POST /api/auth/staff/switch-pin/update — staff updates own PIN */
-  updatePin: (body) =>
-    apiRequest('/auth/staff/switch-pin/update', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-};
-
-// ─── ADMIN API (real backend — replaces mock) ─────────────────────────────────
+// ─── ADMIN API ────────────────────────────────────────────────────────────────
 export const adminAPI = {
   // ── Staff Accounts ──────────────────────────────────────────────────────────
   listStaffAccounts: (params = {}) => {
@@ -546,42 +251,6 @@ export const adminAPI = {
   deleteStaffAccount: (id) =>
     apiRequest(`/admin/staff-accounts/${id}`, {
       method: 'DELETE',
-    }),
-
-  // ── Dashboard Access ────────────────────────────────────────────────────────
-  getDashboardAccess: (id) =>
-    apiRequest(`/admin/staff-accounts/${id}/dashboard-access`),
-
-  setDashboardAccess: (id, dashboards) =>
-    apiRequest(`/admin/staff-accounts/${id}/dashboard-access`, {
-      method: 'PUT',
-      body: JSON.stringify({ dashboards }),
-    }),
-
-  // ── Switch PIN (admin sets for staff) ───────────────────────────────────────
-  setStaffSwitchPin: (id, pin) =>
-    apiRequest(`/admin/staff-accounts/${id}/switch-pin`, {
-      method: 'POST',
-      body: JSON.stringify({ pin }),
-    }),
-
-  removeStaffSwitchPin: (id) =>
-    apiRequest(`/admin/staff-accounts/${id}/switch-pin`, { method: 'DELETE' }),
-
-  // ── Switch Config ───────────────────────────────────────────────────────────
-  getSwitchConfig: () =>
-    apiRequest('/admin/switch-config'),
-
-  setPerStaffSwitchConfig: (staffId, requires_pin) =>
-    apiRequest(`/admin/switch-config/per-staff/${staffId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ requires_pin }),
-    }),
-
-  setPerDashboardSwitchConfig: (dashboard, requires_pin) =>
-    apiRequest(`/admin/switch-config/per-dashboard/${dashboard}`, {
-      method: 'PUT',
-      body: JSON.stringify({ requires_pin }),
     }),
 
   // ── Audit Log ───────────────────────────────────────────────────────────────
@@ -650,8 +319,6 @@ export const adminAPI = {
 
 };
 
-
-
 // ─── RIDER MANAGEMENT API (§6.5 — Admin) ─────────────────────────────────────
 export const adminRidersAPI = {
   /** GET /api/admin/riders — list all riders
@@ -674,11 +341,34 @@ export const adminRidersAPI = {
   /** GET /api/admin/riders/:id — single rider */
   getById: (id) => apiClient.get(`/api/admin/riders/${id}`),
 
-  /** POST /api/admin/riders — create new rider */
-  create: (payload) => apiClient.post('/api/admin/riders', payload),
+  /** POST /api/admin/riders — create new rider
+   *  The form collects a "temporary password" under `temp_password`; the
+   *  backend expects `password`, so it is mapped here (same as the staff
+   *  wrapper). Without this the password is dropped and the account is
+   *  created with a NULL hash that can never sign in.
+   */
+  create: (payload) => apiClient.post('/api/admin/riders', {
+    full_name:     payload.full_name,
+    mobile_number: payload.mobile_number,
+    email:         payload.email,
+    plate_number:  payload.plate_number,
+    vehicle_type:  payload.vehicle_type,
+    notes:         payload.notes,
+    password:      payload.temp_password,
+  }),
 
-  /** PUT /api/admin/riders/:id — update rider info */
-  update: (id, payload) => apiClient.put(`/api/admin/riders/${id}`, payload),
+  /** PUT /api/admin/riders/:id — update rider info
+   *  Only the editable columns are sent; `temp_password` is not part of the
+   *  update contract (use resetPassword instead) and is dropped here.
+   */
+  update: (id, payload) => apiClient.put(`/api/admin/riders/${id}`, {
+    full_name:     payload.full_name,
+    mobile_number: payload.mobile_number,
+    email:         payload.email,
+    plate_number:  payload.plate_number,
+    vehicle_type:  payload.vehicle_type,
+    notes:         payload.notes,
+  }),
 
   /** PATCH /api/admin/riders/:id/status — activate or deactivate */
   updateStatus: (id, status) =>
@@ -687,6 +377,9 @@ export const adminRidersAPI = {
   /** POST /api/admin/riders/:id/reset-password — admin resets password */
   resetPassword: (id, password) =>
     apiClient.post(`/api/admin/riders/${id}/reset-password`, { password }),
+
+  /** DELETE /api/admin/riders/:id — permanently remove a rider */
+  remove: (id) => apiClient.del(`/api/admin/riders/${id}`),
 };
 
 // ─── ADMIN DELIVERIES API ─────────────────────────────────────────────────────

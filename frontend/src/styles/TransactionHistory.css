@@ -196,6 +196,11 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  transition: opacity 180ms ease;
+}
+.th-content--busy {
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 /* ─── States ─────────────────────────────────────────────────────────── */

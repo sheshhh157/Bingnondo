@@ -100,6 +100,16 @@
   border-radius: var(--rl-radius-lg, 14px);
   overflow: hidden;
   box-shadow: var(--rl-shadow-sm);
+  transition: opacity 180ms ease;
+  animation: ad-card-in 220ms ease-out;
+}
+.ad-card--busy {
+  opacity: 0.55;
+  pointer-events: none;
+}
+@keyframes ad-card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .ad-card__head {
   display: flex;
@@ -427,4 +437,9 @@
   }
   .ad-modal-overlay { align-items: center; }
   .ad-modal__handle { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ad-card { animation: none; transition: none; }
+  .ad-spinner { animation-duration: 1.4s; }
 }

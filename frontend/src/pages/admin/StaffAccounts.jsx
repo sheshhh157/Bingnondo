@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
-  Spinner, Badge, Btn, Field, TextInput, PasswordInput,
+  Spinner, TableSkeleton, Badge, Btn, Field, TextInput, PasswordInput,
   AppSelect, Modal, ConfirmModal, PageHeader, RowAction, Pagination,
 } from './adminShared';
 import { useAdminToast } from './useAdminToast';
@@ -22,6 +22,17 @@ const ROLE_DESC = {
   cashier:       'Cashier: takes counter orders, marks payments, manages online orders.',
   kitchen_staff: 'Kitchen Staff: sees the kitchen queue and updates order progress.',
 };
+
+// ── name uniqueness ───────────────────────────────────────────────────────────
+// Staff names must be unique. Compared case- and whitespace-insensitively so
+// "Maria  Santos" and "maria santos" are treated as the same person.
+const normalizeName = (name) => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+function isNameTaken(name, accounts, selfId) {
+  const normalized = normalizeName(name);
+  if (!normalized) return false;
+  return accounts.some((a) => a.id !== selfId && normalizeName(a.full_name) === normalized);
+}
 
 // ── tiny icons ────────────────────────────────────────────────────────────────
 const PlusIcon = () => (
@@ -71,7 +82,7 @@ const KebabIcon = () => (
 );
 
 // ── Create account modal ──────────────────────────────────────────────────────
-function CreateModal({ open, onClose, onCreated, toast }) {
+function CreateModal({ open, onClose, onCreated, toast, accounts = [] }) {
   const [form, setForm] = useState({ full_name: '', email: '', role: 'cashier', temp_password: '' });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -80,7 +91,8 @@ function CreateModal({ open, onClose, onCreated, toast }) {
 
   function validate() {
     const e = {};
-    if (!form.full_name.trim())        e.full_name     = 'Full name is required.';
+    if (!form.full_name.trim())                   e.full_name     = 'Full name is required.';
+    else if (isNameTaken(form.full_name, accounts)) e.full_name   = 'This name is already in use.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email.';
     if (!form.role)                    e.role          = 'Select a role.';
     if (form.temp_password.length < 8) e.temp_password = 'Minimum 8 characters.';
@@ -136,7 +148,7 @@ function CreateModal({ open, onClose, onCreated, toast }) {
 }
 
 // ── Edit account modal ────────────────────────────────────────────────────────
-function EditModal({ account, onClose, onSaved, toast }) {
+function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
   const [form, setForm] = useState({
     full_name: account.full_name || '',
     email:     account.email || '',
@@ -150,6 +162,7 @@ function EditModal({ account, onClose, onSaved, toast }) {
   function validate() {
     const e = {};
     if (!form.full_name.trim()) e.full_name = 'Full name is required.';
+    else if (isNameTaken(form.full_name, accounts, account.id)) e.full_name = 'This name is already in use.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email.';
     if (!form.role) e.role = 'Select a role.';
     setErrors(e); return Object.keys(e).length === 0;
@@ -406,23 +419,30 @@ export default function StaffAccounts() {
   }
 
   async function handleStatusChange() {
-    const newStatus = actionRow.status === 'active' ? 'deactivated' : 'active';
-    setActionLoading(actionRow.id);
+    const target = actionRow;
+    const newStatus = target.status === 'active' ? 'deactivated' : 'active';
+    setActionLoading(target.id);
+    // Optimistic: flip the status pill immediately; the reload below reconciles
+    // with the server (e.g. dropping the row if a status filter is active).
+    setAccounts(list => list.map(a => (a.id === target.id ? { ...a, status: newStatus } : a)));
     try {
-      await adminAPI.updateStaffStatus(actionRow.id, newStatus);
-      toast.success(`${actionRow.full_name} ${newStatus === 'active' ? 'reactivated' : 'deactivated'}.`);
+      await adminAPI.updateStaffStatus(target.id, newStatus);
+      toast.success(`${target.full_name} ${newStatus === 'active' ? 'reactivated' : 'deactivated'}.`);
       load();
-    } catch (err) { toast.error(err?.response?.data?.message || 'Action failed.'); }
-    finally { setActionLoading(null); setActionRow(null); setActionType(null); }
+    } catch (err) {
+      setAccounts(list => list.map(a => (a.id === target.id ? { ...a, status: target.status } : a)));
+      toast.error(err?.response?.data?.message || 'Action failed.');
+    } finally { setActionLoading(null); setActionRow(null); setActionType(null); }
   }
 
   async function handleDelete() {
+    const target = deleteTarget;
     setDeleteLoading(true);
     try {
-      await adminAPI.deleteStaffAccount(deleteTarget.id);
-      toast.success(`${deleteTarget.full_name} deleted.`);
+      await adminAPI.deleteStaffAccount(target.id);
+      toast.success(`${target.full_name} deleted.`);
+      setAccounts(list => list.filter(a => a.id !== target.id));
       setDeleteTarget(null);
-      load();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to delete account.');
     } finally { setDeleteLoading(false); }
@@ -455,7 +475,7 @@ export default function StaffAccounts() {
         {/* Table */}
         <div className="ap-card">
           {loading && accounts.length === 0 ? (
-            <div className="ap-loading"><Spinner size={24} /></div>
+            <TableSkeleton rows={5} cols={5} />
           ) : filtered.length === 0 ? (
             accounts.length === 0 ? (
               <div className="ap-empty">
@@ -504,7 +524,7 @@ export default function StaffAccounts() {
             </div>
           )}
 
-          {!loading && filtered.length > 0 && (
+          {filtered.length > 0 && (
             <div className="ap-table-foot">
               <span className="ap-table-foot__info">
                 {visible.length < filtered.length
@@ -519,7 +539,7 @@ export default function StaffAccounts() {
       </div>
 
       {/* Modals */}
-      <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} toast={toast} />
+      <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} toast={toast} accounts={accounts} />
       {editTarget && (
         <EditModal
           key={editTarget.id}
@@ -527,6 +547,7 @@ export default function StaffAccounts() {
           onClose={() => setEditTarget(null)}
           onSaved={load}
           toast={toast}
+          accounts={accounts}
         />
       )}
       <ResetPasswordModal open={!!resetTarget} onClose={() => setResetTarget(null)} account={resetTarget} toast={toast} />

@@ -1,6 +1,5 @@
-/* ─── Google Fonts ───────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display+SC:wght@400;700;900&family=Karla:wght@300;400;500;600;700&display=swap');
+/* Google Fonts are loaded from index.html (preconnect + <link>) so they don't
+   block first paint. */
 @import './styles/components.css';
 
 /* ─── Design Tokens — Bingnondo Chinese Heritage ─────────────────────── */
@@ -116,7 +115,20 @@
 /* ─── Reset ──────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
-body { margin: 0; padding: 0; min-height: 100dvh; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+body { margin: 0; padding: 0; min-height: 100dvh; overflow-wrap: break-word; }
+
+img, svg, video, canvas { max-width: 100%; }
+img, video { height: auto; }
+
+/* iOS Safari zooms the page when a focused field is under 16px. Keep fields at
+   16px on touch screens so tapping a search box or form input never zooms. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea { font-size: max(16px, 1em); }
+}
 
 #root {
   width: 100%;
@@ -148,7 +160,7 @@ button, input, textarea, select { font-family: var(--font-body); }
 /* ─── Admin Theme — Imperial Ink (墨池) Dark Heritage Variant ──────────
  * Scoped to .al-root — the admin console keeps its dark "imperial ink"
  * character while inheriting the heritage token vocabulary: same token
- * names as the base :root, dark values. Mirrors .sl-root / .ml-root.
+ * names as the base :root, dark values. Mirrors .sl-root.
  *
  * Palette: Dark Xuan Ink — Roasted Lacquer + Gilded Brass on Night Paper
  * Primary:  Roasted Cinnabar #C0392B  (vermilion family, lacquer depth)
@@ -201,25 +213,4 @@ button, input, textarea, select { font-family: var(--font-body); }
   --shadow-sm:  0 1px 4px rgba(63,5,5,0.08);
   --shadow-md:  0 4px 16px rgba(63,5,5,0.12);
   --shadow-lg:  0 12px 40px rgba(63,5,5,0.16);
-}
-/* ─── Manager Theme — Bingnondo Deep Maroon / Lantern Gold ─────────────
- * Scoped to .ml-root (ManagerLayout).
- *
- * Brand (Primary): Deep Maroon  #7F1D1D / #5C0A14 / #9F2626
- * Gold (Accent):   Amber Gold   #D97706 / #F59E0B / #FDE68A  — lantern glow
- * Surface:         Warm Ivory   #FDF6E3 (bg) / #FFFFFF (cards) / #FEF3C7
- * Text:            Dark Maroon-Brown hierarchy
- * Status:          green #15803D / red #DC2626 / warning = gold #D97706
- * Typography:      Playfair Display SC (headings) + Karla (body)
- * ─────────────────────────────────────────────────────────────────────── */
-.ml-root {
-  --font-heading: 'Playfair Display SC', Georgia, 'Times New Roman', serif;
-  --font-body:    'Karla', system-ui, sans-serif;
-
-  /* Shadows — warm maroon-tinted */
-  --shadow-sm:  0 1px 4px rgba(63,5,5,0.08);
-  --shadow-md:  0 4px 16px rgba(63,5,5,0.12);
-  --shadow-lg:  0 12px 40px rgba(63,5,5,0.16);
-
-  font-family: var(--font-body);
 }

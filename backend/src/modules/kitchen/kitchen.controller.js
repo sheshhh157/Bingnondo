@@ -1,11 +1,9 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
-// Shared transition rules. The kitchen used to hand-enforce its own
-// `confirmed -> preparing -> ready` chain here, which could drift from the
-// rules in the orders module. See orders/status-transitions.js.
 const { canTransition } = require('../orders/status-transitions');
-// Flowchart 2: preparing an order consumes its ingredients. See deduction.js.
 const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
+// Auto-hand a dispatchable online order to a free rider. See assignment.js.
+const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('../rider/assignment');
 
 // The kitchen's own live prep queue. 'ready' is deliberately excluded: the
 // kitchen marks an order ready and is then done with it, so a ready ticket
@@ -134,7 +132,11 @@ async function acknowledgeOrder(req, res, next) {
     });
     emitIngredientUsage(usage);
 
-    res.json(order);
+    // Bridge to customer app
+    try {
+      const bridge = require('../../utils/internalBridge');
+      bridge.notifyOrderStatus(order.id, nextStatus);
+    } catch (_) {}
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -218,6 +220,16 @@ async function updateKitchenOrderStatus(req, res, next) {
       usage = await applyOrderIngredientUsage(client, req.params.id, req.user.sub);
     }
 
+    // An online order stays at 'ready' until it is dispatched. If the customer
+    // app already created a pending delivery row, this is the moment it becomes
+    // assignable — hand it to a free rider inside the same transaction.
+    let assigned = [];
+    if (status === 'ready' && current[0].order_type === 'online') {
+      assigned = await autoAssignPendingDeliveries(client, {
+        orderId: parseInt(req.params.id, 10),
+      });
+    }
+
     await client.query('COMMIT');
 
     const order = rows[0];
@@ -236,9 +248,17 @@ async function updateKitchenOrderStatus(req, res, next) {
       });
     }
 
+    // Broadcast auto-assignments only after the commit — a rollback must never
+    // send a delivery that does not exist.
+    emitAssignedDeliveries(assigned);
+
     emitIngredientUsage(usage);
 
-    res.json(order);
+    // Bridge to customer app (notify on status change)
+    try {
+      const bridge = require('../../utils/internalBridge');
+      bridge.notifyOrderStatus(order.id, order.status);
+    } catch (_) {}
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

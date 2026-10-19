@@ -6,11 +6,11 @@ const ctrl = require('./orders.controller');
 // All order routes require staff authentication
 const staffAuth = [authenticateToken, requireStaff];
 
-// Cashier + higher roles can create counter orders
-const canOrder = [authenticateToken, requireStaff, requireRoles('cashier', 'staff', 'owner', 'admin')];
+// Cashier + admin can create counter orders
+const canOrder = [authenticateToken, requireStaff, requireRoles('cashier', 'admin')];
 
-// Kitchen staff + higher roles can update status
-const canUpdateStatus = [authenticateToken, requireStaff, requireRoles('kitchen_staff', 'cashier', 'staff', 'owner', 'admin')];
+// Kitchen staff, cashier + admin can update status
+const canUpdateStatus = [authenticateToken, requireStaff, requireRoles('kitchen_staff', 'cashier', 'admin')];
 
 // POST /api/orders — create a counter order
 router.post('/', ...canOrder, ctrl.createOrder);

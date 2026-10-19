@@ -1,11 +1,11 @@
 /**
- * managerApi.js — Real API calls for the Manager dashboard.
+ * oversightApi.js — Real API calls for the admin oversight views.
  *
- * The manager dashboard is strictly read-only and consumes the same DB-backed
+ * The oversight views are strictly read-only and consume the same DB-backed
  * endpoints as the rest of the staff app. Requests go through apiClient so the
  * Bearer JWT is attached and a 401 triggers a silent refresh + redirect.
  *
- * Backend response shapes, and how they are adapted for the manager pages:
+ * Backend response shapes, and how they are adapted for the oversight pages:
  *
  *   GET  /api/orders            → { orders: [...], total }
  *     `ordersAPI.getRange` returns `{ data, total }`; the pages treat `data` as
@@ -28,9 +28,9 @@
  *     The kitchen prep queue. `?include_ready=1` widens it to the handoff
  *     queue; only OversightKitchen asks for that.
  *
- * Every function keeps the `{ data: ... }` wrapper so ManagerLayout,
- * DashboardPage, SalesReportPage, OversightKitchen, OversightStocks,
- * DeliveriesTab and MenuPage need no changes.
+ * Every function keeps the `{ data: ... }` wrapper so SalesReportPage,
+ * OversightKitchen, OversightStocks, DeliveriesTab and MenuPage need no
+ * changes.
  */
 
 import { get } from './apiClient';
@@ -53,7 +53,7 @@ function viewerTimeZone() {
 }
 
 /**
- * Page sizes for manager order reads.
+ * Page sizes for oversight order reads.
  *
  * The pages used to request `limit=10000` and aggregate in the browser. These
  * are the bounded sizes that replaced it — see `ordersAPI.getRange`. The
@@ -61,7 +61,7 @@ function viewerTimeZone() {
  * any more.
  */
 export const MANAGER_ORDER_LIMITS = {
-  /** Oversight "today" pulse and the Dashboard's bounded window. */
+  /** Oversight "today" pulse and the AdminOverview bounded window. */
   window: 2000,
   /** Sales report transactions table, one page at a time. */
   page: 50,
@@ -84,16 +84,22 @@ export const ordersAPI = {
    * utils/format) so the server honours the browser's timezone; a bare
    * 'YYYY-MM-DD' is interpreted in the server's timezone instead.
    *
+   * @param {string} [opts.payment] Restrict to one payment method; 'all' means
+   *   any method and is dropped rather than sent (see the note below).
    * @param {string} [search] Match order number or line-item name, server-side.
    * @returns {{ data: object[], total: number }} `total` is the number of
    *   matching orders ignoring `limit`/`offset`, so a caller can build a pager
    *   without downloading every page.
    */
-  getRange: async ({ from, to, limit, offset = 0, status, search } = {}) => {
+  getRange: async ({ from, to, limit, offset = 0, status, payment, search } = {}) => {
     const q = new URLSearchParams();
     if (from) q.set('from', from);
     if (to) q.set('to', to);
     if (status) q.set('status', status);
+    // 'all' is the filter UI's "no method selected" sentinel, not a method. Sent
+    // verbatim it becomes `p.method = 'all'`, which matches no payment and blanks
+    // both the transactions table and the revenue figures.
+    if (payment && payment !== 'all') q.set('payment', payment);
     if (search && search.trim()) q.set('search', search.trim());
     if (Number.isFinite(limit)) q.set('limit', String(limit));
     if (offset > 0) q.set('offset', String(offset));
@@ -136,7 +142,9 @@ export const ordersAPI = {
     const q = new URLSearchParams();
     if (from) q.set('from', from);
     if (to) q.set('to', to);
-    if (payment) q.set('payment', payment);
+    // See getRange: 'all' is the UI sentinel for "any method" and must not be
+    // forwarded as a literal method, or the report returns ₱0 with no orders.
+    if (payment && payment !== 'all') q.set('payment', payment);
     if (search && search.trim()) q.set('search', search.trim());
     q.set('range', 'all');
     const tz = viewerTimeZone();
@@ -165,8 +173,8 @@ export const kitchenAPI = {
    * Orders in 'pending' | 'confirmed' | 'preparing' — the live prep queue.
    *
    * @param {object} [opts]
-   * @param {boolean} [opts.includeReady] Also return 'ready' orders. The
-   *   manager needs these to see what is waiting on a handoff; the kitchen
+   * @param {boolean} [opts.includeReady] Also return 'ready' orders. Oversight
+   *   needs these to see what is waiting on a handoff; the kitchen
    *   omits them by design and passes nothing.
    */
   getOrders: async ({ includeReady = false } = {}) => {
@@ -174,7 +182,7 @@ export const kitchenAPI = {
     const res = await get(`/api/kitchen/orders${q}`);
     return { data: res.data || [] };
   },
-  /** Unacknowledged kitchen alerts — read-only for the manager (ack is kitchen-side). */
+  /** Unacknowledged kitchen alerts — read-only for oversight (ack is kitchen-side). */
   getAlerts: async () => {
     const res = await get('/api/kitchen/alerts');
     return { data: res.data || [] };
@@ -182,7 +190,7 @@ export const kitchenAPI = {
 };
 
 // ─── Delivery ─────────────────────────────────────────────────────────────────
-// Read-only delivery list backing the manager nav badge and the shared
+// Read-only delivery list backing the oversight nav badge and the shared
 // "Riders & Deliveries" page. Joins the real deliveries/orders/riders tables.
 export const deliveryAPI = {
   getAll: async (params = {}) => {
@@ -198,7 +206,7 @@ export const deliveryAPI = {
 };
 
 // ─── Menu catalog ─────────────────────────────────────────────────────────────
-// GET /api/menu/staff only requires `staff` (the manager account passes), and
+// GET /api/menu/staff only requires a staff token (any staff role passes), and
 // every menu edit is broadcast to all rooms as menu_update / menu_item_deleted,
 // so a read-only availability view needs no backend change.
 export const menuAPI = {

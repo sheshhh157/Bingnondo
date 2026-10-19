@@ -20,16 +20,16 @@ The one screen that shows kitchen, stock, delivery, and sales together, updating
 
 ## Operating Context
 
-Single-store food operation during live service. The dashboard is used ambiently — glanced at between tasks — and consulted deliberately when something needs attention (a low-stock alert, an overdue kitchen order, a delayed rider). It runs alongside the existing backend on port 5000 and frontend dev server on port 5174, with the Vite proxy joining them. Live updates arrive over Socket.io every few seconds; when the backend is unreachable, the frontend falls back to built-in mock data rather than going blank.
+Single-store food operation during live service. The dashboard is used ambiently — glanced at between tasks — and consulted deliberately when something needs attention (a low-stock alert, an overdue kitchen order, a delayed rider). It runs alongside the existing backend on port 5000 and frontend dev server on port 5174, with the Vite proxy joining them. Live updates arrive over Socket.io every few seconds; when the backend is unreachable, the frontend shows an explicit stale/error state rather than fabricated data or a blank screen.
 
 ## Capabilities and Constraints
 
-Confirmed functionality: dashboard overview with low-stock quick list; sales report with date-range picker, CSV export, and order drill-down; oversight hub with kitchen, stocks, and delivery views; real-time badges, toasts, and StatCard summaries; mock-data fallback.
+Confirmed functionality: dashboard overview with low-stock quick list; sales report with date-range picker, CSV export, and order drill-down; oversight hub with kitchen, stocks, and delivery views; real-time badges, toasts, and StatCard summaries.
 
 Durable constraints future work must preserve:
 
 - Strictly read-only: the dashboard observes and reports; it never mutates orders, stock, or deliveries.
-- Works backend-down: the mock-data fallback is a requirement, not a placeholder.
+- Works backend-down: a clear degraded state (error and stale indicators) is a requirement; the UI never fabricates data to fill a gap.
 - Hand-written CSS with the existing Chinese-heritage design tokens; no CSS framework.
 - Socket.io live-update architecture with event-merge hooks (`useLiveData`).
 
@@ -39,7 +39,7 @@ Bingnondo name and Chinese-heritage identity: warm paper background, heritage re
 
 ## Evidence on Hand
 
-Real structure, simulated content: routes, components, and design tokens in `frontend/src`; in-memory sample data and simulation mutators in `backend/data.js` and `backend/server.js`. There is no production backend, no real order history, and no real customer or rider data — future work must not fabricate testimonials, benchmarks, or deployment claims.
+Real structure, real backend: routes, components, and design tokens in `frontend/src`; an Express + PostgreSQL + Socket.io API in `backend/` with no mock-data layer. The local database holds only baseline menu, inventory, and staff rows — there is no production deployment and no real business data yet, so future work must not fabricate testimonials, benchmarks, or deployment claims.
 
 ## Product Principles
 

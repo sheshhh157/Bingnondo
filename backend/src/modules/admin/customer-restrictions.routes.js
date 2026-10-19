@@ -4,9 +4,8 @@ const router  = express.Router();
 const { authenticateToken, requireRoles } = require('../../middleware/auth.middleware');
 const ctrl = require('./customer-restrictions.controller');
 
-// All customer restriction routes require a valid JWT AND 'admin' or 'owner' role.
-// §6.4 in the flow doc explicitly says: "Customer Restrictions (Admin/Owner)"
-router.use(authenticateToken, requireRoles('admin', 'owner'));
+// All customer restriction routes require a valid JWT AND the 'admin' role.
+router.use(authenticateToken, requireRoles('admin'));
 
 // GET  /api/admin/customer-restrictions
 //   List all customers with violations or non-default restrictions.

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { staffMenuAPI, inventoryAPI, uploadAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import useMediaQuery from '../../hooks/useMediaQuery';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
-import '../../styles/StaffMenuPage.css';
+import '../../styles/AdminMenuPage.css';
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function useToast() {
@@ -549,7 +550,7 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
     } finally { setLoading(false); }
   };
 
-  return (
+  return createPortal(
     <div className="mn-modal-overlay" onClick={onClose}>
       <div className="mn-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="mn-modal-title">
         <div className="mn-modal__header">
@@ -685,7 +686,8 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -707,7 +709,7 @@ function ConfirmDialog({ item, onClose, onConfirm }) {
     finally { setLoading(false); }
   }
 
-  return (
+  return createPortal(
     <div className="mn-modal-overlay mn-modal-overlay--center" onClick={loading ? undefined : onClose}>
       <div className="mn-confirm" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="mn-confirm-title">
         <div className="mn-confirm__icon" aria-hidden="true">
@@ -727,7 +729,8 @@ function ConfirmDialog({ item, onClose, onConfirm }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

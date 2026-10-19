@@ -1,11 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { adminAPI, adminRidersAPI } from '../../services/api';
-import { ordersAPI, kitchenAPI, inventoryAPI, MANAGER_ORDER_LIMITS } from '../../services/managerApi';
+import { ordersAPI, kitchenAPI, inventoryAPI, MANAGER_ORDER_LIMITS } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
 import { currency, stockStatus, stockBadgeVariant, stockStatusText, dayKey, lastDaysBounds } from '../../utils/format';
-import { keyEvent, orderUpsert, orderStatus, queueUpsert, stockPatch, stockCounts, splitByChannel } from '../manager/managerData';
-import LiveControls from '../manager/LiveControls';
+import { keyEvent, orderUpsert, orderStatus, queueUpsert, stockPatch, stockCounts, splitByChannel } from './oversightData';
+import LiveControls from './LiveControls';
 import Badge from '../../components/Badge';
 import CardPanel from '../../components/CardPanel';
 import ErrorBanner from '../../components/ErrorBanner';

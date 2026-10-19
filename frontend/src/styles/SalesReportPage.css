@@ -70,25 +70,6 @@
   flex-wrap: wrap;
 }
 
-/* Transactions table paging. */
-.sales-pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 12px;
-  margin-top: 4px;
-  border-top: 1px solid var(--color-border);
-}
-.sales-pager__status {
-  font-size: 0.78rem;
-  color: var(--color-muted-foreground);
-  text-align: center;
-}
-.sales-pager .ui-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 .sales-search {
   display: flex;
   align-items: center;
@@ -197,7 +178,8 @@
 }
 .sales-chart { width: 100%; }
 
-.sales-table-wrap { overflow-x: auto; }
+.sales-table-wrap { overflow-x: auto; transition: opacity 0.15s ease; }
+.sales-table-wrap--busy { opacity: 0.55; }
 .sales-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .sales-table th {
   text-align: left;
@@ -215,6 +197,13 @@
 }
 .sales-table tbody tr:not(.sales-detail-row):hover td { background: var(--color-surface); }
 .sales-table tr:last-child td { border-bottom: none; }
+
+/* Shared pagination bar, pulled flush to the card's bottom edge so it reads
+   like the pager on the other list pages rather than a box inside the card. */
+.sales-card .cp-pag {
+  margin: 12px -16px -16px;
+  border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
+}
 
 .sales-cell--order { font-weight: 600; color: var(--color-primary); }
 .sales-cell--items { color: var(--color-foreground); }

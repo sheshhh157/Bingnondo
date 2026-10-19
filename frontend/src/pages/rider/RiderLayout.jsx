@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/RiderLayout.css';
@@ -65,6 +65,7 @@ const NAV_ITEMS = [
 export default function RiderLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [logoutOpen, setLogoutOpen] = useState(false);
 
   const handleLogout = () => setLogoutOpen(true);
@@ -139,7 +140,7 @@ export default function RiderLayout() {
       </aside>
 
       {/* ── Main ────────────────────────────────────────────────── */}
-      <main className="rl-main" id="main-content">
+      <main className="rl-main" id="main-content" key={location.pathname}>
         <Outlet />
       </main>
 

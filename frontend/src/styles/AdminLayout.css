@@ -472,8 +472,8 @@
 /* Scroll lock while the mobile drawer is open. */
 .al-main--locked { overflow: hidden; }
 
-/* Content gutter — mirrors the Manager shell (.ml-main) so embedded
-   manager pages and admin pages share the same edge rhythm. */
+/* Content gutter — embedded manager-view pages and admin pages
+   share the same edge rhythm. */
 .al-content {
   flex: 1;
   min-width: 0;
@@ -494,6 +494,13 @@
 /* Admin pages (.ap-page) carry their own padding — the shell gutter now
    supplies it, so drop the nested padding to avoid doubling. */
 .al-content .ap-page { padding: 0; }
+
+/* Page enter: the routed content eases up when moving between admin pages.
+   Keyed on the pathname in AdminLayout so a navigation re-mounts and replays
+   it, while in-page updates (paging, filters) don't. */
+.al-content { animation: al-page-in 220ms ease both; }
+@keyframes al-page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .al-content { animation: none; } }
 
 /* ─── Skip to content ───────────────────────────────────────────────── */
 .al-skip {
@@ -539,10 +546,9 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Manager pages embedded in the admin console.
-   manager/* pages (Dashboard, Sales, Oversight ×4, Menu) render inside
-   .al-content. Every rule here is scoped to .al-content so the standalone
-   /manager/* routes remain pixel-identical.
+   Oversight pages embedded in the admin console.
+   Sales / Oversight ×3 / Menu pages render inside .al-content. Every rule
+   here is scoped to .al-content so they only affect the embedded views.
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* Embedded manager roots must be free to shrink inside the shell grid. */

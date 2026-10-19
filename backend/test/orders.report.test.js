@@ -40,7 +40,7 @@ test('escapeLike neutralises LIKE wildcards', () => {
 
 // ─── buildOrderFilters ────────────────────────────────────────────────────────
 
-const manager = (query = {}, role = 'owner') => ({ user: { sub: 1, role }, query });
+const manager = (query = {}, role = 'admin') => ({ user: { sub: 1, role }, query });
 
 test('buildOrderFilters defaults to today when no range is given', () => {
   const { where } = buildOrderFilters(manager());
@@ -68,13 +68,13 @@ test('a date-only `to` includes the whole final day', () => {
   assert.match(where, /INTERVAL '1 day'\)/, 'end date must be exclusive-upper-bound');
 });
 
-test('cashiers are scoped to their own orders, managers are not', () => {
+test('cashiers are scoped to their own orders, admins are not', () => {
   const cashier = buildOrderFilters(manager({ range: 'all' }, 'cashier'));
   assert.match(cashier.where, /cashier_id = \$1/);
   assert.deepEqual(cashier.params, [1]);
 
-  const owner = buildOrderFilters(manager({ range: 'all' }, 'owner'));
-  assert.doesNotMatch(owner.where, /cashier_id/);
+  const admin = buildOrderFilters(manager({ range: 'all' }, 'admin'));
+  assert.doesNotMatch(admin.where, /cashier_id/);
 });
 
 test('status accepts a comma-separated list and is skipped when absent', () => {
@@ -321,12 +321,12 @@ test('the order list reports an unpaged total', async (t) => {
 let token = null;
 const signIn = async () => {
   if (token) return token;
-  const owner = await db.query(
-    `SELECT id FROM staff_accounts WHERE role IN ('owner','admin') AND status = 'active' ORDER BY id LIMIT 1`);
-  if (owner.rowCount === 0) return null;
+  const admin = await db.query(
+    `SELECT id FROM staff_accounts WHERE role = 'admin' AND status = 'active' ORDER BY id LIMIT 1`);
+  if (admin.rowCount === 0) return null;
   const jwt = require('jsonwebtoken');
   token = jwt.sign(
-    { sub: owner.rows[0].id, type: 'staff', role: 'owner' },
+    { sub: admin.rows[0].id, type: 'staff', role: 'admin' },
     process.env.JWT_ACCESS_SECRET,
     { expiresIn: '5m' },
   );

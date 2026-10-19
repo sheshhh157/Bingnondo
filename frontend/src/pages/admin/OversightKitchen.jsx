@@ -1,9 +1,11 @@
-import { kitchenAPI } from '../../services/managerApi';
+import { useState } from 'react';
+import { kitchenAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
 import { kitchenBadgeVariant, kitchenStatusText } from '../../utils/format';
-import { listEvent, queueUpsert, queueStatusInView, queueReady, splitByChannel, urgencyFor, elapsedSince, useNow } from './managerData';
+import { listEvent, queueUpsert, queueStatusInView, queueReady, splitByChannel, urgencyFor, elapsedSince, useNow } from './oversightData';
 import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
+import Pagination from '../../components/Pagination';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
 import PageHeader from '../../components/PageHeader';
@@ -11,11 +13,22 @@ import ErrorBanner from '../../components/ErrorBanner';
 import { useSocketContext } from '../../context/SocketContext';
 import '../../styles/OversightKitchen.css';
 
+// Counter and online are separate lanes; each lane is a 2-column grid of three
+// rows, so six cards per lane page.
+const LANE_PAGE_SIZE = 6;
+// Ready-for-handoff grid — its own six-per-page window (2 columns × 3 rows).
+const PAGE_SIZE = 6;
+
 export default function OversightKitchen() {
   const { connected } = useSocketContext();
   // Without this the urgency colours and "Overdue" flag would only ever change
   // when a socket event happened to arrive.
   const now = useNow();
+
+  const [counterPage, setCounterPage] = useState(1);
+  const [onlinePage, setOnlinePage] = useState(1);
+  const [unknownPage, setUnknownPage] = useState(1);
+  const [handoffPage, setHandoffPage] = useState(1);
 
   // `includeReady` pulls the handoff queue in alongside the prep queue; the two
   // are split by status below. These reducers keep ready orders in the list
@@ -39,12 +52,20 @@ export default function OversightKitchen() {
     pollMs: 15000,
   });
 
-  // The lane grid is the prep queue; ready orders are waiting to be handed
-  // over rather than being made, so they get their own section below instead of
-  // competing for space in the two-column layout.
+  // The queue is two independent lanes — counter and online — kept separate so
+  // the kitchen can read one channel at a time. Ready orders are waiting to be
+  // handed over rather than being made, so they get their own section below
+  // instead of competing for space in the lane columns.
   const prep = orders.filter((o) => o.status !== 'ready');
   const handoff = orders.filter((o) => o.status === 'ready');
   const { counter, online, unknown } = splitByChannel(prep);
+
+  // Ready-for-handoff keeps a six-per-page window (2 columns × 3 rows). The safe
+  // page is clamped so a live socket update that shrinks the list can't strand
+  // the view on a page that no longer exists.
+  const handoffTotalPages = Math.max(1, Math.ceil(handoff.length / PAGE_SIZE));
+  const handoffSafePage = Math.min(handoffPage, handoffTotalPages);
+  const handoffPageOrders = handoff.slice((handoffSafePage - 1) * PAGE_SIZE, handoffSafePage * PAGE_SIZE);
 
   return (
     <div className="ok-root">
@@ -100,18 +121,21 @@ export default function OversightKitchen() {
         <PageSkeleton stats={2} cards={4} />
       ) : (
         <>
+          {/* Kitchen queue — counter and online kept apart, each a 2-column
+              grid of at most three rows, paginated per lane. */}
           <div className="ok-split">
-            <Column lane="counter" label="Counter Orders" orders={counter} now={now} />
+            <LaneColumn lane="counter" label="Counter Orders" orders={counter} now={now} page={counterPage} onPage={setCounterPage} />
             <div className="ok-divider" aria-hidden="true" />
-            <Column lane="online" label="Online Orders" orders={online} now={now} />
+            <LaneColumn lane="online" label="Online Orders" orders={online} now={now} page={onlinePage} onPage={setOnlinePage} />
           </div>
+
           {/* Orders whose order_channel is neither a known counter nor online
-              channel. Kept out of the two-column grid and shown below it, so a
-              new or missing channel is visible instead of being silently
+              channel. Kept out of the two lane columns and shown below them, so
+              a new or missing channel is visible instead of being silently
               counted as counter. */}
           {unknown.length > 0 && (
             <div className="ok-unknown">
-              <Column lane="unknown" label="Unassigned Channel" orders={unknown} now={now} />
+              <LaneColumn lane="unknown" label="Unassigned Channel" orders={unknown} now={now} page={unknownPage} onPage={setUnknownPage} />
             </div>
           )}
 
@@ -128,12 +152,21 @@ export default function OversightKitchen() {
             {handoff.length === 0 ? (
               <EmptyState message="Nothing waiting to be handed over." />
             ) : (
-              <div className="ok-handoff__list">
-                {handoff.map((o) => (
+              <div className="ok-grid">
+                {handoffPageOrders.map((o) => (
                   <Card key={o.id} order={o} lane="handoff" now={now} />
                 ))}
               </div>
             )}
+            <Pagination
+              page={handoffSafePage}
+              totalPages={handoffTotalPages}
+              total={handoff.length}
+              from={handoff.length === 0 ? 0 : (handoffSafePage - 1) * PAGE_SIZE + 1}
+              to={Math.min(handoffSafePage * PAGE_SIZE, handoff.length)}
+              onPage={setHandoffPage}
+              label="Ready for handoff pagination"
+            />
           </section>
         </>
       )}
@@ -141,22 +174,36 @@ export default function OversightKitchen() {
   );
 }
 
-function Column({ lane, label, orders, now }) {
+/** One channel lane: a 2-column grid of at most three rows, paginated in place. */
+function LaneColumn({ lane, label, orders, now, page, onPage }) {
+  const totalPages = Math.max(1, Math.ceil(orders.length / LANE_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const visible = orders.slice((safePage - 1) * LANE_PAGE_SIZE, safePage * LANE_PAGE_SIZE);
+
   return (
     <section className={`ok-col ok-col--${lane}`} aria-label={`${label}: ${orders.length}`}>
       <div className="ok-col__header">
-        <span className={`ok-col__count ok-col__count--${lane}`}>{orders.length}</span>
+        <span className="ok-col__count">{orders.length}</span>
         <h2 className="ok-col__title">{label}</h2>
       </div>
       {orders.length === 0 ? (
         <EmptyState message={`No ${label.toLowerCase()}`} />
       ) : (
         <div className="ok-col__list">
-          {orders.map((o) => (
+          {visible.map((o) => (
             <Card key={o.id} order={o} lane={lane} now={now} />
           ))}
         </div>
       )}
+      <Pagination
+        page={safePage}
+        totalPages={totalPages}
+        total={orders.length}
+        from={orders.length === 0 ? 0 : (safePage - 1) * LANE_PAGE_SIZE + 1}
+        to={Math.min(safePage * LANE_PAGE_SIZE, orders.length)}
+        onPage={onPage}
+        label={`${label} pagination`}
+      />
     </section>
   );
 }

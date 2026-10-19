@@ -15,10 +15,16 @@
 .oo-page {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+  /* Scroll area with page gutters — mirrors the menu view's 1.25rem side
+     padding so rows no longer run edge-to-edge under the cashier header. */
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
   gap: 0;
   position: relative;
 }
@@ -569,6 +575,38 @@
 
 .oo-detail__row--rejection dd { color: #B91C1C; }
 
+/* GCash amount-sent indicators */
+.oo-detail__shortpay {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 7px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: #FEF2F2;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
+  vertical-align: middle;
+  white-space: nowrap;
+  animation: oo-shortpay-pop 0.2s ease;
+}
+
+@keyframes oo-shortpay-pop {
+  from { transform: scale(0.85); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+.oo-detail__unread {
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--color-muted-foreground);
+}
+
 /* Delivery block */
 .oo-detail__delivery {
   margin-top: 14px;
@@ -1083,6 +1121,7 @@
 
 /* Touch sizing (tablet + phone) — in-flow controls follow the container. */
 @container (max-width: 767px) {
+  .oo-page { padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); }
   .oo-search__input { min-height: 44px; font-size: 16px; }
   .oo-search__clear { width: 44px; height: 44px; }
   .oo-tab { min-height: 44px; }
@@ -1098,6 +1137,7 @@
 
 /* In-flow detail/summary collapses with the container width. */
 @container (max-width: 639px) {
+  .oo-page { padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   .oo-detail { grid-template-columns: 1fr; }
   .oo-detail { padding: 14px; gap: 16px; }
 

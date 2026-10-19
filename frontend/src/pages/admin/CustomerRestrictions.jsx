@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../../services/api';
 import {
-  Spinner, Btn, Field, TextInput, AppSelect, Modal,
+  Spinner, TableSkeleton, Btn, Field, TextInput, AppSelect, Modal,
   PageHeader, RowAction, Pagination,
 } from './adminShared';
 import { useAdminToast } from './useAdminToast';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { formatDate } from './format';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import '../../styles/AdminPage.css';
@@ -360,14 +361,17 @@ export default function CustomerRestrictions() {
   const [filterLevel, setFilterLevel] = useState('');
   const [filterOpen, setFilterOpen]   = useState(false);
 
+  // Debounce the server query so typing doesn't fire a request per keystroke.
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   const [viewViol, setViewViol]   = useState(null);   // customer for violation modal
   const [override, setOverride]   = useState(null);   // customer for override modal
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     adminAPI.listCustomerRestrictions({
-      page, limit: 12,
-      search:           search     || undefined,
+      page, limit: 10,
+      search:           debouncedSearch || undefined,
       restriction_level: filterLevel || undefined,
     })
       .then(({ data }) => {
@@ -375,8 +379,8 @@ export default function CustomerRestrictions() {
         setTotalPages(data.totalPages || 1);
       })
       .catch(() => toast.error('Failed to load customer restrictions.'))
-      .finally(() => setLoading(false));
-  }, [page, search, filterLevel, toast]);
+      .finally(() => { if (!silent) setLoading(false); });
+  }, [page, debouncedSearch, filterLevel, toast]);
 
   // Fetch-on-mount: the sync setLoading inside `load` is intentional.
   // oxlint-disable-next-line react/set-state-in-effect
@@ -384,6 +388,10 @@ export default function CustomerRestrictions() {
 
   const hasFilters = Boolean(search || filterLevel);
   const clearFilters = () => { setSearch(''); setFilterLevel(''); setPage(1); };
+
+  // First load gets the skeleton; paging/filtering keeps the rows and dims them.
+  const firstLoad = loading && customers.length === 0;
+  const busy = loading && customers.length > 0;
 
   const filterFields = (
     <>
@@ -439,8 +447,8 @@ export default function CustomerRestrictions() {
 
         {/* Table */}
         <div className="ap-card">
-          {loading ? (
-            <div className="ap-loading"><Spinner size={24} /></div>
+          {firstLoad ? (
+            <TableSkeleton rows={6} cols={6} />
           ) : customers.length === 0 ? (
             <div className="ap-empty">
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-border)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginBottom: 8 }}>
@@ -456,7 +464,7 @@ export default function CustomerRestrictions() {
               </div>
             </div>
           ) : (
-            <div className="ap-table-wrap">
+            <div className={`ap-table-wrap${busy ? ' is-busy' : ''}`} aria-busy={busy}>
               <table className="ap-table">
                 <thead>
                   <tr>
@@ -479,7 +487,7 @@ export default function CustomerRestrictions() {
             </div>
           )}
 
-          {!loading && customers.length > 0 && (
+          {!firstLoad && customers.length > 0 && (
             <div className="ap-table-foot">
               <span className="ap-table-foot__info">
                 Page {page} of {totalPages} · showing {customers.length} customer{customers.length === 1 ? '' : 's'}
@@ -504,7 +512,7 @@ export default function CustomerRestrictions() {
         open={!!override}
         onClose={() => setOverride(null)}
         customer={override}
-        onSuccess={load}
+        onSuccess={() => load(true)}
         toast={toast}
       />
 
