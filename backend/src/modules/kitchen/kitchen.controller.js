@@ -42,7 +42,9 @@ async function getKitchenOrders(req, res, next) {
              'id',        oi.id,
              'quantity',  oi.quantity,
              'notes',     oi.notes,
-             'menu_item', json_build_object('name', mi.name)
+             'menu_item', json_build_object(
+               'name', mi.name || COALESCE(' – ' || oi.variant_name, '')
+             )
            ) ORDER BY oi.id
          ) AS order_items
        FROM orders o

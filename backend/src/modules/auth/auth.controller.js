@@ -4,6 +4,7 @@ const {
   storeOtp,
   verifyOtp,
   sendOtpEmail,
+  sendPasswordChangedEmail,
 } = require('./auth.otp');
 const {
   signAccessToken,
@@ -24,6 +25,38 @@ function sanitizeStaff(row) {
 function sanitizeRider(row) {
   const { password_hash, ...safe } = row;
   return safe;
+}
+
+// Resolve which account (staff or rider) owns an email for password reset.
+// Mirrors the shared login resolution: staff first, then riders.
+async function findResetAccount(email, client = db) {
+  const { rows: staffRows } = await client.query(
+    "SELECT id FROM staff_accounts WHERE email = $1 AND status = 'active'",
+    [email]
+  );
+  if (staffRows.length > 0) {
+    return { type: 'staff', id: staffRows[0].id };
+  }
+
+  const { rows: riderRows } = await client.query(
+    "SELECT id FROM riders WHERE email = $1 AND status != 'inactive' ORDER BY id LIMIT 1",
+    [email]
+  );
+  if (riderRows.length > 0) {
+    return { type: 'rider', id: riderRows[0].id };
+  }
+
+  return null;
+}
+
+const RESET_TABLES = { staff: 'staff_accounts', rider: 'riders' };
+
+async function writeAuditLog(client, actorId, action, targetType, targetId, details = {}) {
+  await client.query(
+    `INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [actorId, action, targetType, targetId, JSON.stringify(details)]
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,32 +197,37 @@ exports.staffLogin = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FORGOT PASSWORD (staff only)
+// FORGOT PASSWORD (staff + riders)
 // POST /api/auth/forgot-password
 // ─────────────────────────────────────────────────────────────────────────────
+const FORGOT_MESSAGE = 'If that email is registered, a reset code has been sent.';
+
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ message: 'Email is required.' });
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ message: 'Email is required.' });
+    }
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    const { rows: staffRows } = await db.query(
-      "SELECT id FROM staff_accounts WHERE email = $1 AND status = 'active'",
-      [normalizedEmail]
-    );
+    const account = await findResetAccount(normalizedEmail);
 
-    if (staffRows.length === 0) {
-      return res.status(200).json({ message: 'If that email is registered, a reset code has been sent.' });
+    if (account) {
+      const otp = await storeOtp(normalizedEmail, 'password_reset');
+
+      // Send detached: the HTTP response must not wait on SMTP, otherwise
+      // response timing would reveal whether the email is registered.
+      sendOtpEmail(normalizedEmail, otp, 'password_reset').catch((err) =>
+        console.error('[forgotPassword] OTP email failed:', err.message)
+      );
     }
 
-    const otp = await storeOtp(normalizedEmail, 'password_reset');
-    await sendOtpEmail(normalizedEmail, otp, 'password_reset');
-
-    return res.status(200).json({ message: 'If that email is registered, a reset code has been sent.' });
+    // Identical response for known/unknown emails and internal failures alike.
+    return res.status(200).json({ message: FORGOT_MESSAGE });
   } catch (err) {
     console.error('[forgotPassword]', err);
-    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+    return res.status(200).json({ message: FORGOT_MESSAGE });
   }
 };
 
@@ -204,6 +242,12 @@ exports.resetPassword = async (req, res) => {
     if (!email || !otp || !newPassword || !confirmPassword) {
       return res.status(400).json({ message: 'All fields are required.' });
     }
+    if (typeof email !== 'string' || typeof newPassword !== 'string' || typeof confirmPassword !== 'string') {
+      return res.status(400).json({ message: 'All fields are required.' });
+    }
+    if (!/^\d{6}$/.test(String(otp))) {
+      return res.status(400).json({ message: 'Enter the 6-digit code from your email.' });
+    }
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ message: 'Passwords do not match.' });
     }
@@ -212,19 +256,55 @@ exports.resetPassword = async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const result = await verifyOtp(normalizedEmail, otp, 'password_reset');
-    if (!result.valid) {
-      if (result.reason === 'expired') {
-        return res.status(400).json({ message: 'OTP expired. Request a new one.' });
+
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      const account = await findResetAccount(normalizedEmail, client);
+      if (!account) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'This account can no longer reset its password. Contact your administrator.' });
       }
-      return res.status(400).json({ message: 'Invalid OTP. Please try again.' });
+
+      const result = await verifyOtp(normalizedEmail, String(otp), 'password_reset', client);
+      if (!result.valid) {
+        await client.query('ROLLBACK');
+        if (result.reason === 'expired') {
+          return res.status(400).json({ message: 'OTP expired. Request a new one.' });
+        }
+        return res.status(400).json({ message: 'Invalid OTP. Please try again.' });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+      await client.query(
+        `UPDATE ${RESET_TABLES[account.type]} SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+        [passwordHash, account.id]
+      );
+
+      await writeAuditLog(
+        client,
+        // audit_log.actor_id has a FK to staff_accounts, so a rider-initiated
+        // reset logs no actor — the target columns identify the account.
+        account.type === 'staff' ? account.id : null,
+        'self_reset_password',
+        account.type === 'staff' ? 'staff_account' : 'rider',
+        account.id,
+        { email: normalizedEmail, account_type: account.type }
+      );
+
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-
-    await db.query(
-      'UPDATE staff_accounts SET password_hash = $1, updated_at = NOW() WHERE email = $2',
-      [passwordHash, normalizedEmail]
+    // Alert the owner (detached — never affects the reset result).
+    sendPasswordChangedEmail(normalizedEmail).catch((err) =>
+      console.error('[resetPassword] password-changed email failed:', err.message)
     );
 
     return res.status(200).json({ message: 'Password reset successfully. You can now sign in.' });

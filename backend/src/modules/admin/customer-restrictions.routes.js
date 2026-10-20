@@ -21,4 +21,9 @@ router.get('/:customer_id/violations', ctrl.getCustomerViolations);
 //   Body: { restriction_level, reason }
 router.patch('/:customer_id', ctrl.overrideCustomerRestriction);
 
+// PATCH /api/admin/customer-restrictions/:customer_id/account-status
+//   Suspend or reinstate a customer's login account.
+//   Body: { status: 'active'|'suspended', reason }
+router.patch('/:customer_id/account-status', ctrl.updateCustomerAccountStatus);
+
 module.exports = router;

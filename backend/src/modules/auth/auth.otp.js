@@ -4,6 +4,24 @@ const { sendEmail } = require('../../utils/mailer');
 
 const OTP_EXPIRY_MINUTES = 10;
 
+const EMAIL_LOGO_URL = 'https://res.cloudinary.com/roumuyf1/image/upload/w_176,q_auto:good/bingnondo/email/cat-logo.png';
+const EMAIL_BANNER_URL = 'https://res.cloudinary.com/roumuyf1/image/upload/c_fill,w_864,h_300,f_png/bingnondo/email/bg.png';
+
+const emailHeader = `
+          <div style="background-color:#7F1D1D;background-image:url('${EMAIL_BANNER_URL}');background-size:cover;background-position:center;border-radius:12px 12px 0 0;padding:20px 24px;text-align:left;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+              <tr>
+                <td style="vertical-align:middle;padding:0 14px 0 0;">
+                  <img src="${EMAIL_LOGO_URL}" alt="Bingnondo Cafe" width="64" style="display:block;width:64px;height:auto;border:0;" />
+                </td>
+                <td style="vertical-align:middle;">
+                  <div style="font-family:Georgia,'Times New Roman',serif;font-size:20px;letter-spacing:0.08em;color:#FFFBEB;">Bingnondo Cafe</div>
+                  <div style="width:44px;height:2px;background:#D97706;margin:8px 0 0;border-radius:1px;"></div>
+                </td>
+              </tr>
+            </table>
+          </div>`;
+
 /**
  * Generate a cryptographically random 6-digit OTP string.
  */
@@ -20,14 +38,15 @@ function generateOtp() {
  *
  * @param {string} contact - email or mobile number
  * @param {'email_verification'|'mobile_verification'|'password_reset'} purpose
+ * @param {import('pg').Pool|import('pg').PoolClient} [client]
  * @returns {string} the generated OTP (plain text — stored as hash in prod, plain here for simplicity)
  */
-async function storeOtp(contact, purpose) {
+async function storeOtp(contact, purpose, client = db) {
   const otp = generateOtp();
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
   // Invalidate older unused OTPs for same contact+purpose
-  await db.query(
+  await client.query(
     `UPDATE otp_verifications
      SET verified_at = NOW()
      WHERE contact = $1
@@ -38,7 +57,7 @@ async function storeOtp(contact, purpose) {
   );
 
   // Insert new OTP
-  await db.query(
+  await client.query(
     `INSERT INTO otp_verifications (contact, otp_code, purpose, expires_at)
      VALUES ($1, $2, $3, $4)`,
     [contact, otp, purpose, expiresAt]
@@ -54,10 +73,11 @@ async function storeOtp(contact, purpose) {
  * @param {string} contact
  * @param {string} otpCode
  * @param {'email_verification'|'mobile_verification'|'password_reset'} purpose
+ * @param {import('pg').Pool|import('pg').PoolClient} [client]
  * @returns {{ valid: boolean, reason?: 'not_found'|'expired'|'already_used' }}
  */
-async function verifyOtp(contact, otpCode, purpose) {
-  const { rows } = await db.query(
+async function verifyOtp(contact, otpCode, purpose, client = db) {
+  const { rows } = await client.query(
     `SELECT id, expires_at, verified_at
      FROM otp_verifications
      WHERE contact = $1
@@ -82,11 +102,16 @@ async function verifyOtp(contact, otpCode, purpose) {
     return { valid: false, reason: 'expired' };
   }
 
-  // Mark as used
-  await db.query(
-    'UPDATE otp_verifications SET verified_at = NOW() WHERE id = $1',
+  // Consume the OTP atomically — if a concurrent request already used it,
+  // rowCount is 0 and this request must not proceed.
+  const consumed = await client.query(
+    'UPDATE otp_verifications SET verified_at = NOW() WHERE id = $1 AND verified_at IS NULL RETURNING id',
     [record.id]
   );
+
+  if (consumed.rowCount === 0) {
+    return { valid: false, reason: 'already_used' };
+  }
 
   return { valid: true };
 }
@@ -106,23 +131,33 @@ async function sendOtpEmail(toEmail, otp, purpose) {
 
   const bodies = {
     email_verification: `
-      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px 24px;">
-        <h2 style="color:#b45309;margin-bottom:8px;">Welcome to Bingnondo Cafe!</h2>
-        <p style="color:#374151;">Use this code to verify your email address.</p>
-        <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:20px 24px;text-align:center;margin:24px 0;">
-          <span style="font-size:2rem;font-weight:700;letter-spacing:0.2em;color:#92400e;">${otp}</span>
+      <div style="background:#FDF6E3;padding:24px 12px;font-family:Karla,system-ui,-apple-system,'Segoe UI',Arial,sans-serif;">
+        <div style="max-width:480px;margin:0 auto;">
+${emailHeader}
+          <div style="background:#FFFFFF;border:1px solid #E9C998;border-top:0;border-radius:0 0 12px 12px;padding:28px 24px;">
+            <h2 style="font-family:Georgia,'Times New Roman',serif;color:#7F1D1D;font-size:22px;margin:0 0 12px;">Welcome to Bingnondo Cafe!</h2>
+            <p style="color:#3B0A0A;font-size:15px;line-height:1.5;margin:0 0 20px;">Use this code to verify your email address.</p>
+            <div style="background:#FDF6E3;border:1px solid #C9A262;border-radius:10px;padding:18px 24px;text-align:center;margin:0 0 20px;">
+              <span style="font-family:Georgia,'Times New Roman',serif;font-size:2rem;font-weight:700;letter-spacing:0.25em;color:#7F1D1D;">${otp}</span>
+            </div>
+            <p style="color:#7C4A2A;font-size:13px;line-height:1.5;margin:0;">This code expires in ${OTP_EXPIRY_MINUTES} minutes. If you did not create an account, you can safely ignore this email.</p>
+          </div>
         </div>
-        <p style="color:#6b7280;font-size:0.875rem;">This code expires in ${OTP_EXPIRY_MINUTES} minutes. If you did not create an account, you can safely ignore this email.</p>
       </div>
     `,
     password_reset: `
-      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px 24px;">
-        <h2 style="color:#b45309;margin-bottom:8px;">Reset your password</h2>
-        <p style="color:#374151;">Use this code to reset your Bingnondo Cafe password.</p>
-        <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:20px 24px;text-align:center;margin:24px 0;">
-          <span style="font-size:2rem;font-weight:700;letter-spacing:0.2em;color:#92400e;">${otp}</span>
+      <div style="background:#FDF6E3;padding:24px 12px;font-family:Karla,system-ui,-apple-system,'Segoe UI',Arial,sans-serif;">
+        <div style="max-width:480px;margin:0 auto;">
+${emailHeader}
+          <div style="background:#FFFFFF;border:1px solid #E9C998;border-top:0;border-radius:0 0 12px 12px;padding:28px 24px;">
+            <h2 style="font-family:Georgia,'Times New Roman',serif;color:#7F1D1D;font-size:22px;margin:0 0 12px;">Reset your password</h2>
+            <p style="color:#3B0A0A;font-size:15px;line-height:1.5;margin:0 0 20px;">Use this code to reset your Bingnondo Cafe password.</p>
+            <div style="background:#FDF6E3;border:1px solid #C9A262;border-radius:10px;padding:18px 24px;text-align:center;margin:0 0 20px;">
+              <span style="font-family:Georgia,'Times New Roman',serif;font-size:2rem;font-weight:700;letter-spacing:0.25em;color:#7F1D1D;">${otp}</span>
+            </div>
+            <p style="color:#7C4A2A;font-size:13px;line-height:1.5;margin:0;">This code expires in ${OTP_EXPIRY_MINUTES} minutes. If you did not request a password reset, please ignore this email.</p>
+          </div>
         </div>
-        <p style="color:#6b7280;font-size:0.875rem;">This code expires in ${OTP_EXPIRY_MINUTES} minutes. If you did not request a password reset, please ignore this email.</p>
       </div>
     `,
   };
@@ -134,4 +169,30 @@ async function sendOtpEmail(toEmail, otp, purpose) {
   });
 }
 
-module.exports = { generateOtp, storeOtp, verifyOtp, sendOtpEmail };
+/**
+ * Notify an account that its password was just changed (self-service reset).
+ * Alerts the owner if the change was not theirs.
+ *
+ * @param {string} toEmail
+ */
+async function sendPasswordChangedEmail(toEmail) {
+  await sendEmail({
+    to:      toEmail,
+    subject: 'Bingnondo Cafe — Your password was changed',
+    html: `
+      <div style="background:#FDF6E3;padding:24px 12px;font-family:Karla,system-ui,-apple-system,'Segoe UI',Arial,sans-serif;">
+        <div style="max-width:480px;margin:0 auto;">
+${emailHeader}
+          <div style="background:#FFFFFF;border:1px solid #E9C998;border-top:0;border-radius:0 0 12px 12px;padding:28px 24px;">
+            <h2 style="font-family:Georgia,'Times New Roman',serif;color:#7F1D1D;font-size:22px;margin:0 0 12px;">Your password was changed</h2>
+            <p style="color:#3B0A0A;font-size:15px;line-height:1.5;margin:0 0 12px;">The password for your Bingnondo Cafe account was just reset using a one-time code sent to this email address.</p>
+            <p style="color:#3B0A0A;font-size:15px;line-height:1.5;margin:0 0 20px;">If this was you, no action is needed.</p>
+            <p style="color:#7C4A2A;font-size:13px;line-height:1.5;margin:0;">If this was NOT you, contact your administrator immediately — someone may have access to your email inbox.</p>
+          </div>
+        </div>
+      </div>
+    `,
+  });
+}
+
+module.exports = { generateOtp, storeOtp, verifyOtp, sendOtpEmail, sendPasswordChangedEmail };

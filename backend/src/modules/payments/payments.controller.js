@@ -130,9 +130,10 @@ async function getPendingPayments(req, res, next) {
           COALESCE(
             json_agg(
               json_build_object(
-                'name',       mi.name,
-                'quantity',   oi.quantity,
-                'unit_price', oi.unit_price::float
+                'name',         mi.name,
+                'variant_name', oi.variant_name,
+                'quantity',     oi.quantity,
+                'unit_price',   oi.unit_price::float
               )
               ORDER BY oi.id
             ) FILTER (WHERE oi.id IS NOT NULL),
@@ -255,10 +256,11 @@ async function verifyPayment(req, res, next) {
           COALESCE(
             json_agg(
               json_build_object(
-                'name',       mi.name,
-                'quantity',   oi.quantity,
-                'unit_price', oi.unit_price::float,
-                'notes',      oi.notes
+                'name',         mi.name,
+                'variant_name', oi.variant_name,
+                'quantity',     oi.quantity,
+                'unit_price',   oi.unit_price::float,
+                'notes',        oi.notes
               ) ORDER BY oi.id
             ) FILTER (WHERE oi.id IS NOT NULL),
             '[]'
@@ -351,7 +353,7 @@ async function rejectPayment(req, res, next) {
     // Mark payment as rejected with the reason
     await client.query(
       `UPDATE payments
-       SET status = 'rejected', rejection_reason = $1
+       SET status = 'rejected', rejection_reason = $1, rejected_at = NOW()
        WHERE id = $2`,
       [reason.trim(), payment_id]
     );

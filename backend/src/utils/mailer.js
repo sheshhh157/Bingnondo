@@ -16,13 +16,28 @@ async function getTransporter() {
     // For Gmail: use an App Password (not your account password).
     // Set SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_SECURE=true,
     //     SMTP_USER=you@gmail.com, SMTP_PASS=your-app-password
+    if (!process.env.SMTP_HOST) {
+      // Production without SMTP configured: warn once and make sends fail
+      // loudly instead of creating a transport with an undefined host.
+      console.warn(
+        '[mailer] WARNING: NODE_ENV=production but SMTP_HOST is not set — emails cannot be delivered. ' +
+        'Configure SMTP_* in backend/.env (see .env.example).'
+      );
+      transporter = {
+        sendMail: async () => {
+          throw new Error('SMTP is not configured (SMTP_HOST is empty)');
+        },
+      };
+      return transporter;
+    }
+
     transporter = nodemailer.createTransport({
       host:   process.env.SMTP_HOST,
       port:   parseInt(process.env.SMTP_PORT || '465', 10),
       secure: process.env.SMTP_SECURE === 'true',
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: String(process.env.SMTP_USER || '').trim(),
+        pass: String(process.env.SMTP_PASS || '').replace(/\s+/g, ''),
       },
     });
     console.log('[mailer] Using SMTP transporter:', process.env.SMTP_HOST);

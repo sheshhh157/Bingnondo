@@ -122,6 +122,11 @@ export const authClient = {
     setTokens(res.accessToken, res.refreshToken);
     return res;
   },
+  // Public endpoints (retry=false): a 400/429 is a plain error, never a token refresh.
+  forgotPassword: (email) =>
+    request('POST', '/api/auth/forgot-password', { email }, false),
+  resetPassword: (payload) =>
+    request('POST', '/api/auth/reset-password', payload, false),
   logout: async () => {
     try { await post('/api/auth/logout', {}); } catch { /* ignore */ }
     clearTokens();

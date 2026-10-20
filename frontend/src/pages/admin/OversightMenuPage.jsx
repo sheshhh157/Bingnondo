@@ -3,7 +3,6 @@ import { menuAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
 import { currency, menuAvailVariant } from '../../utils/format';
 import { MENU_EVENTS, outOfStockIngredients } from './oversightData';
-import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
@@ -14,7 +13,7 @@ import FilterModal, { FilterTrigger, FilterInline } from '../../components/Mobil
 import '../../styles/MenuPage.css';
 
 export default function MenuPage() {
-  const { data: items, loading, error, lastUpdated, refresh, refreshing } = useLiveData({
+  const { data: items, loading, error, refresh } = useLiveData({
     fetchFn: async () => (await menuAPI.getStaffMenu()).data,
     events: MENU_EVENTS,
     pollMs: 15000,
@@ -68,8 +67,6 @@ export default function MenuPage() {
         <StatCard label="Available" value={items.length - unavailableCount} />
         <StatCard label="Unavailable" value={unavailableCount} />
       </div>
-
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh menu availability" />
 
       <div className="menu-toolbar">
         <div className="menu-search">

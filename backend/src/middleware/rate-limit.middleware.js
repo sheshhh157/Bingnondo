@@ -37,6 +37,23 @@ const otpLimiter = rateLimit({
 });
 
 /**
+ * resetLimiter
+ * ────────────
+ * 10 failed reset attempts per IP per 10 minutes — makes brute-forcing
+ * the 6-digit OTP (~1/1,000,000) impossible. Successful resets don't count.
+ */
+const resetLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message: 'Too many reset attempts. Please wait and request a new code.',
+  },
+});
+
+/**
  * generalApiLimiter
  * ──────────────────
  * Broad catch-all for all /api/* routes — 200 req/min per IP.
@@ -52,4 +69,4 @@ const generalApiLimiter = rateLimit({
   },
 });
 
-module.exports = { loginLimiter, otpLimiter, generalApiLimiter };
+module.exports = { loginLimiter, otpLimiter, resetLimiter, generalApiLimiter };

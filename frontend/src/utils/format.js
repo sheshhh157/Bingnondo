@@ -4,9 +4,15 @@ export function currency(n) {
   return `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** "hh:mm:ss" clock shared by the live "updated / synced" stamps. */
-export function timeStamp(d) {
-  return new Date(d).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+/**
+ * Display label for an order line: "Halo-Halo – Large" when the line carries a
+ * variant snapshot, otherwise the bare item name. Backend readers emit
+ * `variant_name` alongside `name`; kitchen's nested shape arrives pre-composed.
+ */
+export function itemLabel(item) {
+  const base = item?.name || item?.menu_item?.name || '';
+  if (!base) return '';
+  return item.variant_name ? `${base} – ${item.variant_name}` : base;
 }
 
 /**
@@ -177,7 +183,10 @@ export function normalizeLiveOrder(p) {
   if (!p || typeof p !== 'object') return null;
   if (Array.isArray(p.items)) return p;
   const items = (p.order_items || []).map((it) => ({
-    name: it?.menu_item?.name || it?.name || 'Unknown',
+    // Prefer the raw name so itemLabel can compose "<name> – <variant>";
+    // only fall back to the pre-composed kitchen label when no raw name exists.
+    name: it?.name || it?.menu_item?.name || 'Unknown',
+    variant_name: it?.name ? (it?.variant_name ?? null) : null,
     quantity: it?.quantity || 1,
     unit_price: it?.unit_price ?? null,
   }));

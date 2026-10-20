@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { kitchenAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
-import { kitchenBadgeVariant, kitchenStatusText } from '../../utils/format';
+import { kitchenBadgeVariant, kitchenStatusText, itemLabel } from '../../utils/format';
 import { listEvent, queueUpsert, queueStatusInView, queueReady, splitByChannel, urgencyFor, elapsedSince, useNow } from './oversightData';
-import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
 import Pagination from '../../components/Pagination';
 import Badge from '../../components/Badge';
@@ -35,7 +34,7 @@ export default function OversightKitchen() {
   // (unlike the nav badge's, which counts only work in the kitchen), so a live
   // `order:ready` moves a card across into the handoff section instead of
   // making it vanish.
-  const { data: orders, loading, error, refresh, lastUpdated, refreshing } = useLiveData({
+  const { data: orders, loading, error, refresh } = useLiveData({
     fetchFn: async () => (await kitchenAPI.getOrders({ includeReady: true })).data,
     events: [
       listEvent('order:new', queueUpsert),
@@ -79,8 +78,6 @@ export default function OversightKitchen() {
           <button type="button" className="ui-error__retry" onClick={() => refresh()}>Retry</button>
         </ErrorBanner>
       )}
-
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh kitchen queue" />
 
       {loading ? (
         <PageSkeleton stats={2} cards={4} />
@@ -204,11 +201,11 @@ function Card({ order, lane, now }) {
         <div className="ok-card__bar-fill" />
       </div>
       <ul className="ok-card__items">
-        {order.order_items?.map((item) => (
-          <li key={item.id} className="ok-card__item">
+        {(order.order_items || order.items || []).map((item, i) => (
+          <li key={item.id ?? i} className="ok-card__item">
             <span className="ok-card__qty">{item.quantity}×</span>
             <div className="ok-card__item-body">
-              <span className="ok-card__item-name">{item.menu_item?.name || item.name}</span>
+              <span className="ok-card__item-name">{itemLabel(item)}</span>
               {item.notes && <span className="ok-card__note">{item.notes}</span>}
             </div>
           </li>

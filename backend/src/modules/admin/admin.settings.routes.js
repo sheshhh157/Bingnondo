@@ -16,5 +16,16 @@ router.get   ('/menu-categories',     ctrl.listCategories);  // GET    /api/admi
 router.post  ('/menu-categories',     ctrl.createCategory);  // POST   /api/admin/system-settings/menu-categories
 router.patch ('/menu-categories/:id', ctrl.updateCategory);  // PATCH  /api/admin/system-settings/menu-categories/:id
 router.delete('/menu-categories/:id', ctrl.deleteCategory);  // DELETE /api/admin/system-settings/menu-categories/:id
+router.put   ('/menu-categories/:id/variants', ctrl.updateCategoryVariants); // PUT /api/admin/system-settings/menu-categories/:id/variants
+
+// ─── Menu Variants (reusable variant groups) ──────────────────────────────────
+router.get   ('/variants',     ctrl.listVariantGroups);  // GET    /api/admin/system-settings/variants
+router.post  ('/variants',     ctrl.createVariantGroup); // POST   /api/admin/system-settings/variants
+router.patch ('/variants/:id', ctrl.updateVariantGroup); // PATCH  /api/admin/system-settings/variants/:id
+router.delete('/variants/:id', ctrl.deleteVariantGroup); // DELETE /api/admin/system-settings/variants/:id
+
+// ─── Notification Settings ────────────────────────────────────────────────────
+router.get('/notifications', ctrl.getNotificationSettings);  // GET /api/admin/system-settings/notifications
+router.put('/notifications', ctrl.saveNotificationSettings); // PUT /api/admin/system-settings/notifications
 
 module.exports = router;

@@ -181,15 +181,22 @@ function toManagerOrderPayload(order) {
   return {
     ...order,
     items,
-    order_items: items.map((item, i) => ({
-      id: order.id != null ? `${order.id}-${i + 1}` : i + 1,
-      menu_item_id: item.menu_item_id ?? null,
-      name: item.name ?? null,
-      quantity: item.quantity ?? 1,
-      unit_price: item.unit_price ?? null,
-      notes: item.notes ?? null,
-      menu_item: { name: item.name ?? 'Unknown item' },
-    })),
+    order_items: items.map((item, i) => {
+      const label = item.name
+        ? `${item.name}${item.variant_name ? ` – ${item.variant_name}` : ''}`
+        : 'Unknown item';
+      return {
+        id: order.id != null ? `${order.id}-${i + 1}` : i + 1,
+        menu_item_id: item.menu_item_id ?? null,
+        variant_id: item.variant_id ?? null,
+        variant_name: item.variant_name ?? null,
+        name: item.name ?? null,
+        quantity: item.quantity ?? 1,
+        unit_price: item.unit_price ?? null,
+        notes: item.notes ?? null,
+        menu_item: { name: label },
+      };
+    }),
   };
 }
 

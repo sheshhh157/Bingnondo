@@ -154,38 +154,6 @@
 }
 .ui-error__retry:hover { background: #FDF6F5; border-color: var(--color-destructive); }
 
-/* Live data row — "last updated" stamp + quiet refresh button */
-.ui-live {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 0.78rem;
-  color: var(--color-muted-foreground);
-}
-.ui-live__stamp { white-space: nowrap; }
-.ui-live__refresh {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background: var(--color-card);
-  padding: 5px 10px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--color-foreground);
-  cursor: pointer;
-}
-.ui-live__refresh:hover { background: var(--color-surface); }
-.ui-live__refresh:disabled { opacity: 0.6; cursor: wait; }
-.ui-live__refresh svg { transition: transform 0.2s ease; }
-.ui-live__refresh--busy {
-  opacity: 0.6;
-  cursor: wait;
-}
-.ui-live__refresh--busy svg { animation: uispin 0.8s linear infinite; }
-@keyframes uispin { to { transform: rotate(360deg); } }
-
 /* Empty chart placeholder — shown inside chart cards when there is no data */
 .ui-chart-empty {
   display: flex;

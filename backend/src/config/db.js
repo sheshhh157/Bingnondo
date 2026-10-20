@@ -11,6 +11,7 @@ const pool = new Pool({
   // Connection pool settings
   max:             10,   // max simultaneous connections
   idleTimeoutMillis: 30000,
+  allowExitOnIdle: true,
   connectionTimeoutMillis: 2000,
   // SSL: enable for production (Railway/Render require it)
   ssl: process.env.NODE_ENV === 'production'

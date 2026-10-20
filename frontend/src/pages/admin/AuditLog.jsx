@@ -15,7 +15,7 @@ const SearchIcon = () => (
 );
 
 // ── action badge ─────────────────────────────────────────────────────
-const ACTION_TYPES = ['create','deactivate','reactivate','reset_password','update_settings','register_device','remove_device','update_api_key'];
+const ACTION_TYPES = ['create','deactivate','reactivate','reset_password','update_settings','register_device','remove_device','update_api_key','customer_restriction_override','customer_account_status_change','self_reset_password'];
 
 function ActionBadge({ action }) {
   const type = ACTION_TYPES.includes(action) ? action : 'default';

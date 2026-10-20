@@ -8,9 +8,117 @@ function emitMenuUpdate(item) {
   if (_io) _io.emit('menu_update', item);
 }
 
-// ─── Internal helper: fetch one item enriched with category + ingredients ─────
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+function _parseVariant(r) {
+  const out = {
+    id: r.id,
+    name: r.name,
+    price: parseFloat(r.price),
+    is_available: r.is_available,
+    display_order: r.display_order,
+  };
+  if (r.variant_group_id != null) {
+    out.group_id = r.variant_group_id;
+    out.group_name = r.group_name ?? null;
+  }
+  return out;
+}
+
+function _groupVariants(rows) {
+  const map = {};
+  for (const row of rows) {
+    if (!map[row.menu_item_id]) map[row.menu_item_id] = [];
+    map[row.menu_item_id].push(_parseVariant(row));
+  }
+  return map;
+}
+
+// Returns an error message, or null when the variant payload is valid.
+function _validateVariants(variants) {
+  if (!Array.isArray(variants)) return 'variants must be an array.';
+  const seen = new Set();
+  for (const v of variants) {
+    const name = typeof v?.name === 'string' ? v.name.trim() : '';
+    if (!name) return 'Every variant needs a name.';
+    if (name.length > 100) return 'Variant names must be 100 characters or fewer.';
+    if (v.price == null || Number.isNaN(Number(v.price)) || Number(v.price) <= 0) {
+      return `Variant "${name}" needs a price greater than zero.`;
+    }
+    const key = name.toLowerCase();
+    if (seen.has(key)) return `Duplicate variant name "${name}".`;
+    seen.add(key);
+  }
+  return null;
+}
+
+// True when the payload uses the grouped shape: [{ group_id, name, price }].
+function _isGroupVariantPayload(variants) {
+  return Array.isArray(variants) && variants.length > 0 &&
+    variants.every(v => v && v.group_id != null);
+}
+
+// Validate group-mode variants: each entry needs a group_id, a name and a
+// price > 0. Groups must be linked to the item's category, and each group may
+// hold at most its max_options entries with no duplicate names.
+// Returns { error } or { options: [{ group_id, name, price }] } in payload order.
+async function _validateGroupVariants(client, categoryId, variants) {
+  const seenPerGroup = new Map(); // group_id -> Set(lowercased name)
+  const normalized = [];
+
+  for (const v of variants) {
+    const groupId = parseInt(v?.group_id, 10);
+    if (isNaN(groupId)) return { error: 'Invalid variant group.' };
+
+    const name = typeof v?.name === 'string' ? v.name.trim() : '';
+    if (!name) return { error: 'Every option needs a name.' };
+    if (name.length > 100) return { error: 'Option names must be 100 characters or fewer.' };
+
+    const price = Number(v?.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      return { error: `Variant "${name}" needs a price greater than zero.` };
+    }
+
+    const seen = seenPerGroup.get(groupId) || new Set();
+    const key = name.toLowerCase();
+    if (seen.has(key)) return { error: `Duplicate option name "${name}".` };
+    seen.add(key);
+    seenPerGroup.set(groupId, seen);
+
+    normalized.push({ group_id: groupId, name, price });
+  }
+
+  const groupIds = [...seenPerGroup.keys()];
+  const { rows: groupRows } = await client.query(
+    'SELECT id, name, max_options FROM variant_groups WHERE id = ANY($1::int[])',
+    [groupIds]
+  );
+  const groupMap = new Map(groupRows.map(r => [r.id, r]));
+  for (const gid of groupIds) {
+    if (!groupMap.has(gid)) return { error: `Variant group ${gid} not found.` };
+  }
+
+  const { rows: linkRows } = await client.query(
+    'SELECT variant_group_id FROM menu_category_variant_groups WHERE category_id = $1 AND variant_group_id = ANY($2::int[])',
+    [categoryId, groupIds]
+  );
+  const linked = new Set(linkRows.map(r => r.variant_group_id));
+  const unlinked = groupIds.filter(gid => !linked.has(gid));
+  if (unlinked.length > 0) {
+    return { error: 'One or more variant groups are not enabled for this category.' };
+  }
+
+  for (const [gid, seen] of seenPerGroup) {
+    const group = groupMap.get(gid);
+    if (seen.size > group.max_options) {
+      return { error: `"${group.name}" allows up to ${group.max_options} option${group.max_options === 1 ? '' : 's'}.` };
+    }
+  }
+
+  return { options: normalized };
+}
+
 async function _getEnrichedItem(id) {
-  const [itemRes, ingRes] = await Promise.all([
+  const [itemRes, ingRes, varRes] = await Promise.all([
     db.query(
       `SELECT
          mi.id,
@@ -42,6 +150,16 @@ async function _getEnrichedItem(id) {
        ORDER BY inv.name ASC`,
       [id]
     ),
+    db.query(
+      `SELECT miv.id, miv.name, miv.price, miv.is_available, miv.display_order,
+              miv.variant_group_id,
+              vg.name AS group_name
+         FROM menu_item_variants miv
+         LEFT JOIN variant_groups vg ON vg.id = miv.variant_group_id
+        WHERE miv.menu_item_id = $1
+        ORDER BY miv.display_order ASC, miv.id ASC`,
+      [id]
+    ),
   ]);
 
   if (itemRes.rows.length === 0) return null;
@@ -50,6 +168,7 @@ async function _getEnrichedItem(id) {
   return {
     ...item,
     price: parseFloat(item.price),
+    variants: varRes.rows.map(_parseVariant),
     ingredients: ingRes.rows.map((r) => ({
       inventory_item_id: r.inventory_item_id,
       quantity_required: r.quantity_required != null ? parseFloat(r.quantity_required) : null,
@@ -64,7 +183,7 @@ async function _getEnrichedItem(id) {
 // Public — customers + cashier read-only view (no ingredients)
 async function getPublicMenu(req, res, next) {
   try {
-    const [catRes, itemRes] = await Promise.all([
+    const [catRes, itemRes, varRes] = await Promise.all([
       db.query('SELECT id, name FROM menu_categories ORDER BY name ASC'),
       db.query(`
         SELECT
@@ -81,11 +200,25 @@ async function getPublicMenu(req, res, next) {
         WHERE mi.is_deleted = FALSE
         ORDER BY mc.name ASC, mi.name ASC
       `),
+      db.query(`
+        SELECT miv.menu_item_id, miv.id, miv.name, miv.price, miv.is_available, miv.display_order,
+               miv.variant_group_id,
+               vg.name AS group_name
+          FROM menu_item_variants miv
+          LEFT JOIN variant_groups vg ON vg.id = miv.variant_group_id
+         ORDER BY miv.display_order ASC, miv.id ASC
+      `),
     ]);
+
+    const variantMap = _groupVariants(varRes.rows);
 
     res.json({
       categories: catRes.rows,
-      items: itemRes.rows.map((r) => ({ ...r, price: parseFloat(r.price) })),
+      items: itemRes.rows.map((r) => ({
+        ...r,
+        price: parseFloat(r.price),
+        variants: variantMap[r.id] || [],
+      })),
     });
   } catch (err) {
     next(err);
@@ -96,8 +229,18 @@ async function getPublicMenu(req, res, next) {
 // Staff view — enriched with linked ingredients per item
 async function getStaffMenu(req, res, next) {
   try {
-    const [catRes, itemRes, ingRes] = await Promise.all([
-      db.query('SELECT id, name FROM menu_categories ORDER BY name ASC'),
+    const [catRes, itemRes, ingRes, varRes] = await Promise.all([
+      db.query(`
+        SELECT c.id, c.name,
+               COALESCE(
+                 (SELECT ARRAY_AGG(mcg.variant_group_id)
+                    FROM menu_category_variant_groups mcg
+                   WHERE mcg.category_id = c.id),
+                 '{}'
+               ) AS variant_group_ids
+          FROM menu_categories c
+         ORDER BY c.name ASC
+      `),
       db.query(`
         SELECT
           mi.id,
@@ -128,6 +271,14 @@ async function getStaffMenu(req, res, next) {
         JOIN inventory_items inv ON inv.id = mii.inventory_item_id
         ORDER BY inv.name ASC
       `),
+      db.query(`
+        SELECT miv.menu_item_id, miv.id, miv.name, miv.price, miv.is_available, miv.display_order,
+               miv.variant_group_id,
+               vg.name AS group_name
+          FROM menu_item_variants miv
+          LEFT JOIN variant_groups vg ON vg.id = miv.variant_group_id
+         ORDER BY miv.display_order ASC, miv.id ASC
+      `),
     ]);
 
     // Group ingredients by menu_item_id
@@ -143,11 +294,14 @@ async function getStaffMenu(req, res, next) {
       });
     }
 
+    const variantMap = _groupVariants(varRes.rows);
+
     res.json({
       categories: catRes.rows,
       items: itemRes.rows.map((item) => ({
         ...item,
         price: parseFloat(item.price),
+        variants: variantMap[item.id] || [],
         ingredients: ingMap[item.id] || [],
       })),
     });
@@ -182,11 +336,25 @@ async function createMenuItem(req, res, next) {
       image_url      = null,
       image_public_id = null,
       ingredients    = [],
+      variants       = [],
     } = req.body;
 
     if (!name?.trim())                return res.status(400).json({ message: 'Item name is required.' });
     if (!price || Number(price) <= 0) return res.status(400).json({ message: 'A valid price is required.' });
     if (!category_id)                 return res.status(400).json({ message: 'Category is required.' });
+
+    const isGroupMode = req.body.variants_mode === 'group' || _isGroupVariantPayload(variants);
+    let validatedOptions = [];
+    if (isGroupMode) {
+      if (variants.length > 0) {
+        const v = await _validateGroupVariants(client, category_id, variants);
+        if (v.error) return res.status(400).json({ message: v.error });
+        validatedOptions = v.options;
+      }
+    } else if (variants.length > 0) {
+      const variantErr = _validateVariants(variants);
+      if (variantErr) return res.status(400).json({ message: variantErr });
+    }
 
     await client.query('BEGIN');
 
@@ -211,6 +379,33 @@ async function createMenuItem(req, res, next) {
       );
     }
 
+    if (isGroupMode && validatedOptions.length > 0) {
+      const values = validatedOptions.map((_, i) =>
+        `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`
+      ).join(', ');
+      const params = validatedOptions.flatMap((o, i) => [
+        newId, o.name, o.price, true, i, o.group_id,
+      ]);
+      await client.query(
+        `INSERT INTO menu_item_variants (menu_item_id, name, price, is_available, display_order, variant_group_id)
+         VALUES ${values}`,
+        params
+      );
+    } else if (variants.length > 0) {
+      const values = variants.map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`).join(', ');
+      const params = variants.flatMap((v, i) => [
+        newId,
+        v.name.trim(),
+        Number(v.price),
+        v.is_available !== false,
+        i,
+      ]);
+      await client.query(
+        `INSERT INTO menu_item_variants (menu_item_id, name, price, is_available, display_order) VALUES ${values}`,
+        params
+      );
+    }
+
     await client.query('COMMIT');
 
     const enriched = await _getEnrichedItem(newId);
@@ -230,13 +425,38 @@ async function updateMenuItem(req, res, next) {
   const client = await db.getClient();
   try {
     const { id } = req.params;
-    const { name, price, description, category_id, is_available, image_url, image_public_id, ingredients } = req.body;
+    const { name, price, description, category_id, is_available, image_url, image_public_id, ingredients, variants } = req.body;
 
-    const existing = await db.query('SELECT id FROM menu_items WHERE id = $1', [id]);
+    const existing = await db.query('SELECT id, category_id FROM menu_items WHERE id = $1', [id]);
     if (existing.rows.length === 0) return res.status(404).json({ message: 'Menu item not found.' });
+    const currentCategoryId = existing.rows[0].category_id;
 
     if (name !== undefined && !name.trim()) return res.status(400).json({ message: 'Item name cannot be empty.' });
     if (price !== undefined && Number(price) <= 0) return res.status(400).json({ message: 'Price must be greater than zero.' });
+
+    const isGroupMode = req.body.variants_mode === 'group' || _isGroupVariantPayload(variants);
+    let validatedOptions = [];
+    if (variants !== undefined) {
+      const effectiveCategoryId = category_id !== undefined ? category_id : currentCategoryId;
+      if (isGroupMode) {
+        if (variants.length > 0) {
+          const v = await _validateGroupVariants(client, effectiveCategoryId, variants);
+          if (v.error) return res.status(400).json({ message: v.error });
+          validatedOptions = v.options;
+        }
+      } else {
+        const variantErr = _validateVariants(variants);
+        if (variantErr) return res.status(400).json({ message: variantErr });
+
+        if (variants.some((v) => v.id != null)) {
+          const owned = await db.query('SELECT id FROM menu_item_variants WHERE menu_item_id = $1', [id]);
+          const ownedIds = new Set(owned.rows.map((r) => r.id));
+          if (variants.some((v) => v.id != null && !ownedIds.has(v.id))) {
+            return res.status(400).json({ message: 'A variant does not belong to this menu item.' });
+          }
+        }
+      }
+    }
 
     await client.query('BEGIN');
 
@@ -258,6 +478,20 @@ async function updateMenuItem(req, res, next) {
       await client.query(`UPDATE menu_items SET ${sets.join(', ')} WHERE id = $${n}`, params);
     }
 
+    // If category changed without an explicit variants payload, remove grouped
+    // rows whose group is not linked to the new category.
+    if (category_id !== undefined && category_id !== currentCategoryId && variants === undefined) {
+      await client.query(
+        `DELETE FROM menu_item_variants miv
+          WHERE miv.menu_item_id = $1
+            AND miv.variant_group_id IS NOT NULL
+            AND miv.variant_group_id NOT IN (
+              SELECT variant_group_id FROM menu_category_variant_groups WHERE category_id = $2
+            )`,
+        [id, category_id]
+      );
+    }
+
     // Replace ingredients if provided (delete-then-insert)
     if (ingredients !== undefined) {
       await client.query('DELETE FROM menu_item_ingredients WHERE menu_item_id = $1', [id]);
@@ -272,6 +506,51 @@ async function updateMenuItem(req, res, next) {
           `INSERT INTO menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required) VALUES ${values}`,
           params2
         );
+      }
+    }
+
+    if (variants !== undefined && isGroupMode) {
+      // Group mode: fully replace this item's grouped rows (order history keeps
+      // its variant_name snapshot; its variant_id is nulled via ON DELETE SET NULL).
+      await client.query(
+        `DELETE FROM menu_item_variants
+          WHERE menu_item_id = $1 AND variant_group_id IS NOT NULL`,
+        [id]
+      );
+      for (let i = 0; i < validatedOptions.length; i++) {
+        const o = validatedOptions[i];
+        await client.query(
+          `INSERT INTO menu_item_variants (menu_item_id, name, price, is_available, display_order, variant_group_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [id, o.name, o.price, true, i, o.group_id]
+        );
+      }
+    } else if (variants !== undefined) {
+      // Legacy mode: diff by id, restricted to grouped-free rows only.
+      const keep = variants.filter((v) => v.id != null).map((v) => v.id);
+      await client.query(
+        `DELETE FROM menu_item_variants WHERE menu_item_id = $1 AND variant_group_id IS NULL AND NOT (id = ANY($2::int[]))`,
+        [id, keep]
+      );
+      let order = 0;
+      for (const v of variants) {
+        const vName = v.name.trim();
+        const available = typeof v.is_available === 'boolean' ? v.is_available : null;
+        if (v.id != null) {
+          await client.query(
+            `UPDATE menu_item_variants
+             SET name = $1, price = $2, is_available = COALESCE($3, is_available), display_order = $4
+             WHERE id = $5`,
+            [vName, Number(v.price), available, order, v.id]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO menu_item_variants (menu_item_id, name, price, is_available, display_order)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [id, vName, Number(v.price), available === false ? false : true, order]
+          );
+        }
+        order++;
       }
     }
 

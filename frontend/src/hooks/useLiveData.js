@@ -19,12 +19,11 @@ import { useSocketEventContext } from '../context/SocketContext';
 //               server-side filter changes, e.g. the sales report's period).
 //
 // Returns:
-//   { data, loading, error, refresh, setData, lastUpdated, refreshing }
+//   { data, loading, error, refresh, setData, refreshing }
 export default function useLiveData({ fetchFn, events = [], refetchEvents = [], initial = [], pollMs, reloadKey }) {
   const [data, setData] = useState(initial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const { subscribe } = useSocketEventContext();
@@ -92,7 +91,6 @@ export default function useLiveData({ fetchFn, events = [], refetchEvents = [], 
       if (mountedRef.current) {
         setData(applyDeferred(result));
         setError(null);
-        setLastUpdated(Date.now());
       }
       return true;
     } catch (err) {
@@ -165,7 +163,6 @@ export default function useLiveData({ fetchFn, events = [], refetchEvents = [], 
       }
       if (!mountedRef.current) return;
       setData((prev) => handler.merge(prev, payload));
-      setLastUpdated(Date.now());
     });
     // `run` is stable (it only depends on `load`, which only depends on
     // `applyDeferred`, itself `[]`), so including it does not re-subscribe.
@@ -183,5 +180,5 @@ export default function useLiveData({ fetchFn, events = [], refetchEvents = [], 
     }
   }, [run, reloadKey]);
 
-  return { data, loading, error, refresh, setData, lastUpdated, refreshing };
+  return { data, loading, error, refresh, setData, refreshing };
 }

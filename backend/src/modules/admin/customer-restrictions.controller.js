@@ -11,6 +11,7 @@ async function writeAuditLog(client, actorId, action, targetType, targetId, deta
 }
 
 const VALID_LEVELS = ['none', 'warned', 'cod_restricted', 'suspended'];
+const VALID_ACCOUNT_STATUSES = ['active', 'suspended'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 6.4  CUSTOMER RESTRICTIONS
@@ -19,14 +20,18 @@ const VALID_LEVELS = ['none', 'warned', 'cod_restricted', 'suspended'];
 /**
  * GET /api/admin/customer-restrictions
  *
- * Returns all customers who have at least one violation OR an active
- * restriction (restriction_level != 'none').
+ * Returns registered customer accounts with their violation counts and
+ * restriction levels. By default every customer is listed; pass
+ * flagged=1 to surface only customers with at least one violation or a
+ * non-default restriction row.
  *
  * Query params:
  *   page              number  default 1
  *   limit             number  default 12
- *   search            string  filters on first_name, last_name, email
+ *   search            string  filters on first_name, last_name, email, mobile
  *   restriction_level string  filter by exact level
+ *   account_status    string  filter by customers.status
+ *   flagged           '1'     only customers with violations/restrictions
  */
 exports.listCustomerRestrictions = async (req, res) => {
   try {
@@ -35,18 +40,22 @@ exports.listCustomerRestrictions = async (req, res) => {
     const offset = (page - 1) * limit;
     const search = (req.query.search || '').trim();
     const level  = (req.query.restriction_level || '').trim();
+    const accountStatus = (req.query.account_status || '').trim();
+    const flaggedOnly   = req.query.flagged === '1' || req.query.flagged === 'true';
 
     const conditions = [];
     const params     = [];
 
-    // Only surface customers that are "interesting" — have at least one
-    // violation or a non-default restriction row.
-    conditions.push(`(
-      EXISTS (
-        SELECT 1 FROM customer_order_violations v WHERE v.customer_id = c.id
-      )
-      OR cr.restriction_level IS NOT NULL
-    )`);
+    // flagged=1 keeps the original "interesting customers only" view; without
+    // it every customer account is listed.
+    if (flaggedOnly) {
+      conditions.push(`(
+        EXISTS (
+          SELECT 1 FROM customer_order_violations v WHERE v.customer_id = c.id
+        )
+        OR cr.restriction_level IS NOT NULL
+      )`);
+    }
 
     if (search) {
       params.push(`%${search}%`);
@@ -55,6 +64,7 @@ exports.listCustomerRestrictions = async (req, res) => {
         c.first_name ILIKE $${idx}
         OR c.last_name  ILIKE $${idx}
         OR c.email      ILIKE $${idx}
+        OR c.mobile_number ILIKE $${idx}
         OR CONCAT(c.first_name, ' ', c.last_name) ILIKE $${idx}
       )`);
     }
@@ -68,18 +78,39 @@ exports.listCustomerRestrictions = async (req, res) => {
       }
     }
 
+    if (accountStatus && VALID_ACCOUNT_STATUSES.includes(accountStatus)) {
+      params.push(accountStatus);
+      conditions.push(`c.status = $${params.length}`);
+    }
+
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Count query
-    const { rows: countRows } = await db.query(
-      `SELECT COUNT(*) AS total
-         FROM customers c
-         LEFT JOIN customer_restrictions cr ON cr.customer_id = c.id
-       ${where}`,
-      params
-    );
+    // Count + global summary (independent of paging and filters) in one round trip.
+    const [{ rows: countRows }, { rows: summaryRows }] = await Promise.all([
+      db.query(
+        `SELECT COUNT(*) AS total
+           FROM customers c
+           LEFT JOIN customer_restrictions cr ON cr.customer_id = c.id
+         ${where}`,
+        params
+      ),
+      db.query(
+        `SELECT
+            COUNT(*)::int                                                                          AS total_customers,
+            (COUNT(*) FILTER (WHERE EXISTS (
+               SELECT 1 FROM customer_order_violations v WHERE v.customer_id = c.id
+             ) OR cr.restriction_level IS NOT NULL))::int                                          AS flagged,
+            (COUNT(*) FILTER (WHERE cr.restriction_level = 'warned'))::int                         AS warned,
+            (COUNT(*) FILTER (WHERE cr.restriction_level = 'cod_restricted'))::int                 AS cod_restricted,
+            (COUNT(*) FILTER (WHERE cr.restriction_level = 'suspended'))::int                      AS restriction_suspended,
+            (COUNT(*) FILTER (WHERE c.status = 'suspended'))::int                                  AS accounts_suspended
+           FROM customers c
+           LEFT JOIN customer_restrictions cr ON cr.customer_id = c.id`
+      ),
+    ]);
     const total      = parseInt(countRows[0].total, 10);
     const totalPages = Math.max(1, Math.ceil(total / limit));
+    const summary    = summaryRows[0];
 
     // Data query
     params.push(limit, offset);
@@ -92,6 +123,7 @@ exports.listCustomerRestrictions = async (req, res) => {
           CONCAT(c.first_name, ' ', c.last_name)            AS customer_name,
           c.email                                            AS customer_email,
           c.mobile_number                                    AS customer_mobile,
+          c.status                                           AS account_status,
           COALESCE(cr.restriction_level, 'none')            AS restriction_level,
           cr.reason,
           cr.updated_at                                      AS restriction_updated_at,
@@ -130,6 +162,7 @@ exports.listCustomerRestrictions = async (req, res) => {
       limit,
       total,
       totalPages,
+      summary,
     });
   } catch (err) {
     console.error('[customer-restrictions] listCustomerRestrictions:', err);
@@ -259,6 +292,80 @@ exports.overrideCustomerRestriction = async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[customer-restrictions] overrideCustomerRestriction:', err);
+    res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * PATCH /api/admin/customer-restrictions/:customer_id/account-status
+ *
+ * Suspend or reinstate a customer's login account (customers.status).
+ * Body: { status: 'active'|'suspended', reason }
+ *
+ * Logs action to audit_log. Setting 'awaiting_verification' manually is
+ * not allowed — that state belongs to the signup flow.
+ */
+exports.updateCustomerAccountStatus = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const customerId = parseInt(req.params.customer_id, 10);
+    if (!customerId) return res.status(400).json({ message: 'Invalid customer ID.' });
+
+    const { status, reason } = req.body;
+
+    if (!status || !VALID_ACCOUNT_STATUSES.includes(status)) {
+      return res.status(400).json({
+        message: `status must be one of: ${VALID_ACCOUNT_STATUSES.join(', ')}.`,
+      });
+    }
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: 'A reason is required for audit purposes.' });
+    }
+
+    const { rows: check } = await client.query(
+      `SELECT id, email, status, CONCAT(first_name, ' ', last_name) AS full_name FROM customers WHERE id = $1`,
+      [customerId]
+    );
+    if (!check.length) return res.status(404).json({ message: 'Customer not found.' });
+    const customer = check[0];
+
+    if (customer.status === status) {
+      return res.status(409).json({ message: `This account is already ${status === 'suspended' ? 'suspended' : 'active'}.` });
+    }
+
+    await client.query('BEGIN');
+
+    const { rows: updated } = await client.query(
+      `UPDATE customers SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, status, updated_at`,
+      [status, customerId]
+    );
+
+    await writeAuditLog(
+      client,
+      req.user.sub,
+      'customer_account_status_change',
+      'customer',
+      customerId,
+      {
+        customer_email: customer.email,
+        customer_name:  customer.full_name,
+        from_status:    customer.status,
+        to_status:      status,
+        reason:         reason.trim(),
+      }
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      message:  status === 'suspended' ? 'Account suspended.' : 'Account reinstated.',
+      customer: updated[0],
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[customer-restrictions] updateCustomerAccountStatus:', err);
     res.status(500).json({ message: 'Something went wrong. Please try again.' });
   } finally {
     client.release();

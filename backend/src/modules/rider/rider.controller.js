@@ -57,7 +57,7 @@ exports.getCurrentDelivery = async (req, res) => {
 
     // Fetch line items
     const itemsRes = await db.query(
-      `SELECT oi.quantity, oi.unit_price, oi.notes, mi.name
+      `SELECT oi.quantity, oi.unit_price, oi.notes, oi.variant_name, mi.name
          FROM order_items oi
          JOIN menu_items  mi ON mi.id = oi.menu_item_id
         WHERE oi.order_id = $1`,
@@ -78,10 +78,11 @@ exports.getCurrentDelivery = async (req, res) => {
         total_amount:     parseFloat(row.total_amount),
         special_request:  row.special_request ?? null,
         items: itemsRes.rows.map((i) => ({
-          name:       i.name,
-          quantity:   i.quantity,
-          unit_price: parseFloat(i.unit_price),
-          notes:      i.notes ?? null,
+          name:         i.name,
+          variant_name: i.variant_name ?? null,
+          quantity:     i.quantity,
+          unit_price:   parseFloat(i.unit_price),
+          notes:        i.notes ?? null,
         })),
       },
     });
@@ -256,7 +257,7 @@ exports.updateDeliveryStatus = async (req, res) => {
       if (dRows.length > 0) {
         const r = dRows[0];
         const itemsRes = await db.query(
-          `SELECT oi.quantity, oi.unit_price, oi.notes, mi.name
+          `SELECT oi.quantity, oi.unit_price, oi.notes, oi.variant_name, mi.name
              FROM order_items oi
              JOIN menu_items  mi ON mi.id = oi.menu_item_id
             WHERE oi.order_id = $1`,
@@ -274,10 +275,11 @@ exports.updateDeliveryStatus = async (req, res) => {
           total_amount:     parseFloat(r.total_amount),
           special_request:  r.special_request ?? null,
           items: itemsRes.rows.map((i) => ({
-            name:       i.name,
-            quantity:   i.quantity,
-            unit_price: parseFloat(i.unit_price),
-            notes:      i.notes ?? null,
+            name:         i.name,
+            variant_name: i.variant_name ?? null,
+            quantity:     i.quantity,
+            unit_price:   parseFloat(i.unit_price),
+            notes:        i.notes ?? null,
           })),
         };
       }
@@ -356,7 +358,7 @@ exports.getDeliveryHistory = async (req, res) => {
     let itemsByOrder = {};
     if (orderIds.length > 0) {
       const itemsRes = await db.query(
-        `SELECT oi.order_id, oi.quantity, mi.name
+        `SELECT oi.order_id, oi.quantity, oi.variant_name, mi.name
            FROM order_items oi
            JOIN menu_items  mi ON mi.id = oi.menu_item_id
           WHERE oi.order_id = ANY($1)`,
@@ -364,7 +366,11 @@ exports.getDeliveryHistory = async (req, res) => {
       );
       for (const item of itemsRes.rows) {
         if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
-        itemsByOrder[item.order_id].push({ name: item.name, quantity: item.quantity });
+        itemsByOrder[item.order_id].push({
+          name: item.name,
+          variant_name: item.variant_name ?? null,
+          quantity: item.quantity,
+        });
       }
     }
 

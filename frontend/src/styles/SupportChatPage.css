@@ -82,25 +82,6 @@
   margin: 0;
 }
 
-.sc-refresh-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border: none;
-  background: none;
-  border-radius: var(--radius-md);
-  font-family: var(--font-body);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-muted-foreground);
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
-}
-.sc-refresh-btn:hover { background: var(--color-muted); color: var(--color-foreground); }
-.sc-refresh-btn span { display: none; }
-@media (min-width: 640px) { .sc-refresh-btn span { display: inline; } }
-
 /* ─── Main split panel ───────────────────────────────────────────────── */
 .sc-panel {
   display: flex;

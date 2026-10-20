@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { currency } from '../../../utils/format';
+import { currency, itemLabel } from '../../../utils/format';
 import '../../../styles/OrderDraft.css';
 
 const TrashIcon = ({ size = 15 }) => (
@@ -39,7 +39,7 @@ export default function OrderDraft({
 
   // Close the open note editor if its item was removed or the cart was cleared.
   // Adjusting state during render is React's recommended pattern for this.
-  if (openNoteId != null && !draft.some((d) => d.id === openNoteId)) {
+  if (openNoteId != null && !draft.some((d) => d.key === openNoteId)) {
     setOpenNoteId(null);
   }
 
@@ -120,13 +120,13 @@ export default function OrderDraft({
         ) : (
           draft.map((item) => (
             <DraftItem
-              key={item.id}
+              key={item.key}
               item={item}
-              noteOpen={openNoteId === item.id}
-              onOpenNote={() => setOpenNoteId(item.id)}
+              noteOpen={openNoteId === item.key}
+              onOpenNote={() => setOpenNoteId(item.key)}
               onCloseNote={() => setOpenNoteId(null)}
-              onQty={(q) => onUpdateQty(item.id, q)}
-              onNote={(n) => onUpdateNote(item.id, n)}
+              onQty={(q) => onUpdateQty(item.key, q)}
+              onNote={(n) => onUpdateNote(item.key, n)}
             />
           ))
         )}
@@ -195,7 +195,7 @@ export default function OrderDraft({
 function DraftItem({ item, noteOpen, onOpenNote, onCloseNote, onQty, onNote }) {
   const noteBtnRef = useRef(null);
   const textareaRef = useRef(null);
-  const noteId = `cdr-note-${item.id}`;
+  const noteId = `cdr-note-${item.key}`;
   const hasNote = Boolean(item.note);
 
   const closeNote = () => {
@@ -233,7 +233,7 @@ function DraftItem({ item, noteOpen, onOpenNote, onCloseNote, onQty, onNote }) {
     <article className="cdr-item">
       <div className="cdr-item__top">
         <div className="cdr-item__meta">
-          <p className="cdr-item__name">{item.name}</p>
+          <p className="cdr-item__name">{itemLabel(item)}</p>
           <p className="cdr-item__unit">{currency(item.price)} each</p>
         </div>
         <span className="cdr-item__line-total">{currency(item.price * item.qty)}</span>

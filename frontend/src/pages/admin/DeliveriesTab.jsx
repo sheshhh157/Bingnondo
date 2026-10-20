@@ -4,7 +4,7 @@ import { TableSkeleton, Btn, PageHeader, Pagination, Modal } from './adminShared
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import { getSocket } from '../../services/socket';
-import { currency } from '../../utils/format';
+import { currency, itemLabel } from '../../utils/format';
 import '../../styles/AdminPage.css';
 import '../../styles/RidersPage.css';
 
@@ -83,7 +83,7 @@ function DeliveryDetailModal({ row, onClose }) {
               <li key={it.id}>
                 <span className="rd-del-detail__item-qty">{it.quantity}×</span>
                 <span className="rd-del-detail__item-name">
-                  {it.name}
+                  {itemLabel(it)}
                   {it.notes ? <em className="rd-del-detail__item-note"> — {it.notes}</em> : null}
                 </span>
                 <span className="rd-del-detail__item-price">{currency(Number(it.unit_price) * Number(it.quantity))}</span>
@@ -199,15 +199,6 @@ export default function DeliveriesTab() {
           title="Deliveries"
           chip={`${allCount} ${allCount === 1 ? 'delivery' : 'deliveries'}`}
           sub="Track rider deliveries from assignment to drop-off."
-          action={
-            <Btn
-              variant="ghost"
-              onClick={refresh}
-              icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>}
-            >
-              Refresh
-            </Btn>
-          }
         />
       </div>
 

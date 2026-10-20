@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { kitchenAPI } from '../../../services/api';
+import { itemLabel } from '../../../utils/format';
 
 function elapsed(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -90,11 +91,11 @@ export default function OrderCard({ order, lane, onStatusChange }) {
 
       {/* Items */}
       <ul className="kp-card__items" aria-label="Order items">
-        {order.order_items?.map((item) => (
-          <li key={item.id} className="kp-card__item">
+        {(order.order_items || order.items || []).map((item, i) => (
+          <li key={item.id ?? i} className="kp-card__item">
             <span className="kp-card__qty">{item.quantity}×</span>
             <div className="kp-card__item-body">
-              <span className="kp-card__item-name">{item.menu_item?.name || item.name}</span>
+              <span className="kp-card__item-name">{itemLabel(item)}</span>
               {item.notes && (
                 <span className="kp-card__note" aria-label={`Note: ${item.notes}`}>
                   {item.notes}

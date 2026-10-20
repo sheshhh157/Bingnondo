@@ -72,6 +72,181 @@
   outline-offset: 2px;
 }
 
+/* Notification bell */
+.nb-root { position: relative; }
+
+.nb-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-foreground);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.nb-btn:hover { border-color: var(--color-border-strong); background: var(--color-muted); }
+.nb-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.nb-btn--open { border-color: var(--color-border-strong); background: var(--color-muted); }
+
+.nb-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-destructive);
+  color: var(--color-on-destructive);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+.nb-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: min(360px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.nb-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+.nb-panel__title {
+  font-family: var(--font-heading);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--color-foreground);
+}
+.nb-mark {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+.nb-mark:hover { text-decoration: underline; }
+.nb-mark:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.nb-mark:disabled { opacity: 0.6; cursor: default; }
+
+.nb-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(60dvh, 380px);
+  overflow-y: auto;
+}
+
+.nb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 14px;
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+}
+
+.nb-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.nb-item:hover { background: var(--color-muted); }
+.nb-item:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.nb-item:last-child { border-bottom: none; }
+.nb-item--unread { background: rgba(253, 230, 138, 0.22); }
+.nb-item--unread:hover { background: rgba(253, 230, 138, 0.4); }
+
+.nb-item__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+}
+.nb-item__icon--orders { color: #1D4ED8; }
+.nb-item__icon--payments { color: #047857; }
+.nb-item__icon--deliveries { color: #0EA5E9; }
+.nb-item__icon--inventory { color: var(--color-gold); }
+.nb-item__icon--kitchen { color: #DC2626; }
+.nb-item__icon--customers { color: #7C3AED; }
+.nb-item__icon--system { color: var(--color-muted-foreground); }
+
+.nb-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.nb-item__title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+  overflow-wrap: anywhere;
+}
+.nb-item__body {
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+  overflow-wrap: anywhere;
+}
+.nb-item__time { font-size: 0.6875rem; color: var(--color-muted-foreground); }
+
+.nb-panel__foot {
+  padding: 9px 14px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-muted);
+}
+.nb-manage {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+.nb-manage:hover { text-decoration: underline; }
+.nb-manage:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* Phones: the shared PageHeader stacks the actions full-width below the title,
+   which parks the bell at the left. Keep the overview header a row so the bell
+   holds its top-right corner and the panel anchors to it. */
+@media (max-width: 639px) {
+  .ao-page .ap-page__header { flex-direction: row; align-items: flex-start; }
+  .ao-page .ap-page__actions { width: auto; margin-left: auto; }
+}
+
 /* Mobile KPI layout: revenue cards full-width and compact, the rest grouped
    (kitchen + stock in pairs, accounts three-up). Scoped to this page so the
    manager dashboard's KPI grid is untouched. */
