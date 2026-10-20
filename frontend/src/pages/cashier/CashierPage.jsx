@@ -22,7 +22,7 @@ export default function CashierPage({ view, onToggleSidebar, sidebarOpen, onOpen
   const [categories, setCategories]       = useState([]);
   const [menuItems, setMenuItems]         = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
-  const [draft, setDraft]                 = useState([]);        // [{ ...item, qty, note }]
+  const [draft, setDraft]                 = useState([]);        // [{ key, id, name, price, variant_id, variant_name, qty, note }]
   const [search, setSearch]               = useState('');
   const [menuLoading, setMenuLoading]     = useState(true);
   const [menuError, setMenuError]         = useState('');
@@ -72,9 +72,14 @@ export default function CashierPage({ view, onToggleSidebar, sidebarOpen, onOpen
     const socket = connectSocket();
     socket.on('menu_update', (updated) => {
       setMenuItems((prev) =>
-        prev.map((item) =>
-          item.id === updated.id ? { ...item, is_available: updated.is_available } : item
-        )
+        prev.map((item) => {
+          if (item.id !== updated.id) return item;
+          // save/create broadcasts the full enriched item (with variants);
+          // the availability toggle broadcasts only { id, name, is_available }.
+          return Array.isArray(updated.variants)
+            ? { ...item, ...updated }
+            : { ...item, is_available: updated.is_available };
+        })
       );
     });
     return () => { socket.off('menu_update'); };
@@ -134,18 +139,30 @@ export default function CashierPage({ view, onToggleSidebar, sidebarOpen, onOpen
   }, [cartOpen]);
 
   // ─── Cart operations ──────────────────────────────────────────────
-  const addItem = (item) => {
-    if (!item.is_available) return;
+  // Lines are keyed by `<itemId>:<variantId>` (or the bare item id when the
+  // item has no variants) so two variants of the same item coexist in the cart.
+  const addItem = (item, variant = null) => {
+    if (!item.is_available || (variant && !variant.is_available)) return;
+    const key = variant ? `${item.id}:${variant.id}` : String(item.id);
     setDraft((prev) => {
-      const existing = prev.find((d) => d.id === item.id);
-      if (existing) return prev.map((d) => d.id === item.id ? { ...d, qty: d.qty + 1 } : d);
-      return [...prev, { ...item, qty: 1, note: '' }];
+      const existing = prev.find((d) => d.key === key);
+      if (existing) return prev.map((d) => d.key === key ? { ...d, qty: d.qty + 1 } : d);
+      return [...prev, {
+        key,
+        id: item.id,
+        name: item.name,
+        price: variant ? variant.price : item.price,
+        variant_id: variant ? variant.id : null,
+        variant_name: variant ? variant.name : null,
+        qty: 1,
+        note: '',
+      }];
     });
   };
 
-  const removeItem    = (id) => setDraft((prev) => prev.filter((d) => d.id !== id));
-  const updateQty     = (id, qty) => { if (qty < 1) { removeItem(id); return; } setDraft((prev) => prev.map((d) => d.id === id ? { ...d, qty } : d)); };
-  const updateNote    = (id, note) => setDraft((prev) => prev.map((d) => d.id === id ? { ...d, note } : d));
+  const removeItem    = (key) => setDraft((prev) => prev.filter((d) => d.key !== key));
+  const updateQty     = (key, qty) => { if (qty < 1) { removeItem(key); return; } setDraft((prev) => prev.map((d) => d.key === key ? { ...d, qty } : d)); };
+  const updateNote    = (key, note) => setDraft((prev) => prev.map((d) => d.key === key ? { ...d, note } : d));
   const clearDraft    = () => setDraft([]);
   const draftTotal    = draft.reduce((sum, d) => sum + d.price * d.qty, 0);
   const draftCount    = draft.reduce((sum, d) => sum + d.qty, 0);
@@ -155,7 +172,7 @@ export default function CashierPage({ view, onToggleSidebar, sidebarOpen, onOpen
   // only when the cashier completes payment in PaymentModal → ordersAPI.checkout.
   const placeOrder = () => {
     if (draft.length === 0) return;
-    const items = draft.map(({ id, qty, note }) => ({ menu_item_id: id, quantity: qty, notes: note }));
+    const items = draft.map(({ id, variant_id, qty, note }) => ({ menu_item_id: id, variant_id, quantity: qty, notes: note }));
     setPaymentModal({ items, total: draftTotal, draft: [...draft] });
   };
 

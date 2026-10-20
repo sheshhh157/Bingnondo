@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { staffMenuAPI, inventoryAPI, uploadAPI } from '../../services/api';
+import { staffMenuAPI, adminAPI, inventoryAPI, uploadAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import useMediaQuery from '../../hooks/useMediaQuery';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
@@ -466,11 +466,20 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   );
 }
 
+// Menu cards/tables show the cheapest option when an item has variants.
+function priceDisplay(item) {
+  const variants = item.variants || [];
+  if (variants.length === 0) return `₱${Number(item.price).toFixed(0)}`;
+  const available = variants.filter((v) => v.is_available);
+  const min = Math.min(...(available.length > 0 ? available : variants).map((v) => Number(v.price)));
+  return `from ₱${min.toFixed(0)}`;
+}
+
 // ─── Add / Edit modal ─────────────────────────────────────────────────────────
-function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
+function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClose, onSave }) {
   const isEdit = !!item;
   const [tab, setTab] = useState('details');
-  // Add mode is a strict two-step wizard: Details → Ingredients.
+  // Add mode is a strict three-step wizard: Details → Variants → Ingredients.
   const [step, setStep] = useState('details');
   const activeView = isEdit ? tab : step;
   const goTo = (view) => (isEdit ? setTab(view) : setStep(view));
@@ -485,8 +494,40 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
   const [photoRemoved, setPhotoRemoved] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
   const [linked, setLinked]             = useState(item?.ingredients || []);
+  // Per-item option rows for each enabled variant group: { [groupId]: [{ name, price }] }.
+  const [variantOptions, setVariantOptions] = useState(() => {
+    const map = {};
+    for (const v of item?.variants || []) {
+      if (v.group_id == null) continue;
+      if (!map[v.group_id]) map[v.group_id] = [];
+      map[v.group_id].push({ name: v.name, price: String(v.price) });
+    }
+    return map;
+  });
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState('');
+
+  const enabledGroupIds = categories.find((c) => c.id === form.category_id)?.variant_group_ids || [];
+  const enabledGroups = (variantGroups || []).filter((g) => enabledGroupIds.includes(g.id));
+  const optionsOf = (groupId) => variantOptions[groupId] || [];
+  const pricedCount = enabledGroups.reduce((n, g) => (
+    n + optionsOf(g.id).filter((r) => String(r.name).trim() !== '').length
+  ), 0);
+
+  const addOption = (groupId) => setVariantOptions((prev) => {
+    const group = enabledGroups.find((g) => g.id === groupId);
+    const cur = prev[groupId] || [];
+    if (group && cur.length >= group.max_options) return prev;
+    return { ...prev, [groupId]: [...cur, { name: '', price: '' }] };
+  });
+  const updateOption = (groupId, idx, patch) => setVariantOptions((prev) => {
+    const cur = prev[groupId] || [];
+    return { ...prev, [groupId]: cur.map((r, i) => (i === idx ? { ...r, ...patch } : r)) };
+  });
+  const removeOption = (groupId, idx) => setVariantOptions((prev) => {
+    const cur = prev[groupId] || [];
+    return { ...prev, [groupId]: cur.filter((_, i) => i !== idx) };
+  });
 
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -505,11 +546,60 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
     return true;
   };
 
-  const goNext = () => { if (validateDetails()) goTo('ingredients'); };
+  // Variants are optional; a named row needs a price > 0, names are unique per
+  // group and a group may not exceed its max. Fully blank rows are ignored.
+  const validateVariants = () => {
+    for (const g of enabledGroups) {
+      const seen = new Set();
+      let count = 0;
+      for (const r of optionsOf(g.id)) {
+        const name = String(r.name).trim();
+        const raw = String(r.price).trim();
+        if (name === '' && raw === '') continue;
+        count += 1;
+        if (!name) { setError(`Every option in "${g.name}" needs a name.`); return false; }
+        if (raw === '' || !Number.isFinite(Number(raw)) || Number(raw) <= 0) {
+          setError(`Enter a valid price for "${g.name} — ${name}".`);
+          return false;
+        }
+        const key = name.toLowerCase();
+        if (seen.has(key)) { setError(`Duplicate option name "${name}" in "${g.name}".`); return false; }
+        seen.add(key);
+      }
+      if (count > g.max_options) {
+        setError(`"${g.name}" allows up to ${g.max_options} option${g.max_options === 1 ? '' : 's'}.`);
+        return false;
+      }
+    }
+    setError('');
+    return true;
+  };
+
+  const buildVariantsPayload = () => {
+    const payload = [];
+    for (const g of enabledGroups) {
+      for (const r of optionsOf(g.id)) {
+        const name = String(r.name).trim();
+        if (name === '') continue;
+        payload.push({ group_id: g.id, name, price: Number(r.price) });
+      }
+    }
+    return payload;
+  };
+
+  const goNext = () => {
+    if (!validateDetails()) { goTo('details'); return; }
+    if (activeView === 'details') { goTo('variants'); return; }
+    if (activeView === 'variants') {
+      if (!validateVariants()) return;
+      goTo('ingredients');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateDetails()) { goTo('details'); return; }
+    if (!validateVariants()) { goTo('variants'); return; }
     // Add flow requires at least one linked ingredient.
     if (!isEdit && linked.length === 0) {
       setError('Link at least one ingredient before saving.');
@@ -540,7 +630,15 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
       }
 
       await onSave(
-        { ...form, price: Number(form.price), image_url, image_public_id: old_public_id, ingredients: linked },
+        {
+          ...form,
+          price: Number(form.price),
+          image_url,
+          image_public_id: old_public_id,
+          ingredients: linked,
+          variants_mode: 'group',
+          variants: buildVariantsPayload(),
+        },
         isEdit ? item.id : null
       );
       onClose();
@@ -564,13 +662,21 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
 
         {isEdit ? (
           <div className="mn-modal__tabs">
-            {[{ id: 'details', label: 'Details' }, { id: 'ingredients', label: `Ingredients${linked.length ? ` (${linked.length})` : ''}` }].map(({ id, label }) => (
+            {[
+              { id: 'details', label: 'Details' },
+              { id: 'variants', label: `Variants${pricedCount ? ` (${pricedCount})` : ''}` },
+              { id: 'ingredients', label: `Ingredients${linked.length ? ` (${linked.length})` : ''}` },
+            ].map(({ id, label }) => (
               <button key={id} type="button" onClick={() => goTo(id)} className={`mn-modal__tab${activeView === id ? ' mn-modal__tab--active' : ''}`}>{label}</button>
             ))}
           </div>
         ) : (
           <div className="mn-modal__steps" aria-label="Add item progress">
-            {[{ id: 'details', n: 1, label: 'Details' }, { id: 'ingredients', n: 2, label: 'Ingredients' }].map(({ id, n, label }) => (
+            {[
+              { id: 'details', n: 1, label: 'Details' },
+              { id: 'variants', n: 2, label: 'Variants' },
+              { id: 'ingredients', n: 3, label: 'Ingredients' },
+            ].map(({ id, n, label }) => (
               <span
                 key={id}
                 className={`mn-modal__step${activeView === id ? ' mn-modal__step--active' : ''}`}
@@ -639,6 +745,84 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                   </div>
                 </div>
               </>
+            ) : activeView === 'variants' ? (
+              <div className="mn-field">
+                <p className="mn-field__label">Variants</p>
+                <p className="mn-field__hint">
+                  Add up to the group's limit of options for this item, each with its own name and price.
+                  Leave a row blank to skip it.
+                </p>
+                {enabledGroups.length === 0 ? (
+                  <p className="mn-variant-empty">
+                    This category has no variant groups enabled. Switch groups on for the category in
+                    System Settings → Menu categories &amp; variants.
+                  </p>
+                ) : (
+                  <div className="mn-variant-groups">
+                    {enabledGroups.map((g) => {
+                      const rows = optionsOf(g.id);
+                      const atMax = rows.length >= g.max_options;
+                      return (
+                        <div key={g.id} className="mn-variant-group">
+                          <div className="mn-variant-group__head">
+                            <span className="mn-variant-group__title">{g.name}</span>
+                            <span className="mn-variant-group__limit">
+                              {rows.length}/{g.max_options}
+                            </span>
+                          </div>
+                          {rows.length > 0 && (
+                            <div className="mn-variant-rows">
+                              {rows.map((r, i) => (
+                                <div key={i} className="mn-variant-row">
+                                  <input
+                                    type="text"
+                                    maxLength={100}
+                                    className="mn-field__input"
+                                    value={r.name}
+                                    onChange={(e) => updateOption(g.id, i, { name: e.target.value })}
+                                    placeholder="Option name (e.g. Chocolate)"
+                                    aria-label={`${g.name} option ${i + 1} name`}
+                                  />
+                                  <span className="mn-variant-row__price">
+                                    ₱
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      inputMode="decimal"
+                                      className="mn-field__input"
+                                      value={r.price}
+                                      onChange={(e) => updateOption(g.id, i, { price: e.target.value })}
+                                      placeholder="0"
+                                      aria-label={`${g.name} option ${i + 1} price`}
+                                    />
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="mn-variant-row__remove"
+                                    onClick={() => removeOption(g.id, i)}
+                                    aria-label={`Remove ${g.name} option ${i + 1}`}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            className="mn-variant-add"
+                            onClick={() => addOption(g.id)}
+                            disabled={atMax}
+                          >
+                            + Add option
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="mn-field">
                 <p className="mn-field__label">Linked Ingredients</p>
@@ -676,9 +860,19 @@ function MenuItemModal({ item, categories, inventoryItems, onClose, onSave }) {
                 <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
               </svg>
             </button>
-          ) : (
+          ) : activeView === 'variants' ? (
             <>
               <button type="button" className="mn-btn mn-btn--ghost" onClick={() => goTo('details')} disabled={loading}>Back</button>
+              <button type="button" className="mn-btn mn-btn--primary" onClick={goNext}>
+                Next
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                </svg>
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="mn-btn mn-btn--ghost" onClick={() => goTo('variants')} disabled={loading}>Back</button>
               <button type="submit" form="mn-form" className="mn-btn mn-btn--primary" disabled={loading} aria-busy={loading}>
                 {loading ? <span className="mn-spinner" aria-label="Saving…" /> : 'Add item'}
               </button>
@@ -753,7 +947,7 @@ function MenuItemCard({ item, onEdit, onDelete, onToggle, toggling }) {
       <div className="mn-card__body">
         <div className="mn-card__top-row">
           <h3 className="mn-card__name">{item.name}</h3>
-          <span className="mn-card__price">₱{Number(item.price).toFixed(0)}</span>
+          <span className="mn-card__price">{priceDisplay(item)}</span>
         </div>
         {item.description && <p className="mn-card__desc">{item.description}</p>}
         <div className="mn-card__footer">
@@ -832,7 +1026,7 @@ function MenuItemRow({ item, onEdit, onDelete, onToggle, toggling }) {
       <td className="mn-table__td">
         <span className="mn-badge mn-badge--cat">{item.category_name}</span>
       </td>
-      <td className="mn-table__td mn-table__td--bold">₱{Number(item.price).toFixed(0)}</td>
+      <td className="mn-table__td mn-table__td--bold">{priceDisplay(item)}</td>
       <td className="mn-table__td">
         {(() => {
           const blockers = getOutOfStockBlockers(item);
@@ -934,6 +1128,7 @@ function Pagination({ page, totalPages, total, from, to, onPage }) {
 export default function MenuPage() {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [variantGroups, setVariantGroups] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -956,9 +1151,14 @@ export default function MenuPage() {
   const fetchAll = useCallback(async () => {
     try {
       setError('');
-      const [menuRes, invRes] = await Promise.all([staffMenuAPI.getAll(), inventoryAPI.getAll()]);
+      const [menuRes, invRes, variantsRes] = await Promise.all([
+        staffMenuAPI.getAll(),
+        inventoryAPI.getAll(),
+        adminAPI.listVariantGroups(),
+      ]);
       setCategories(menuRes.data.categories);
       setItems(menuRes.data.items);
+      setVariantGroups(variantsRes.data?.data ?? variantsRes.data ?? []);
       setInventoryItems(invRes.data.items || []);
     } catch { setError('Failed to load menu. Please try again.'); }
     finally { setLoading(false); }
@@ -1190,7 +1390,7 @@ export default function MenuPage() {
       )}
 
       {modal && (
-        <MenuItemModal item={modal.item} categories={categories} inventoryItems={inventoryItems} onClose={() => setModal(null)} onSave={handleSave} />
+        <MenuItemModal item={modal.item} categories={categories} variantGroups={variantGroups} inventoryItems={inventoryItems} onClose={() => setModal(null)} onSave={handleSave} />
       )}
       {deleteTarget && (
         <ConfirmDialog item={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} />

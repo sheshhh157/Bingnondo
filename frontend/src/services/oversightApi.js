@@ -182,11 +182,6 @@ export const kitchenAPI = {
     const res = await get(`/api/kitchen/orders${q}`);
     return { data: res.data || [] };
   },
-  /** Unacknowledged kitchen alerts — read-only for oversight (ack is kitchen-side). */
-  getAlerts: async () => {
-    const res = await get('/api/kitchen/alerts');
-    return { data: res.data || [] };
-  },
 };
 
 // ─── Delivery ─────────────────────────────────────────────────────────────────

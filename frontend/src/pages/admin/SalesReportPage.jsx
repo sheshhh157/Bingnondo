@@ -1,10 +1,9 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ordersAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
-import { currency, STATUS_LABEL, periodBounds } from '../../utils/format';
+import { currency, STATUS_LABEL, periodBounds, itemLabel } from '../../utils/format';
 import { toCsv, downloadCsv } from '../../utils/csv';
 import { listEvent, orderUpsert } from './oversightData';
-import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
@@ -57,7 +56,7 @@ const EMPTY_PAGE = { data: NO_ORDERS, total: 0 };
 function buildSalesCsv(rows) {
   return toCsv(SALES_CSV_HEADERS, rows, (o) => [
     o.order_number || o.id,
-    (o.items || []).map((i) => `${i.name} x${i.quantity}`).join('; '),
+    (o.items || []).map((i) => `${itemLabel(i)} x${i.quantity}`).join('; '),
     o.payment_method === 'gcash' ? 'GCash' : 'Cash',
     currency(o.total_amount),
     STATUS_LABEL[o.status] || o.status,
@@ -132,8 +131,6 @@ export default function SalesReportPage() {
     loading: reportLoading,
     error: reportError,
     refresh: refreshReport,
-    lastUpdated,
-    refreshing,
   } = useLiveData({
     fetchFn: fetchReport,
     // These figures are server-derived, so a new order can't be merged into
@@ -387,8 +384,6 @@ export default function SalesReportPage() {
         </ErrorBanner>
       )}
 
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh sales report" />
-
       {showSkeleton ? (
         <PageSkeleton stats={3} charts={2} rows={5} />
       ) : (
@@ -565,7 +560,7 @@ function FragmentRow({ order, expanded, onToggle }) {
         </td>
         <td className="sales-cell--order">#{order.order_number || order.id}</td>
         <td className="sales-cell--items">
-          {(order.items || []).slice(0, 2).map((i) => i.name).filter(Boolean).join(', ')}
+          {(order.items || []).slice(0, 2).map((i) => itemLabel(i)).filter(Boolean).join(', ')}
           {(order.items || []).length > 2 && <span className="sales-more"> +{order.items.length - 2}</span>}
         </td>
         <td><Badge variant={order.payment_method === 'gcash' ? 'info' : 'muted'}>{order.payment_method === 'gcash' ? 'GCash' : 'Cash'}</Badge></td>
@@ -578,10 +573,10 @@ function FragmentRow({ order, expanded, onToggle }) {
           <td colSpan={7}>
             <div className="sales-detail">
               <strong className="sales-detail__title">Items</strong>
-              {(order.items || []).map((i) => (
-                <div key={i.name + i.unit_price} className="sales-detail__item">
+              {(order.items || []).map((i, idx) => (
+                <div key={`${i.name}-${i.variant_name ?? ''}-${i.unit_price}-${idx}`} className="sales-detail__item">
                   <span className="sales-detail__qty">{i.quantity}×</span>
-                  <span className="sales-detail__name">{i.name}</span>
+                  <span className="sales-detail__name">{itemLabel(i)}</span>
                   <span className="sales-detail__price">{currency((i.unit_price || 0) * (i.quantity || 1))}</span>
                 </div>
               ))}

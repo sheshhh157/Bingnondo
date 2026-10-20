@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getCurrentDelivery, updateDeliveryStatus } from '../../services/riderApi';
 import { useSocketEventContext } from '../../context/SocketContext';
+import { itemLabel } from '../../utils/format';
 import '../../styles/ActiveDelivery.css';
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
@@ -40,15 +41,6 @@ function IconCheck() {
     </svg>
   );
 }
-function IconRefresh() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="23 4 23 10 17 10"/>
-      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-    </svg>
-  );
-}
 
 // ── Status badge ───────────────────────────────────────────────────────────────
 const STATUS_LABEL = {
@@ -84,7 +76,7 @@ function ConfirmModal({ message, onConfirm, onCancel, loading }) {
 }
 
 // ── No delivery state ──────────────────────────────────────────────────────────
-function NoDelivery({ onRefresh, refreshing }) {
+function NoDelivery() {
   return (
     <div className="ad-empty">
       <div className="ad-empty__icon" aria-hidden="true">
@@ -99,10 +91,6 @@ function NoDelivery({ onRefresh, refreshing }) {
       <p className="ad-empty__sub">
         You have no delivery assigned right now. Check back when staff assigns one.
       </p>
-      <button className="ad-btn ad-btn--outline" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing}>
-        {refreshing ? <span className="ad-spinner" aria-label="Refreshing" /> : <IconRefresh />}
-        Refresh
-      </button>
     </div>
   );
 }
@@ -203,16 +191,6 @@ export default function ActiveDelivery() {
           <h1 className="ad-header__title">Active Delivery</h1>
           <p className="ad-header__sub">Your current assigned order</p>
         </div>
-        <button
-          className="ad-btn ad-btn--icon"
-          onClick={fetchDelivery}
-          disabled={refreshing}
-          aria-busy={refreshing}
-          aria-label="Refresh delivery"
-          title="Refresh"
-        >
-          {refreshing ? <span className="ad-spinner" aria-hidden="true" /> : <IconRefresh />}
-        </button>
       </header>
 
       {error && (
@@ -232,7 +210,7 @@ export default function ActiveDelivery() {
       )}
 
       {!delivery ? (
-        <NoDelivery onRefresh={fetchDelivery} refreshing={refreshing} />
+        <NoDelivery />
       ) : (
         <div className={`ad-card${refreshing ? ' ad-card--busy' : ''}`} aria-busy={refreshing}>
           {/* ── Header row ── */}
@@ -286,7 +264,7 @@ export default function ActiveDelivery() {
               {(delivery.items || []).map((item, i) => (
                 <li key={i} className="ad-item">
                   <span className="ad-item__qty">{item.quantity}×</span>
-                  <span className="ad-item__name">{item.name}</span>
+                  <span className="ad-item__name">{itemLabel(item)}</span>
                   <span className="ad-item__price">{formatCurrency(item.unit_price * item.quantity)}</span>
                 </li>
               ))}

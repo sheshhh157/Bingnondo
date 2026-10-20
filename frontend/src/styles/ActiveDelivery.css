@@ -336,27 +336,6 @@
   background: var(--rl-surface-2);
   color: var(--rl-text);
 }
-.ad-btn--outline {
-  background: transparent;
-  border: 1.5px solid var(--rl-border);
-  color: var(--rl-text-muted);
-}
-.ad-btn--outline:hover:not(:disabled) {
-  border-color: var(--rl-text-muted);
-  color: var(--rl-text);
-}
-.ad-btn--icon {
-  background: var(--rl-surface);
-  border: 1px solid var(--rl-border);
-  color: var(--rl-text-muted);
-  padding: 10px;
-  border-radius: var(--rl-radius);
-  box-shadow: var(--rl-shadow-sm);
-}
-.ad-btn--icon:hover:not(:disabled) {
-  color: var(--rl-text);
-  border-color: var(--rl-border-strong);
-}
 .ad-btn--full { width: 100%; }
 
 /* ── Spinner ── */

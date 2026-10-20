@@ -1,13 +1,77 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
+const { createKitchenAlert, announceKitchenAlert } = require('../kitchen/kitchen-alert');
 const { ALL_STATUSES, isKnownStatus, canTransition } = require('./status-transitions');
 const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
-const INTERNAL_BRIDGE_URL = process.env.INTERNAL_BRIDGE_URL || 'http://localhost:3000/api/internal';
-const INTERNAL_API_KEY     = process.env.INTERNAL_API_KEY;
 
 // ─── Helper: format order number ─────────────────────────────────────────────
 function orderNumber(id) {
   return `ORD-${String(id).padStart(4, '0')}`;
+}
+
+// ─── Helper: validate order line items (+ variants) and price them ───────────
+// Shared by createOrder and updateOrderItems. A menu item that has variants
+// cannot be ordered bare — the caller must pick one, and the variant's
+// absolute price wins over the base price. The chosen variant is snapshotted
+// onto the line (variant_name) so history survives a variant delete/rename.
+async function _resolveOrderItems(queryable, items) {
+  const menuIds = items.map((i) => Number(i.menu_item_id));
+  const [menuRes, variantRes] = await Promise.all([
+    queryable.query(
+      'SELECT id, name, price, is_available FROM menu_items WHERE id = ANY($1)',
+      [menuIds]
+    ),
+    queryable.query(
+      `SELECT id, menu_item_id, name, price, is_available
+       FROM menu_item_variants
+       WHERE menu_item_id = ANY($1)`,
+      [menuIds]
+    ),
+  ]);
+  const menuMap = Object.fromEntries(menuRes.rows.map((r) => [r.id, r]));
+  const variantMap = {};
+  for (const v of variantRes.rows) {
+    if (!variantMap[v.menu_item_id]) variantMap[v.menu_item_id] = [];
+    variantMap[v.menu_item_id].push(v);
+  }
+
+  let totalAmount = 0;
+  const validated = [];
+
+  for (const item of items) {
+    const mi = menuMap[Number(item.menu_item_id)];
+    if (!mi) return { error: `Menu item ${item.menu_item_id} not found.` };
+    if (!mi.is_available) return { error: `"${mi.name}" is currently unavailable.` };
+
+    const qty = Number(item.quantity);
+    if (!qty || qty < 1) return { error: 'Quantity must be at least 1.' };
+
+    const itemVariants = variantMap[mi.id] || [];
+    let variant = null;
+    if (item.variant_id != null) {
+      variant = itemVariants.find((v) => v.id === Number(item.variant_id)) || null;
+      if (!variant) return { error: `Variant ${item.variant_id} does not belong to "${mi.name}".` };
+      if (!variant.is_available) {
+        return { error: `Variant "${variant.name}" of "${mi.name}" is currently unavailable.` };
+      }
+    } else if (itemVariants.length > 0) {
+      return { error: `"${mi.name}" has variants — pick one before adding it to the order.` };
+    }
+
+    const unitPrice = variant ? parseFloat(variant.price) : parseFloat(mi.price);
+    totalAmount += unitPrice * qty;
+    validated.push({
+      menu_item_id: mi.id,
+      variant_id: variant ? variant.id : null,
+      variant_name: variant ? variant.name : null,
+      name: mi.name,
+      unit_price: unitPrice,
+      quantity: qty,
+      notes: item.notes || null,
+    });
+  }
+
+  return { validated, totalAmount };
 }
 
 // Reporting buckets default to the server's zone. Real clients always send
@@ -66,32 +130,10 @@ async function createOrder(req, res, next) {
       return res.status(400).json({ message: `method must be one of: ${allowedMethods.join(', ')}` });
     }
 
-    // 1. Validate all items exist and are available, compute total
-    const menuIds = items.map((i) => Number(i.menu_item_id));
-    const menuRes = await db.query(
-      'SELECT id, name, price, is_available FROM menu_items WHERE id = ANY($1)',
-      [menuIds]
-    );
-    const menuMap = Object.fromEntries(menuRes.rows.map((r) => [r.id, r]));
-
-    let totalAmount = 0;
-    const validated = [];
-
-    for (const item of items) {
-      const mi = menuMap[Number(item.menu_item_id)];
-      if (!mi) {
-        return res.status(400).json({ message: `Menu item ${item.menu_item_id} not found.` });
-      }
-      if (!mi.is_available) {
-        return res.status(400).json({ message: `"${mi.name}" is currently unavailable.` });
-      }
-      const qty = Number(item.quantity);
-      if (!qty || qty < 1) {
-        return res.status(400).json({ message: 'Quantity must be at least 1.' });
-      }
-      totalAmount += parseFloat(mi.price) * qty;
-      validated.push({ menu_item_id: mi.id, name: mi.name, unit_price: parseFloat(mi.price), quantity: qty, notes: item.notes || null });
-    }
+    // 1. Validate all items (and any chosen variants), compute total
+    const resolved = await _resolveOrderItems(db, items);
+    if (resolved.error) return res.status(400).json({ message: resolved.error });
+    const { validated, totalAmount } = resolved;
 
     // Cash must cover the total before anything is written.
     if (payment.method === 'cash') {
@@ -120,9 +162,9 @@ async function createOrder(req, res, next) {
     // 3. Insert order items
     for (const item of validated) {
       await client.query(
-        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [order.id, item.menu_item_id, item.quantity, item.unit_price, item.notes]
+        `INSERT INTO order_items (order_id, menu_item_id, variant_id, variant_name, quantity, unit_price, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [order.id, item.menu_item_id, item.variant_id, item.variant_name, item.quantity, item.unit_price, item.notes]
       );
     }
 
@@ -141,6 +183,9 @@ async function createOrder(req, res, next) {
       [order.id, payment.method, totalAmount]
     );
 
+    // 5b. Paid -> ring the kitchen ESP32 buzzer (same transaction as the order).
+    const kitchenAlert = await createKitchenAlert(client, order.id);
+
     await client.query('COMMIT');
 
     // 6. Attach items + payment to the response and emit to kitchen
@@ -152,6 +197,7 @@ async function createOrder(req, res, next) {
       : null;
 
     socketHub.emitNewOrder(order);
+    announceKitchenAlert(kitchenAlert);
 
     res.status(201).json(order);
   } catch (err) {
@@ -351,6 +397,8 @@ async function getOrders(req, res, next) {
            json_build_object(
              'id',           oi.id,
              'menu_item_id', oi.menu_item_id,
+             'variant_id',   oi.variant_id,
+             'variant_name', oi.variant_name,
              'name',         mi.name,
              'quantity',     oi.quantity,
              'unit_price',   oi.unit_price::float,
@@ -499,7 +547,8 @@ async function getOrderReport(req, res, next) {
             FROM rev GROUP BY 1 ORDER BY 1
           ) d)                                                                   AS daily,
          (SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (
-            SELECT COALESCE(mi.name, 'Deleted item #' || oi.menu_item_id::text) AS name,
+            SELECT COALESCE(mi.name, 'Deleted item #' || oi.menu_item_id::text)
+                     || COALESCE(' – ' || oi.variant_name, '') AS name,
                    SUM(oi.quantity)::int AS qty
             FROM rev
             JOIN order_items oi ON oi.order_id = rev.id
@@ -605,6 +654,8 @@ async function getOnlineOrders(req, res, next) {
            json_build_object(
              'id',           oi.id,
              'menu_item_id', oi.menu_item_id,
+             'variant_id',   oi.variant_id,
+             'variant_name', oi.variant_name,
              'name',         mi.name,
              'quantity',     oi.quantity,
              'unit_price',   oi.unit_price::float,
@@ -652,6 +703,7 @@ async function getOrderById(req, res, next) {
          json_agg(
            json_build_object(
              'id', oi.id, 'menu_item_id', oi.menu_item_id,
+             'variant_id', oi.variant_id, 'variant_name', oi.variant_name,
              'name', mi.name, 'quantity', oi.quantity,
              'unit_price', oi.unit_price::float, 'notes', oi.notes
            ) ORDER BY oi.id
@@ -879,42 +931,21 @@ async function updateOrderItems(req, res, next) {
       });
     }
 
-    // 2. Validate all items
-    const menuIds = items.map((i) => Number(i.menu_item_id));
-    const menuRes = await client.query(
-      'SELECT id, name, price, is_available FROM menu_items WHERE id = ANY($1)',
-      [menuIds]
-    );
-    const menuMap = Object.fromEntries(menuRes.rows.map((r) => [r.id, r]));
-
-    let totalAmount = 0;
-    const validated = [];
-
-    for (const item of items) {
-      const mi = menuMap[Number(item.menu_item_id)];
-      if (!mi) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ message: `Menu item ${item.menu_item_id} not found.` });
-      }
-      if (!mi.is_available) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ message: `"${mi.name}" is currently unavailable.` });
-      }
-      const qty = Number(item.quantity);
-      if (!qty || qty < 1) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ message: 'Quantity must be at least 1.' });
-      }
-      totalAmount += parseFloat(mi.price) * qty;
-      validated.push({ menu_item_id: mi.id, name: mi.name, unit_price: parseFloat(mi.price), quantity: qty, notes: item.notes || null });
+    // 2. Validate all items (and any chosen variants)
+    const resolved = await _resolveOrderItems(client, items);
+    if (resolved.error) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: resolved.error });
     }
+    const { validated, totalAmount } = resolved;
 
     // 3. Delete old items, insert new ones
     await client.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
     for (const item of validated) {
       await client.query(
-        'INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes) VALUES ($1, $2, $3, $4, $5)',
-        [orderId, item.menu_item_id, item.quantity, item.unit_price, item.notes]
+        `INSERT INTO order_items (order_id, menu_item_id, variant_id, variant_name, quantity, unit_price, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [orderId, item.menu_item_id, item.variant_id, item.variant_name, item.quantity, item.unit_price, item.notes]
       );
     }
 

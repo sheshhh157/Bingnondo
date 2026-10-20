@@ -5,7 +5,7 @@ const http    = require('http');
 const { Server } = require('socket.io');
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
-const { generalApiLimiter, loginLimiter, otpLimiter } = require('./src/middleware/rate-limit.middleware');
+const { generalApiLimiter, loginLimiter, otpLimiter, resetLimiter } = require('./src/middleware/rate-limit.middleware');
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
 const authRoutes        = require('./src/modules/auth/auth.routes');
@@ -14,7 +14,6 @@ const inventoryRoutes   = require('./src/modules/inventory/inventory.routes');
 const ordersRoutes      = require('./src/modules/orders/orders.routes');
 const paymentsRoutes    = require('./src/modules/payments/payments.routes');
 const kitchenRoutes     = require('./src/modules/kitchen/kitchen.routes');
-const esp32Routes       = require('./src/modules/kitchen/esp32.routes');
 // Admin + Staff routes
 const adminStaffRoutes    = require('./src/modules/admin/admin.routes');
 
@@ -22,6 +21,7 @@ const adminSettingsRoutes = require('./src/modules/admin/admin.settings.routes')
 const adminRiderRoutes    = require('./src/modules/admin/admin.riders.routes');
 const adminDeliveryRoutes = require('./src/modules/admin/admin.deliveries.routes');
 const adminAuditRoutes    = require('./src/modules/admin/admin.audit.routes');
+const adminNotificationsRoutes = require('./src/modules/admin/admin.notifications.routes'); // Notification bell feed
 const adminCustomerRestrictionsRoutes = require('./src/modules/admin/customer-restrictions.routes'); // §6.4
 const supportChatRoutes   = require('./src/modules/support-chat/support-chat.routes');
 const uploadRoutes        = require('./src/modules/upload/upload.routes');
@@ -57,6 +57,7 @@ app.use('/api', generalApiLimiter);
 app.use('/api/auth/login',           loginLimiter);   // shared login (staff + rider)
 app.use('/api/auth/staff/login',     loginLimiter);   // legacy staff-only route
 app.use('/api/auth/forgot-password', otpLimiter);
+app.use('/api/auth/reset-password',  resetLimiter);
 app.use('/api/auth', authRoutes);
 
 // ─── Menu & Inventory Routes ───────────────────────────────────────────────────
@@ -68,7 +69,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/orders',   ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/kitchen',  kitchenRoutes);
-app.use('/api/esp32',    esp32Routes);   // ESP32 kitchen buzzer: GET /alert (polled), POST /ack (button)
+app.use('/api/esp32',    require('./src/modules/kitchen/esp32.routes'));   // ESP32 buzzer device
 
 // ─── Rider Routes ─────────────────────────────────────────────────────────────
 // Requires JWT type='rider' — enforced by requireRider middleware inside the router
@@ -89,6 +90,7 @@ app.use('/api/admin/system-settings', adminSettingsRoutes);
 app.use('/api/admin/riders',          adminRiderRoutes);   // §6.5 Rider CRUD (admin)
 app.use('/api/admin/deliveries',      adminDeliveryRoutes); // Riders & Deliveries — read-only list
 app.use('/api/admin/audit-log',       adminAuditRoutes);  // §6.6 Admin audit trail
+app.use('/api/admin/notifications',   adminNotificationsRoutes); // Bell feed + seen marker
 // Customer Restrictions (§6.4) — Admin only
 app.use('/api/admin/customer-restrictions', adminCustomerRestrictionsRoutes);
 app.use('/api/support-chat',          supportChatRoutes);
@@ -137,6 +139,7 @@ server.listen(PORT, () => {
   console.log(`Restrictions: GET                  /api/admin/customer-restrictions`);
   console.log(`              GET                  /api/admin/customer-restrictions/:id/violations`);
   console.log(`              PATCH                /api/admin/customer-restrictions/:id`);
+  console.log(`              PATCH                /api/admin/customer-restrictions/:id/account-status`);
   console.log(`Settings:     GET/PUT              /api/admin/system-settings/business-hours`);
   console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);
 });

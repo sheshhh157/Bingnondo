@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { kitchenAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
-import { kitchenBadgeVariant, kitchenStatusText } from '../../utils/format';
+import { kitchenBadgeVariant, kitchenStatusText, itemLabel } from '../../utils/format';
 import { listEvent, queueUpsert, queueStatusInView, queueReady, splitByChannel, urgencyFor, elapsedSince, useNow } from './oversightData';
-import LiveControls from './LiveControls';
 import PageSkeleton from '../../components/PageSkeleton';
 import Pagination from '../../components/Pagination';
 import Badge from '../../components/Badge';
@@ -35,21 +34,13 @@ export default function OversightKitchen() {
   // (unlike the nav badge's, which counts only work in the kitchen), so a live
   // `order:ready` moves a card across into the handoff section instead of
   // making it vanish.
-  const { data: orders, loading, error, refresh, lastUpdated, refreshing } = useLiveData({
+  const { data: orders, loading, error, refresh } = useLiveData({
     fetchFn: async () => (await kitchenAPI.getOrders({ includeReady: true })).data,
     events: [
       listEvent('order:new', queueUpsert),
       listEvent('order:status', queueStatusInView),
       listEvent('order:ready', queueReady),
     ],
-  });
-
-  // Unacknowledged kitchen (ESP32) alerts. Queried, not socket-pushed: the
-  // backend only buzzes the kitchen + device rooms, and an alert needs its
-  // hardware source — polling the existing endpoint is the manager's view.
-  const { data: alerts } = useLiveData({
-    fetchFn: async () => (await kitchenAPI.getAlerts()).data,
-    pollMs: 15000,
   });
 
   // The queue is two independent lanes — counter and online — kept separate so
@@ -86,35 +77,6 @@ export default function OversightKitchen() {
           Couldn't load this view.
           <button type="button" className="ui-error__retry" onClick={() => refresh()}>Retry</button>
         </ErrorBanner>
-      )}
-
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh kitchen queue" />
-
-      {alerts.length > 0 && (
-        <section className="kit-alerts" aria-label={`${alerts.length} active kitchen alert${alerts.length === 1 ? '' : 's'}`} role="status">
-          <div className="kit-alerts__header">
-            <span className="kit-alerts__count">{alerts.length}</span>
-            <span className="kit-alerts__title">Active kitchen alerts</span>
-            <span className="kit-alerts__hint">awaiting kitchen acknowledgment</span>
-          </div>
-          <div className="kit-alerts__list">
-            {alerts.map((a) => (
-              <div key={a.id} className="kit-alert" role="alert">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                </svg>
-                <div className="kit-alert__body">
-                  <span className="kit-alert__order">#{a.order?.order_number}</span>
-                  <span className="kit-alert__loc">{a.esp32_device?.location_label || 'Unassigned device'}</span>
-                </div>
-                <time className="kit-alert__time" dateTime={a.triggered_at} title={new Date(a.triggered_at).toLocaleString('en-PH')}>
-                  {elapsedSince(a.triggered_at, now)}
-                </time>
-              </div>
-            ))}
-          </div>
-        </section>
       )}
 
       {loading ? (
@@ -239,11 +201,11 @@ function Card({ order, lane, now }) {
         <div className="ok-card__bar-fill" />
       </div>
       <ul className="ok-card__items">
-        {order.order_items?.map((item) => (
-          <li key={item.id} className="ok-card__item">
+        {(order.order_items || order.items || []).map((item, i) => (
+          <li key={item.id ?? i} className="ok-card__item">
             <span className="ok-card__qty">{item.quantity}×</span>
             <div className="ok-card__item-body">
-              <span className="ok-card__item-name">{item.menu_item?.name || item.name}</span>
+              <span className="ok-card__item-name">{itemLabel(item)}</span>
               {item.notes && <span className="ok-card__note">{item.notes}</span>}
             </div>
           </li>

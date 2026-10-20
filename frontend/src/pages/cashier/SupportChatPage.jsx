@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supportChatAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
+import { itemLabel } from '../../utils/format';
 import Pagination from '../../components/Pagination';
 import '../../styles/SupportChatPage.css';
 
@@ -167,35 +168,6 @@ function NoChatSelected() {
   );
 }
 
-// ─── Order context side panel ─────────────────────────────────────────────────
-function OrderContext({ orders }) {
-  if (!orders || orders.length === 0) return null;
-  return (
-    <div className="sc-order-ctx">
-      <p className="sc-order-ctx__label">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        Active Orders
-      </p>
-      {orders.map((order) => (
-        <div key={order.id} className="sc-order-ctx__card">
-          <div className="sc-order-ctx__row">
-            <span className="sc-order-ctx__num">{order.order_number}</span>
-            <span className={`sc-order-ctx__status sc-order-ctx__status--${order.status}`}>
-              {order.status.replace(/_/g, ' ')}
-            </span>
-          </div>
-          <p className="sc-order-ctx__items">
-            {order.items?.map((i) => `${i.quantity}× ${i.name}`).join(' · ')}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ─── Order Drawer ─────────────────────────────────────────────────────────────
 function OrderDrawer({ order, onClose }) {
   const DELIVERY_FEE = 50;
@@ -247,7 +219,7 @@ function OrderDrawer({ order, onClose }) {
                 <div key={i} className="od-item">
                   <div className="od-item__left">
                     <span className="od-item__qty">{item.quantity}×</span>
-                    <span className="od-item__name">{item.name}</span>
+                    <span className="od-item__name">{itemLabel(item)}</span>
                   </div>
                   {item.price != null && (
                     <span className="od-item__price">
@@ -490,19 +462,6 @@ export default function SupportChatPage() {
             </p>
           </div>
         </div>
-        <button
-          className="sc-refresh-btn"
-          onClick={fetchThreads}
-          aria-label="Refresh conversations"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-            <path d="M21 3v5h-5"/>
-            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-            <path d="M8 16H3v5"/>
-          </svg>
-          <span>Refresh</span>
-        </button>
       </div>
 
       {/* ── Main panel ──────────────────────────────────────────────────────────── */}

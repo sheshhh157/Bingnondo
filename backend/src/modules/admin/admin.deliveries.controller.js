@@ -102,11 +102,12 @@ exports.listDeliveries = async (req, res) => {
        LEFT JOIN LATERAL (
          SELECT json_agg(
                   json_build_object(
-                    'id',         oi.id,
-                    'name',       mi.name,
-                    'quantity',   oi.quantity,
-                    'unit_price', oi.unit_price,
-                    'notes',      oi.notes
+                    'id',           oi.id,
+                    'name',         mi.name,
+                    'variant_name', oi.variant_name,
+                    'quantity',     oi.quantity,
+                    'unit_price',   oi.unit_price,
+                    'notes',        oi.notes
                   ) ORDER BY oi.id
                 ) AS items
          FROM order_items oi

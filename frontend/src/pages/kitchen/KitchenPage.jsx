@@ -4,7 +4,6 @@ import { getSocket, KITCHEN_EVENTS } from '../../services/socket';
 import KitchenHeader from './components/KitchenHeader';
 import OrderColumn from './components/OrderColumn';
 import OrderCard from './components/OrderCard';
-import AlertPanel from './components/AlertPanel';
 import ConnectionStatus from './components/ConnectionStatus';
 import '../../styles/KitchenPage.css';
 
@@ -21,21 +20,6 @@ function ordersReducer(state, action) {
         .map((o) => o.id === action.id ? { ...o, status: action.status } : o)
         // Keep order visible while it's still active; drop once ready/cancelled/completed
         .filter((o) => ['pending', 'confirmed', 'preparing'].includes(o.status));
-    default: return state;
-  }
-}
-
-function alertsReducer(state, action) {
-  switch (action.type) {
-    case 'LOAD': return action.payload;
-    case 'ADD': {
-      const exists = state.some((a) => a.id === action.payload.id);
-      return exists ? state : [action.payload, ...state];
-    }
-    case 'ACKNOWLEDGE':
-      return state.map((a) =>
-        a.id === action.id ? { ...a, acknowledged_at: new Date().toISOString() } : a
-      );
     default: return state;
   }
 }
@@ -59,44 +43,92 @@ function playAlert() {
   }
 }
 
+const LOAD_RETRY_MS = 5000;
+
+function describeLoadError(err) {
+  const apiMessage = err?.response?.data?.message;
+  const status = err?.status ?? err?.response?.status;
+  if (apiMessage) return `${apiMessage} — retrying automatically…`;
+  if (status) return `Couldn't load orders (HTTP ${status}) — retrying automatically…`;
+  const message = err?.message || '';
+  if (err instanceof TypeError && /fetch|network|load failed/i.test(message)) {
+    return "Couldn't reach the server — retrying automatically…";
+  }
+  return `${message || "Couldn't load orders."} — retrying automatically…`;
+}
+
+// ─── First-load skeleton ─────────────────────────────────────────────────────
+function KitchenSkeleton() {
+  return (
+    <div className="kp-display kp-skeleton">
+      <span className="kp-sr-only" role="status" aria-live="polite">Loading kitchen queue…</span>
+
+      <section className="kp-banner" aria-hidden="true">
+        <div className="kp-banner__header">
+          <span className="kp-skel kp-skel--line" />
+        </div>
+        <div className="kp-banner__cards">
+          <div className="kp-skel kp-skel--card" />
+          <div className="kp-skel kp-skel--card" />
+          <div className="kp-skel kp-skel--card" />
+        </div>
+      </section>
+
+      <div className="kp-split" aria-hidden="true">
+        <div className="kp-skel kp-skel--column" />
+        <div className="kp-divider" />
+        <div className="kp-skel kp-skel--column" />
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function KitchenPage() {
   const [orders, dispatchOrders] = useReducer(ordersReducer, []);
-  const [alerts, dispatchAlerts] = useReducer(alertsReducer, []);
   const [connected, setConnected] = useState(true);
   const [reconnecting, setReconnecting] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [ackAllLoading, setAckAllLoading] = useState(false);
+  const [ackAllError, setAckAllError] = useState(null);
 
-  // Initial load
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+    let timer = null;
+
+    async function tryLoad() {
       try {
-        const [ordersRes, alertsRes] = await Promise.all([
-          kitchenAPI.getOrders(),
-          kitchenAPI.getAlerts(),
-        ]);
+        const ordersRes = await kitchenAPI.getOrders();
         const ordersData = ordersRes?.data ?? ordersRes ?? [];
-        const alertsData = alertsRes?.data ?? alertsRes ?? [];
-        if (!cancelled) {
-          dispatchOrders({ type: 'LOAD', payload: Array.isArray(ordersData) ? ordersData : [] });
-          dispatchAlerts({ type: 'LOAD', payload: Array.isArray(alertsData) ? alertsData : [] });
-        }
+        if (cancelled) return;
+        dispatchOrders({ type: 'LOAD', payload: Array.isArray(ordersData) ? ordersData : [] });
+        setError(null);
+        setPageLoading(false);
       } catch (err) {
-        if (!cancelled) setError(err?.response?.data?.message || 'Failed to load orders.');
-      } finally {
-        if (!cancelled) setPageLoading(false);
+        if (cancelled) return;
+        setError(describeLoadError(err));
+        setPageLoading(false);
+        timer = setTimeout(tryLoad, LOAD_RETRY_MS);
       }
     }
-    load();
-    return () => { cancelled = true; };
-  }, []);
+
+    tryLoad();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [reloadKey]);
 
   // Socket.io
   useEffect(() => {
     const socket = getSocket();
-    socket.on('connect',         () => { setConnected(true); setReconnecting(false); });
+    let hadConnected = socket.connected;
+
+    socket.on('connect', () => {
+      setConnected(true);
+      setReconnecting(false);
+      if (hadConnected) setReloadKey((k) => k + 1);
+      hadConnected = true;
+    });
     socket.on('disconnect',       () => setConnected(false));
     socket.on('reconnecting',     () => setReconnecting(true));
     socket.on('reconnect_failed', () => setReconnecting(false));
@@ -108,16 +140,6 @@ export default function KitchenPage() {
       playAlert();
     });
 
-    socket.on(KITCHEN_EVENTS.KITCHEN_ALERT, (alert) => {
-      dispatchAlerts({ type: 'ADD', payload: alert });
-    });
-
-    // An alert acknowledged on the physical ESP32 button - clear it from the
-    // panel live, the same as pressing Acknowledge here.
-    socket.on(KITCHEN_EVENTS.KITCHEN_ALERT_ACK, ({ alertId }) => {
-      dispatchAlerts({ type: 'ACKNOWLEDGE', id: alertId });
-    });
-
     socket.on(KITCHEN_EVENTS.ORDER_STATUS_UPDATE, ({ orderId, status }) => {
       dispatchOrders({ type: 'UPDATE_STATUS', id: orderId, status });
     });
@@ -126,18 +148,12 @@ export default function KitchenPage() {
       socket.off('connect'); socket.off('disconnect');
       socket.off('reconnecting'); socket.off('reconnect_failed');
       socket.off(KITCHEN_EVENTS.NEW_ORDER);
-      socket.off(KITCHEN_EVENTS.KITCHEN_ALERT);
-      socket.off(KITCHEN_EVENTS.KITCHEN_ALERT_ACK);
       socket.off(KITCHEN_EVENTS.ORDER_STATUS_UPDATE);
     };
   }, []);
 
   const handleStatusChange = useCallback((orderId, newStatus) => {
     dispatchOrders({ type: 'UPDATE_STATUS', id: orderId, status: newStatus });
-  }, []);
-
-  const handleAcknowledge = useCallback((alertId) => {
-    dispatchAlerts({ type: 'ACKNOWLEDGE', id: alertId });
   }, []);
 
   // ─── Split orders into lanes ──────────────────────────────────────────────
@@ -156,6 +172,22 @@ export default function KitchenPage() {
     (o) => o.order_channel === 'mobile_app' && o.status !== 'pending'
   );
 
+  async function handleAcknowledgeAll() {
+    const ids = pendingOrders.map((o) => o.id);
+    setAckAllLoading(true);
+    setAckAllError(null);
+    const results = await Promise.allSettled(ids.map((id) => kitchenAPI.acknowledgeOrder(id)));
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        dispatchOrders({ type: 'UPDATE_STATUS', id: ids[i], status: r.value?.status ?? 'confirmed' });
+      }
+    });
+    if (results.some((r) => r.status === 'rejected')) {
+      setAckAllError('Some orders could not be acknowledged. Try again.');
+    }
+    setAckAllLoading(false);
+  }
+
   return (
     <div className="kp-root">
       <ConnectionStatus connected={connected} reconnecting={reconnecting} />
@@ -165,16 +197,9 @@ export default function KitchenPage() {
         onlineCount={onlineOrders.length}
       />
 
-      <AlertPanel alerts={alerts} onAcknowledge={handleAcknowledge} />
-
       <main className="kp-main" id="main-content">
         {pageLoading ? (
-          <div className="kp-state" role="status" aria-live="polite">
-            <div className="kp-loader" aria-hidden="true">
-              <div /><div /><div />
-            </div>
-            <span>Loading kitchen queue…</span>
-          </div>
+          <KitchenSkeleton />
         ) : error ? (
           <div className="kp-state kp-state--error" role="alert">
             <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -182,7 +207,7 @@ export default function KitchenPage() {
               <path d="M16 9v8M16 21h.01" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
             </svg>
             <p>{error}</p>
-            <button className="kp-btn kp-btn--outline" onClick={() => window.location.reload()}>
+            <button className="kp-btn kp-btn--outline" onClick={() => setReloadKey((k) => k + 1)}>
               Retry
             </button>
           </div>
@@ -205,7 +230,23 @@ export default function KitchenPage() {
                     {pendingOrders.length}
                   </span>
                 )}
+                {pendingOrders.length > 0 && (
+                  <button
+                    className="kp-btn kp-btn--acknowledge"
+                    onClick={handleAcknowledgeAll}
+                    disabled={ackAllLoading}
+                    aria-label={`Acknowledge ${pendingOrders.length} new order${pendingOrders.length > 1 ? 's' : ''}`}
+                  >
+                    {ackAllLoading
+                      ? <span className="kp-spin-sm" aria-hidden="true" />
+                      : pendingOrders.length > 1 ? 'Acknowledge All' : 'Acknowledge'}
+                  </button>
+                )}
               </div>
+
+              {ackAllError && (
+                <p className="kp-banner__error" role="alert">{ackAllError}</p>
+              )}
 
               {pendingOrders.length === 0 ? (
                 <p className="kp-banner__empty">No new orders</p>

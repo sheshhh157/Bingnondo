@@ -15,7 +15,7 @@ const LEVEL_META = {
   none:           { label: 'No restriction',   cls: 'cr-badge--none'     },
   warned:         { label: 'Warned',            cls: 'cr-badge--warned'   },
   cod_restricted: { label: 'GCash only',        cls: 'cr-badge--codblock' },
-  suspended:      { label: 'Suspended',         cls: 'cr-badge--suspend'  },
+  suspended:      { label: 'Ordering blocked',  cls: 'cr-badge--suspend'  },
 };
 
 function RestrictionBadge({ level }) {
@@ -23,6 +23,23 @@ function RestrictionBadge({ level }) {
   return (
     <span className={`cr-badge ${meta.cls}`}>
       <span className="cr-badge__dot" aria-hidden="true" />
+      {meta.label}
+    </span>
+  );
+}
+
+// ── Account status badge ────────────────────────────────────────────
+const ACCOUNT_META = {
+  active:                { label: 'Active',                cls: 'cr-acct--active'  },
+  awaiting_verification: { label: 'Awaiting verification', cls: 'cr-acct--await'   },
+  suspended:             { label: 'Suspended',             cls: 'cr-acct--suspend' },
+};
+
+function AccountBadge({ status }) {
+  const meta = ACCOUNT_META[status] || { label: status || 'Unknown', cls: 'cr-acct--await' };
+  return (
+    <span className={`cr-acct ${meta.cls}`}>
+      <span className="cr-acct__dot" aria-hidden="true" />
       {meta.label}
     </span>
   );
@@ -59,7 +76,7 @@ function ViolationModal({ open, onClose, customer }) {
     <Modal open={open} onClose={onClose} title="Violation history" width={560}>
       {/* Customer header */}
       <div className="cr-modal-customer">
-        <div className="cr-modal-avatar">{customer?.customer_name?.[0]?.toUpperCase() || 'C'}</div>
+        <div className="cr-modal-avatar">{customer?.customer_name?.[0]?.toUpperCase() || 'U'}</div>
         <div>
           <div className="cr-modal-name">{customer?.customer_name}</div>
           <div className="cr-modal-email">{customer?.customer_email}</div>
@@ -77,7 +94,7 @@ function ViolationModal({ open, onClose, customer }) {
       ) : violations.length === 0 ? (
         <div className="ap-empty" style={{ padding: '28px 0' }}>
           <div className="ap-empty__title">No violations on record</div>
-          <div className="ap-empty__sub">This customer has a clean order history.</div>
+          <div className="ap-empty__sub">This user has a clean order history.</div>
         </div>
       ) : (
         <div className="cr-viol-list">
@@ -159,7 +176,7 @@ function OverrideModal({ open, onClose, customer, onSuccess, toast }) {
     <Modal open={open} onClose={onClose} title="Override restriction" width={460}>
       <form onSubmit={e => { e.preventDefault(); submit(); }}>
         <div className="cr-modal-customer">
-          <div className="cr-modal-avatar">{customer?.customer_name?.[0]?.toUpperCase() || 'C'}</div>
+          <div className="cr-modal-avatar">{customer?.customer_name?.[0]?.toUpperCase() || 'U'}</div>
           <div>
             <div className="cr-modal-name">{customer?.customer_name}</div>
             <div className="cr-modal-email">{customer?.customer_email}</div>
@@ -194,7 +211,7 @@ function OverrideModal({ open, onClose, customer, onSuccess, toast }) {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              This will restore full ordering access for this customer.
+              This will restore full ordering access for this user.
             </div>
           )}
           {isDemotion && !isLifting && (
@@ -202,7 +219,7 @@ function OverrideModal({ open, onClose, customer, onSuccess, toast }) {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
-              Changing restriction level will affect this customer's checkout options immediately.
+              Changing restriction level will affect this user's checkout options immediately.
             </div>
           )}
 
@@ -220,6 +237,89 @@ function OverrideModal({ open, onClose, customer, onSuccess, toast }) {
             loading={loading}
           >
             {isLifting ? 'Lift restriction' : 'Apply override'}
+          </Btn>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Suspend / reinstate account modal ───────────────────────────────
+function AccountStatusModal({ open, onClose, customer, onSuccess, toast }) {
+  const suspending = customer?.account_status !== 'suspended';
+  const [reason, setReason]   = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+
+  async function submit() {
+    if (!reason.trim()) { setError('A reason is required for audit purposes.'); return; }
+    setLoading(true);
+    try {
+      await adminAPI.updateCustomerAccountStatus(customer.customer_id, {
+        status: suspending ? 'suspended' : 'active',
+        reason: reason.trim(),
+      });
+      toast.success(suspending
+        ? `Account suspended for ${customer.customer_name}.`
+        : `Account reinstated for ${customer.customer_name}.`);
+      onSuccess();
+      onClose();
+    } catch (err) {
+      toast.error(err.message || 'Failed to update account status.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={suspending ? 'Suspend account' : 'Reinstate account'}
+      width={460}
+    >
+      <form onSubmit={e => { e.preventDefault(); submit(); }}>
+        <div className="cr-modal-customer">
+          <div className="cr-modal-avatar">{customer?.customer_name?.[0]?.toUpperCase() || 'U'}</div>
+          <div>
+            <div className="cr-modal-name">{customer?.customer_name}</div>
+            <div className="cr-modal-email">{customer?.customer_email}</div>
+          </div>
+          <div style={{ marginLeft: 'auto' }}>
+            <AccountBadge status={customer?.account_status} />
+          </div>
+        </div>
+
+        <div className="ap-divider" />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className={`cr-override-notice ${suspending ? 'cr-override-notice--warn' : 'cr-override-notice--lift'}`}>
+            {suspending
+              ? 'Suspending blocks this user from signing in and placing orders.'
+              : "This restores the user's ability to sign in and place orders."}
+          </div>
+
+          <Field label="Reason / notes" id="acct-reason" error={error}>
+            <textarea
+              id="acct-reason"
+              className="ap-input"
+              rows={3}
+              value={reason}
+              onChange={e => { setReason(e.target.value); setError(''); }}
+              placeholder="State the reason for this account change. This will be logged to the audit trail."
+              style={{ resize: 'vertical', minHeight: 72 }}
+            />
+          </Field>
+
+          <p style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', lineHeight: 1.6 }}>
+            All account status changes are permanently logged to the audit trail with your account ID attached.
+          </p>
+        </div>
+
+        <div className="ap-modal__footer">
+          <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
+          <Btn variant={suspending ? 'danger' : 'gold'} type="submit" loading={loading}>
+            {suspending ? 'Suspend account' : 'Reinstate account'}
           </Btn>
         </div>
       </form>
@@ -249,9 +349,24 @@ const SearchIcon = () => (
     <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
   </svg>
 );
+const SuspendIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <line x1="17" y1="8" x2="22" y2="13" />
+    <line x1="22" y1="8" x2="17" y2="13" />
+  </svg>
+);
+const ReinstateIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <polyline points="16 11 18 13 22 9" />
+  </svg>
+);
 
 // ── Customer restriction row ────────────────────────────────────────
-function CustomerRow({ customer, onViewViolations, onOverride }) {
+function CustomerRow({ customer, onViewViolations, onOverride, onAccountStatus }) {
   const violCount = customer.total_violations || 0;
 
   return (
@@ -260,7 +375,7 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
       <td>
         <div className="ap-member">
           <div className="cr-customer-avatar">
-            {customer.customer_name?.[0]?.toUpperCase() || 'C'}
+            {customer.customer_name?.[0]?.toUpperCase() || 'U'}
           </div>
           <div className="ap-member__info">
             <span className="ap-member__name" title={customer.customer_name}>{customer.customer_name}</span>
@@ -268,6 +383,14 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
           </div>
         </div>
       </td>
+
+      {/* Mobile */}
+      <td style={{ fontSize: '0.75rem', color: 'var(--color-muted-foreground)', whiteSpace: 'nowrap' }}>
+        {customer.customer_mobile || '—'}
+      </td>
+
+      {/* Account status */}
+      <td><AccountBadge status={customer.account_status} /></td>
 
       {/* Violations */}
       <td>
@@ -315,6 +438,23 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
             srLabel={`Override restriction for ${customer.customer_name}`}
             onClick={() => onOverride(customer)}
           />
+          {customer.account_status === 'suspended' ? (
+            <RowAction
+              variant="success"
+              icon={<ReinstateIcon />}
+              label="Reinstate"
+              srLabel={`Reinstate account for ${customer.customer_name}`}
+              onClick={() => onAccountStatus(customer)}
+            />
+          ) : (
+            <RowAction
+              variant="danger"
+              icon={<SuspendIcon />}
+              label="Suspend"
+              srLabel={`Suspend account for ${customer.customer_name}`}
+              onClick={() => onAccountStatus(customer)}
+            />
+          )}
         </div>
       </td>
     </tr>
@@ -322,27 +462,26 @@ function CustomerRow({ customer, onViewViolations, onOverride }) {
 }
 
 // ── Stats row ────────────────────────────────────────────────────────
-function StatCards({ customers }) {
-  const total      = customers.length;
-  const warned     = customers.filter(c => c.restriction_level === 'warned').length;
-  const codBlock   = customers.filter(c => c.restriction_level === 'cod_restricted').length;
-  const suspended  = customers.filter(c => c.restriction_level === 'suspended').length;
+function StatCards({ summary }) {
+  const s = summary || {};
 
   const stats = [
-    { label: 'Flagged customers', value: total,     color: undefined },
-    { label: 'Warned',            value: warned,    color: '#D97706' },
-    { label: 'GCash only',        value: codBlock,  color: '#B45309' },
-    { label: 'Suspended',         value: suspended, color: '#DC2626' },
+    { label: 'Total users',        value: s.total_customers ?? '—',        color: undefined },
+    { label: 'Flagged',            value: s.flagged ?? '—',                color: '#B45309' },
+    { label: 'Warned',             value: s.warned ?? '—',                 color: '#D97706' },
+    { label: 'GCash only',         value: s.cod_restricted ?? '—',         color: '#B45309' },
+    { label: 'Ordering blocked',   value: s.restriction_suspended ?? '—',  color: '#DC2626' },
+    { label: 'Accounts suspended', value: s.accounts_suspended ?? '—',     color: '#DC2626' },
   ];
 
   return (
     <div className="cr-stats">
-      {stats.map((s, i) => (
+      {stats.map((s2, i) => (
         <div key={i} className="cr-stat">
-          <div className="cr-stat__value" style={s.color ? { color: s.color } : {}}>
-            {s.value}
+          <div className="cr-stat__value" style={s2.color ? { color: s2.color } : {}}>
+            {s2.value}
           </div>
-          <div className="cr-stat__label">{s.label}</div>
+          <div className="cr-stat__label">{s2.label}</div>
         </div>
       ))}
     </div>
@@ -354,40 +493,45 @@ export default function CustomerRestrictions() {
   const { toast } = useAdminToast();
 
   const [customers, setCustomers]   = useState([]);
+  const [summary, setSummary]       = useState(null);
   const [loading, setLoading]       = useState(true);
   const [page, setPage]             = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch]         = useState('');
-  const [filterLevel, setFilterLevel] = useState('');
+  const [filterLevel, setFilterLevel]     = useState('');
+  const [filterAccount, setFilterAccount] = useState('');
   const [filterOpen, setFilterOpen]   = useState(false);
 
   // Debounce the server query so typing doesn't fire a request per keystroke.
   const debouncedSearch = useDebouncedValue(search, 300);
 
-  const [viewViol, setViewViol]   = useState(null);   // customer for violation modal
-  const [override, setOverride]   = useState(null);   // customer for override modal
+  const [viewViol, setViewViol]         = useState(null);   // customer for violation modal
+  const [override, setOverride]         = useState(null);   // customer for override modal
+  const [accountModal, setAccountModal] = useState(null);   // customer for suspend/reinstate modal
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
     adminAPI.listCustomerRestrictions({
       page, limit: 10,
-      search:           debouncedSearch || undefined,
+      search:            debouncedSearch || undefined,
       restriction_level: filterLevel || undefined,
+      account_status:    filterAccount || undefined,
     })
       .then(({ data }) => {
         setCustomers(data.data || data);
         setTotalPages(data.totalPages || 1);
+        setSummary(data.summary || null);
       })
-      .catch(() => toast.error('Failed to load customer restrictions.'))
+      .catch(() => toast.error('Failed to load user accounts.'))
       .finally(() => { if (!silent) setLoading(false); });
-  }, [page, debouncedSearch, filterLevel, toast]);
+  }, [page, debouncedSearch, filterLevel, filterAccount, toast]);
 
   // Fetch-on-mount: the sync setLoading inside `load` is intentional.
   // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
-  const hasFilters = Boolean(search || filterLevel);
-  const clearFilters = () => { setSearch(''); setFilterLevel(''); setPage(1); };
+  const hasFilters = Boolean(search || filterLevel || filterAccount);
+  const clearFilters = () => { setSearch(''); setFilterLevel(''); setFilterAccount(''); setPage(1); };
 
   // First load gets the skeleton; paging/filtering keeps the rows and dims them.
   const firstLoad = loading && customers.length === 0;
@@ -397,8 +541,15 @@ export default function CustomerRestrictions() {
     <>
       <AppSelect value={filterLevel} onChange={e => { setFilterLevel(e.target.value); setPage(1); }} aria-label="Filter by restriction level">
         <option value="">All restriction levels</option>
+        <option value="none">No restriction</option>
         <option value="warned">Warned</option>
         <option value="cod_restricted">GCash only</option>
+        <option value="suspended">Ordering blocked</option>
+      </AppSelect>
+      <AppSelect value={filterAccount} onChange={e => { setFilterAccount(e.target.value); setPage(1); }} aria-label="Filter by account status">
+        <option value="">All account statuses</option>
+        <option value="active">Active</option>
+        <option value="awaiting_verification">Awaiting verification</option>
         <option value="suspended">Suspended</option>
       </AppSelect>
       {hasFilters && (
@@ -412,20 +563,20 @@ export default function CustomerRestrictions() {
       <div className="ap-page ap-page--wide">
 
         <PageHeader
-          title="Customer Restrictions"
-          chip={`${customers.length} flagged`}
-          sub="Customers with repeated order violations. Manual overrides are logged to the audit trail."
+          title="User Accounts"
+          chip={`${summary?.flagged ?? 0} flagged`}
+          sub="All registered user accounts. Restriction overrides and account suspensions are logged to the audit trail."
         />
 
         {/* Stats */}
-        <StatCards customers={customers} />
+        <StatCards summary={summary} />
 
         {/* Info notice */}
         <div className="ap-notice">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
           </svg>
-          Only customers with at least one violation or an active restriction appear here. All override actions are logged.
+          Every registered user account appears here. Overrides and account status changes are logged to the audit trail.
         </div>
 
         {/* Toolbar */}
@@ -433,14 +584,14 @@ export default function CustomerRestrictions() {
           <div className="ap-toolbar__filters">
             <div style={{ minWidth: 220, flex: 1 }}>
               <TextInput
-                placeholder="Search customer name or email…"
+                placeholder="Search name, email, or mobile…"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
                 prefix={<SearchIcon />}
-                aria-label="Search customers"
+                aria-label="Search user accounts"
               />
             </div>
-            <FilterTrigger open={filterOpen} onClick={() => setFilterOpen(true)} active={hasFilters} label="Filter customers" />
+            <FilterTrigger open={filterOpen} onClick={() => setFilterOpen(true)} active={hasFilters} label="Filter user accounts" />
             <FilterInline>{filterFields}</FilterInline>
           </div>
         </div>
@@ -448,7 +599,7 @@ export default function CustomerRestrictions() {
         {/* Table */}
         <div className="ap-card">
           {firstLoad ? (
-            <TableSkeleton rows={6} cols={6} />
+            <TableSkeleton rows={6} cols={8} />
           ) : customers.length === 0 ? (
             <div className="ap-empty">
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-border)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginBottom: 8 }}>
@@ -456,11 +607,11 @@ export default function CustomerRestrictions() {
                 <circle cx="9" cy="7" r="4" />
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              <div className="ap-empty__title">No restricted customers</div>
+              <div className="ap-empty__title">No user accounts found</div>
               <div className="ap-empty__sub">
-                {filterLevel || search
-                  ? 'No customers match the current filters.'
-                  : 'All customers are in good standing.'}
+                {filterLevel || filterAccount || search
+                  ? 'No user accounts match the current filters.'
+                  : 'No user accounts yet.'}
               </div>
             </div>
           ) : (
@@ -468,7 +619,7 @@ export default function CustomerRestrictions() {
               <table className="ap-table">
                 <thead>
                   <tr>
-                    {['Customer', 'Violations', 'Restriction', 'Last updated', 'Updated by', ''].map(h => (
+                    {['User', 'Mobile', 'Account', 'Violations', 'Restriction', 'Last updated', 'Updated by', ''].map(h => (
                       <th key={h} scope="col" className={h === '' ? 'ap-table__th--right' : ''}>{h}</th>
                     ))}
                   </tr>
@@ -480,6 +631,7 @@ export default function CustomerRestrictions() {
                       customer={c}
                       onViewViolations={setViewViol}
                       onOverride={setOverride}
+                      onAccountStatus={setAccountModal}
                     />
                   ))}
                 </tbody>
@@ -490,7 +642,7 @@ export default function CustomerRestrictions() {
           {!firstLoad && customers.length > 0 && (
             <div className="ap-table-foot">
               <span className="ap-table-foot__info">
-                Page {page} of {totalPages} · showing {customers.length} customer{customers.length === 1 ? '' : 's'}
+                Page {page} of {totalPages} · showing {customers.length} user{customers.length === 1 ? '' : 's'}
               </span>
               <Pagination page={page} total={totalPages} onPage={setPage} />
             </div>
@@ -516,7 +668,17 @@ export default function CustomerRestrictions() {
         toast={toast}
       />
 
-      <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter customers">
+      {/* Suspend / reinstate modal */}
+      <AccountStatusModal
+        key={accountModal?.customer_id ?? 'none'}
+        open={!!accountModal}
+        onClose={() => setAccountModal(null)}
+        customer={accountModal}
+        onSuccess={() => load(true)}
+        toast={toast}
+      />
+
+      <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter user accounts">
         {filterFields}
       </FilterModal>
     </>

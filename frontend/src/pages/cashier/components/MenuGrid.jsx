@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { currency } from '../../../utils/format';
 import '../../../styles/MenuGrid.css';
 
@@ -40,9 +42,16 @@ export default function MenuGrid({ items, loading, error, onAdd, onRetry, draft,
 }
 
 function MenuCard({ item, onAdd, draft }) {
-  const inCart = draft.find((d) => d.id === item.id);
-  const qty = inCart?.qty || 0;
-  const unavailable = !item.is_available;
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const variants = Array.isArray(item.variants) ? item.variants : [];
+  const hasVariants = variants.length > 0;
+  const priceable = variants.filter((v) => v.is_available);
+  const qty = draft.filter((d) => d.id === item.id).reduce((s, d) => s + d.qty, 0);
+  const unavailable = !item.is_available || (hasVariants && priceable.length === 0);
+  const fromPrice = hasVariants
+    ? Math.min(...(priceable.length > 0 ? priceable : variants).map((v) => v.price))
+    : item.price;
+  const onAddClick = () => (hasVariants ? setPickerOpen(true) : onAdd(item));
 
   return (
     <article
@@ -88,11 +97,11 @@ function MenuCard({ item, onAdd, draft }) {
         <p className="cdm-card__name">{item.name}</p>
         <div className="cdm-card__footer">
           <span className="cdm-card__price">
-            {currency(item.price)}
+            {hasVariants ? `from ${currency(fromPrice)}` : currency(item.price)}
           </span>
           <button
             className="cdm-card__add"
-            onClick={() => onAdd(item)}
+            onClick={onAddClick}
             disabled={unavailable}
             aria-label={`Add ${item.name} to order`}
           >
@@ -103,7 +112,70 @@ function MenuCard({ item, onAdd, draft }) {
           </button>
         </div>
       </div>
+
+      {pickerOpen && (
+        <VariantPicker
+          item={item}
+          onPick={(variant) => onAdd(item, variant)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </article>
+  );
+}
+
+function VariantPicker({ item, onPick, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div className="cdv-overlay" onClick={onClose}>
+      <div
+        className="cdv-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`cdv-title-${item.id}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cdv-head">
+          <div>
+            <p className="cdv-sub">Choose an option</p>
+            <h3 id={`cdv-title-${item.id}`} className="cdv-title">{item.name}</h3>
+          </div>
+          <button className="cdv-close" onClick={onClose} aria-label="Close">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className="cdv-list">
+          {item.variants.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              className={`cdv-option${v.is_available ? '' : ' cdv-option--off'}`}
+              disabled={!v.is_available}
+              onClick={() => { onPick(v); onClose(); }}
+            >
+              <span className="cdv-option__name">{v.name}</span>
+              <span className="cdv-option__meta">
+                {v.is_available ? currency(v.price) : 'Sold out'}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

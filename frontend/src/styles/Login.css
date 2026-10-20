@@ -459,6 +459,96 @@
 
 .login-form__footer strong { color: #2D0000; }
 
+/* ─── Forgot password / account recovery ─────────────────────────── */
+.login-form__aux {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.25rem;
+}
+
+.login-form__link {
+  font-family: 'Noto Sans TC', system-ui, sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #E07B00;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.login-form__link:hover { color: #B45309; text-decoration: underline; }
+.login-form__link:focus-visible { outline: 3px solid #E07B00; outline-offset: 2px; border-radius: 4px; }
+
+.login-form__linkbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  color: #E07B00;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.login-form__linkbtn:hover:not(:disabled) { color: #B45309; text-decoration: underline; }
+.login-form__linkbtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.login-form__linkbtn:focus-visible { outline: 3px solid #E07B00; outline-offset: 2px; border-radius: 4px; }
+
+.login-form__notice {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.6rem 0.875rem;
+  background: rgba(224,123,0,0.08);
+  border: 1px solid rgba(224,123,0,0.28);
+  border-radius: 8px;
+  color: #7A4A00;
+  font-family: 'Noto Sans TC', system-ui, sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.login-field__input--otp {
+  letter-spacing: 0.35em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.login-form__resend {
+  font-family: 'Noto Sans TC', system-ui, sans-serif;
+  font-size: 0.8125rem;
+  color: #78553A;
+  text-align: center;
+}
+
+.login-form__sub--email { word-break: break-all; }
+.login-form__sub--email strong { color: #2D0000; }
+
+.login-form__success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem 1rem;
+  background: rgba(34,120,60,0.07);
+  border: 1px solid rgba(34,120,60,0.25);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.login-form__success-icon { color: #1E7A3C; display: inline-flex; }
+
+.login-form__success p {
+  margin: 0;
+  font-family: 'Noto Sans TC', system-ui, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1E5A31;
+}
+
+.login-form__submit--link { text-decoration: none; }
+
 /* ══════════════════════════════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════════════════════════════ */

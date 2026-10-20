@@ -4,7 +4,6 @@ import useLiveData from '../../hooks/useLiveData';
 import { stockStatus, stockBadgeVariant, stockStatusText } from '../../utils/format';
 import { toCsv, downloadCsv } from '../../utils/csv';
 import { listEvent, stockPatch, stockCounts } from './oversightData';
-import LiveControls from './LiveControls';
 import Badge from '../../components/Badge';
 import EmptyState from '../../components/EmptyState';
 import StatCard from '../../components/StatCard';
@@ -104,7 +103,7 @@ export default function OversightStocks() {
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const { data: items, loading, error, lastUpdated, refresh, refreshing } = useLiveData({
+  const { data: items, loading, error, refresh } = useLiveData({
     fetchFn: async () => {
       const { data } = await inventoryAPI.getAll();
       return data.items || data;
@@ -183,8 +182,6 @@ export default function OversightStocks() {
         <StatCard label="Low Stock" value={stats.low} />
         <StatCard label="Out of Stock" value={stats.out} />
       </div>
-
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh stock levels" />
 
       {!loading && (stats.low + stats.out) > 0 && (
         <ErrorBanner>

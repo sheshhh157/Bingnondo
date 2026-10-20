@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { adminAPI, adminRidersAPI } from '../../services/api';
 import { ordersAPI, kitchenAPI, inventoryAPI, MANAGER_ORDER_LIMITS } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
-import { currency, stockStatus, stockBadgeVariant, stockStatusText, dayKey, lastDaysBounds } from '../../utils/format';
+import { currency, stockStatus, stockBadgeVariant, stockStatusText, dayKey, lastDaysBounds, itemLabel } from '../../utils/format';
 import { keyEvent, orderUpsert, orderStatus, queueUpsert, stockPatch, stockCounts, splitByChannel } from './oversightData';
-import LiveControls from './LiveControls';
+import NotificationBell from './NotificationBell';
 import Badge from '../../components/Badge';
 import CardPanel from '../../components/CardPanel';
 import ErrorBanner from '../../components/ErrorBanner';
@@ -58,7 +58,7 @@ function hourRange(row) {
 }
 
 const FETCH_LABELS = [
-  'staff accounts', 'customer restrictions', 'business hours', 'menu categories',
+  'staff accounts', 'user accounts', 'business hours', 'menu categories',
   'riders', 'kitchen queue', 'inventory', 'orders', 'order totals',
 ];
 
@@ -68,14 +68,14 @@ const INITIAL = {
 };
 
 export default function AdminOverview() {
-  const { data, loading, error, refresh, lastUpdated, refreshing } = useLiveData({
+  const { data, loading, error, refresh } = useLiveData({
     fetchFn: async () => {
       // One snapshot for the whole page. A single failing endpoint must not
       // blank everything: each panel falls back to empty and the banner names
       // what couldn't be loaded.
       const settled = await Promise.allSettled([
         adminAPI.listStaffAccounts(),
-        adminAPI.listCustomerRestrictions({ limit: 100 }),
+        adminAPI.listCustomerRestrictions({ limit: 100, flagged: 1 }),
         adminAPI.getBusinessHours(),
         adminAPI.listCategories(),
         adminRidersAPI.getAll({ limit: 100 }),
@@ -157,7 +157,7 @@ export default function AdminOverview() {
     const tally = {};
     for (const o of revenueOrders) {
       for (const it of o.items || o.order_items || []) {
-        const name = it.name || it.menu_item?.name;
+        const name = itemLabel(it);
         if (!name) continue;
         tally[name] = (tally[name] || 0) + (Number(it.quantity) || 1);
       }
@@ -278,7 +278,7 @@ export default function AdminOverview() {
     },
     {
       id: 'flagged',
-      label: 'Flagged customers',
+      label: 'Flagged users',
       value: restrictions.length,
       sub: suspended ? `${suspended} suspended` : 'No suspensions',
       to: '/admin/restrictions',
@@ -288,7 +288,7 @@ export default function AdminOverview() {
 
   return (
     <div className="ap-page ap-page--wide ao-page">
-      <PageHeader title="Overview" sub="Store at a glance" />
+      <PageHeader title="Overview" sub="Store at a glance" action={<NotificationBell />} />
 
       {error && (
         <ErrorBanner>
@@ -296,8 +296,6 @@ export default function AdminOverview() {
           <button type="button" className="ui-error__retry" onClick={() => refresh()}>Retry</button>
         </ErrorBanner>
       )}
-
-      <LiveControls lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => refresh(true)} label="Refresh overview" />
 
       {loading ? (
         <div className="dash-kpis" aria-hidden="true">

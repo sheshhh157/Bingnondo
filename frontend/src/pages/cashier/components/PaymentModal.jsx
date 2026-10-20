@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { ordersAPI } from '../../../services/cashierApi';
-import { currency } from '../../../utils/format';
+import { currency, itemLabel } from '../../../utils/format';
 import '../../../styles/PaymentModal.css';
 
 const fmtK  = (d) => d >= 1000 ? `₱${d / 1000}k` : `₱${d}`;
@@ -208,9 +208,9 @@ export default function PaymentModal({ items, total, draft, onClose, onSuccess }
                 <div className="pm-summary">
                   <div className="pm-summary__items">
                     {draft.map((item) => (
-                      <div key={item.id} className="pm-summary__row">
+                      <div key={item.key} className="pm-summary__row">
                         <span className="pm-summary__name">
-                          {item.name}
+                          {itemLabel(item)}
                           <span className="pm-summary__qty"> ×{item.qty}</span>
                         </span>
                         <span className="pm-summary__val">{currency(item.price * item.qty)}</span>
@@ -390,9 +390,9 @@ function Receipt({ order, orderNumber, draft, total, method, cashGiven, change, 
         <div className="pm-receipt__meta">{dateStr} · {timeStr}</div>
         <div className="pm-receipt__divider" aria-hidden="true" />
 
-        {items.map((item) => (
-          <div key={item.id} className="pm-receipt__line">
-            <span>{item.name} <span className="pm-receipt__qty">×{item.quantity ?? item.qty}</span></span>
+        {items.map((item, idx) => (
+          <div key={item.id ?? item.key ?? idx} className="pm-receipt__line">
+            <span>{itemLabel(item)} <span className="pm-receipt__qty">×{item.quantity ?? item.qty}</span></span>
             <span>{currency((item.unit_price ?? item.price) * (item.quantity ?? item.qty))}</span>
           </div>
         ))}

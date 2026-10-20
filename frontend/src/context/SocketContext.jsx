@@ -201,6 +201,10 @@ export function SocketProvider({ children }) {
       socket.on('delivery:new', capture('delivery:new'));
       socket.on('menu_update', capture('menu_update'));
       socket.on('menu_item_deleted', capture('menu_item_deleted'));
+      socket.on('kitchen_alert', capture('kitchen_alert'));
+      socket.on('payment:pending', capture('payment:pending'));
+      socket.on('payment:verified', capture('payment:verified'));
+      socket.on('payment:rejected', capture('payment:rejected'));
 
       return socket;
     })();

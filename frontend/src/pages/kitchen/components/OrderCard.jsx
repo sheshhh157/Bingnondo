@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { kitchenAPI } from '../../../services/api';
+import { itemLabel } from '../../../utils/format';
 
 function elapsed(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -37,11 +38,7 @@ export default function OrderCard({ order, lane, onStatusChange }) {
   async function handleAction() {
     setLoading(true);
     try {
-      if (isPending) {
-        // Acknowledge: pending → confirmed
-        await kitchenAPI.acknowledgeOrder(order.id);
-        onStatusChange(order.id, 'confirmed');
-      } else if (isPreparing) {
+      if (isPreparing) {
         // Mark ready. Counter orders are finalised to 'completed' server-side,
         // so reflect whichever status comes back to drop the card correctly.
         const res = await kitchenAPI.updateOrderStatus(order.id, 'ready');
@@ -94,11 +91,11 @@ export default function OrderCard({ order, lane, onStatusChange }) {
 
       {/* Items */}
       <ul className="kp-card__items" aria-label="Order items">
-        {order.order_items?.map((item) => (
-          <li key={item.id} className="kp-card__item">
+        {(order.order_items || order.items || []).map((item, i) => (
+          <li key={item.id ?? i} className="kp-card__item">
             <span className="kp-card__qty">{item.quantity}×</span>
             <div className="kp-card__item-body">
-              <span className="kp-card__item-name">{item.menu_item?.name || item.name}</span>
+              <span className="kp-card__item-name">{itemLabel(item)}</span>
               {item.notes && (
                 <span className="kp-card__note" aria-label={`Note: ${item.notes}`}>
                   {item.notes}
@@ -117,41 +114,39 @@ export default function OrderCard({ order, lane, onStatusChange }) {
       )}
 
       {/* Footer */}
-      <div className="kp-card__footer">
+      {!isPending && (
+        <div className="kp-card__footer">
 
-        <button
-          className={`kp-btn kp-btn--${isPending ? 'acknowledge' : isPreparing ? 'ready' : 'start'}`}
-          onClick={handleAction}
-          disabled={loading}
-          aria-label={
-            isPending   ? `Acknowledge order ${order.order_number}` :
-            isPreparing ? `Mark order ${order.order_number} as ready` :
-                          `Start preparing order ${order.order_number}`
-          }
-        >
-          {loading ? (
-            <span className="kp-spin-sm" aria-hidden="true" />
-          ) : isPending ? (
-            <>
-              Acknowledge
-            </>
-          ) : isPreparing ? (
-            <>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                <path d="M2 6.5l3 3L11 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Mark Ready
-            </>
-          ) : (
-            <>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                <polygon points="3,2 11,6.5 3,11" fill="currentColor"/>
-              </svg>
-              Start Preparing
-            </>
-          )}
-        </button>
-      </div>
+          <button
+            className={`kp-btn kp-btn--${isPreparing ? 'ready' : 'start'}`}
+            onClick={handleAction}
+            disabled={loading}
+            aria-label={
+              isPreparing
+                ? `Mark order ${order.order_number} as ready`
+                : `Start preparing order ${order.order_number}`
+            }
+          >
+            {loading ? (
+              <span className="kp-spin-sm" aria-hidden="true" />
+            ) : isPreparing ? (
+              <>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                  <path d="M2 6.5l3 3L11 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Mark Ready
+              </>
+            ) : (
+              <>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                  <polygon points="3,2 11,6.5 3,11" fill="currentColor"/>
+                </svg>
+                Start Preparing
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </article>
   );
 }

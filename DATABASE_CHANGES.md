@@ -5,8 +5,133 @@ and constraints only. Data seeding is intentionally not logged here. Each
 schema change ships as a numbered, idempotent migration in `backend/migrations/`.
 
 Target database: `bingnondo_db` on PostgreSQL 16 (localhost:5432).
-This entry diffs against the last push: `11b7c29`
-(`origin/feat/admin-mobile-filters-online-orders`).
+This entry diffs against the last PR: **#28** (`2545f2c`, merge of
+`feat/admin-mobile-filters-online-orders` @ `2addd57` into `main`).
+Migrations 012–020 below are not on `main` yet.
+
+---
+
+## 020 — Variant groups: name + max options only
+- **Date:** 2026-10-20
+- **Type:** Schema
+- **File:** `backend/migrations/020_group_max_options.sql`
+- **Why:** A variant group becomes a pure template — a name and the maximum
+  number of options an item may offer for it (e.g. "Flavor — max 3"). Option
+  names and prices are typed per menu item in Menu Management, so two items can
+  offer different choices (and different prices) under the same group.
+- **Applied:**
+  - Added column `variant_groups.max_options` (`integer NOT NULL DEFAULT 3`) +
+    check `chk_variant_groups_max_options` (`BETWEEN 1 AND 10`).
+  - Dropped column `menu_item_variants.variant_group_option_id`, its FK
+    (`menu_item_variants_variant_group_option_id_fkey`), index
+    (`idx_menu_item_variants_group_option`) and unique index
+    (`uq_menu_item_variants_item_group_option`).
+  - Dropped table `variant_group_options` (+ its sequence) — option names are
+    no longer global.
+  - Added unique index `uq_menu_item_variants_item_group_name`
+    (`menu_item_id`, `variant_group_id`, `LOWER(name)`) where
+    `variant_group_id IS NOT NULL` — an item's option names are unique within a
+    group. `uq_menu_item_variants_item_name_legacy` (`menu_item_id`, `name`)
+    where `variant_group_id IS NULL` still covers legacy flat variants.
+
+---
+
+## 019 — Category variant groups + per-item variant prices
+- **Date:** 2026-10-20
+- **Type:** Schema
+- **File:** `backend/migrations/019_category_variants_item_prices.sql`
+- **Why:** Variant groups become pure option-name definitions ("Flavor" →
+  Chocolate, Vanilla). Each category toggles which groups it offers, and the
+  price of each option is set per menu item — the same option can cost more or
+  less depending on the item, and an item can simply not offer an option
+  (no row) instead of inventing a placeholder.
+- **Applied:**
+  - Dropped column `variant_group_options.price` (prices now live on
+    `menu_item_variants` per item).
+  - Added table `menu_category_variant_groups` (`category_id` FK →
+    `menu_categories` `ON DELETE CASCADE`, `variant_group_id` FK →
+    `variant_groups` `ON DELETE CASCADE`, composite PK) + 2 lookup indexes
+    (+1 table, +1 sequence, +2 indexes, +2 foreign keys). Toggling a group OFF
+    for a category deletes that group's `menu_item_variants` rows for items in
+    the category (order history keeps its `variant_name` snapshots).
+  - Added columns `menu_item_variants.variant_group_id` and
+    `menu_item_variants.variant_group_option_id` (FKs → `variant_groups` /
+    `variant_group_options`, `ON DELETE CASCADE`) + 3 indexes
+    (`idx_menu_item_variants_menu_item_group`,
+    `idx_menu_item_variants_group_option`,
+    `idx_menu_item_variants_menu_item_id`).
+  - Replaced unique `uq_menu_item_variants_item_name` (which blocked two
+    groups from sharing an option name on one item) with:
+    - `uq_menu_item_variants_item_group_option` (`menu_item_id`,
+      `variant_group_option_id`) — one price per option per item;
+    - `uq_menu_item_variants_item_name_legacy` (`menu_item_id`, `name`) where
+      `variant_group_id IS NULL` — legacy flat variants keep the uniqueness
+      guarantee.
+
+---
+
+## 018 — Variant groups
+- **Date:** 2026-10-17
+- **Type:** Schema
+- **File:** `backend/migrations/018_variant_groups.sql`
+- **Why:** Reusable variant definitions ("Flavor", "Solo / Sharing", "Hot /
+  Cold") are set up once in System Settings — a named group with its priced
+  options — instead of retyping the same list on every menu item.
+  `menu_item_variants` stays the per-item runtime table the cashier and
+  ordering flow read; attaching a group's options to items comes later and
+  will write into that table.
+- **Applied:**
+  - Added table `variant_groups` (`id` PK, `name` varchar(100), `created_at`,
+    `updated_at`). Names are unique case-insensitively
+    (`uq_variant_groups_name`) (+1 table, +1 sequence).
+  - Added table `variant_group_options` (`id` PK, `group_id` FK →
+    `variant_groups` `ON DELETE CASCADE`, `name` varchar(100), `price`
+    numeric(10,2), `display_order` smallint default 0, `created_at`). Option
+    names are unique per group case-insensitively
+    (`uq_variant_group_options_group_name`) + lookup index
+    (`idx_variant_group_options_group_id`) (+1 table, +1 foreign key,
+    +2 indexes, +1 sequence).
+
+---
+
+## 017 — Menu item variants
+- **Date:** 2026-10-17
+- **Type:** Schema
+- **File:** `backend/migrations/017_menu_item_variants.sql`
+- **Why:** Menu items can now be sold in flavors/sizes with their own absolute
+  price (e.g. "Halo-Halo Regular ₱75 / Large ₱95"). The base item price is only
+  used while an item has no variants. Ingredients/recipes stay linked to the
+  menu item itself, and stock deducts per menu item, not per variant.
+- **Applied:**
+  - Added table `menu_item_variants` (`id` PK, `menu_item_id` FK →
+    `menu_items` `ON DELETE CASCADE`, `name` varchar(100), `price`
+    numeric(10,2), `is_available` bool default true, `display_order` smallint
+    default 0, `created_at`). Variant names are unique per menu item
+    (`uq_menu_item_variants_item_name`) and lookups get
+    `idx_menu_item_variants_menu_item_id` (+1 table, +1 foreign key,
+    +3 indexes, +1 sequence).
+  - Added `order_items.variant_id` (nullable FK → `menu_item_variants`
+    `ON DELETE SET NULL`) and `order_items.variant_name` varchar(100) — the
+    receipt/kitchen snapshot that survives a variant delete or rename
+    (+1 foreign key).
+
+---
+
+## 016 — System settings store + notification markers
+- **Date:** 2026-10-17
+- **Type:** Schema
+- **File:** `backend/migrations/016_system_settings_notifications.sql`
+- **Why:** The Admin Overview notification bell needs (a) server-persisted
+  visibility settings ("which event categories show up"), (b) an unread marker
+  per admin, and (c) a rejection timestamp for GCash receipts — the reject
+  flow only stored `status` + `rejection_reason`.
+- **Applied:**
+  - Added table `system_settings` (`key` varchar(100) PK, `value` jsonb,
+    `updated_at`) — generic key/value store for admin-configurable system
+    options. Seeded with the `notifications` row (all 7 categories visible).
+    Adds 1 index (`system_settings_pkey`).
+  - Added `staff_accounts.notification_seen_at` (timestamp, nullable).
+  - Added `payments.rejected_at` (timestamp, nullable).
 
 ---
 
@@ -26,21 +151,45 @@ This entry diffs against the last push: `11b7c29`
 
 ---
 
-## Current DB snapshot — 2026-10-15
-- **Database:** `bingnondo_db` @ PostgreSQL 16 (localhost:5432), schema `public`
-- **Compared against:** last push `11b7c29`
-- **Method:** live introspection (read-only) vs the schema as of that push.
+## 012–014 — Inventory category series
+- **Date:** 2026-10-14
+- **Type:** Schema
+- **Files:** `backend/migrations/012_inventory_categories.sql`,
+  `013_inventory_menu_categories.sql`, `014_inventory_item_categories.sql`
+- **Why:** Inventory ingredients gained managed categories. 012 introduced a
+  dedicated `inventory_categories` list; 013 switched to the existing
+  `menu_categories`; 014 made the link many-to-many.
+- **Applied (net):**
+  - Added junction table `inventory_item_categories`: PK
+    `(inventory_item_id, category_id)`, foreign keys to `inventory_items` and
+    `menu_categories`, index on `category_id` (+1 table, +2 foreign keys,
+    +2 indexes).
+  - The transient `inventory_categories` table + sequence and the single
+    `inventory_items.category_id` column (with its foreign key and index)
+    were created and dropped within the series — net zero.
 
-### Totals vs last push
-| Metric | Last push | Now | Δ |
+---
+
+## Current DB snapshot — 2026-10-17
+- **Database:** `bingnondo_db` @ PostgreSQL 16 (localhost:5432), schema `public`
+- **Compared against:** last PR `#28` (`2545f2c`)
+- **Method:** live introspection (read-only) vs the schema as of that PR
+  (current schema with the 012–017 effects reversed).
+  `bingnondo_database-schema.sql` regenerated with pg_dump 16.15
+  (`--clean --if-exists --no-owner --no-privileges`).
+
+### Totals vs last PR
+| Metric | Last PR | Now | Δ |
 |---|---:|---:|---:|
-| Tables | 30 | 27 | −3 |
-| Foreign keys | 42 | 37 | −5 |
-| Indexes | 76 | 67 | −9 |
-| Sequences | 25 | 23 | −2 |
+| Tables | 29 | 29 | 0 |
+| Foreign keys | 40 | 39 | −1 |
+| Indexes | 74 | 71 | −3 |
+| Sequences | 25 | 24 | −1 |
 | Views | 0 | 0 | 0 |
 
-### Net schema delta since last push
+### Net schema delta since last PR
+- **Added — 1 table:** `inventory_item_categories` (ingredient ↔ menu
+  category junction; migrations 012–014). +2 foreign keys, +2 indexes.
 - **Removed — 3 tables:** `dashboard_switch_config`, `staff_dashboard_access`,
   `staff_switch_pin`.
   - Sequences removed: `dashboard_switch_config_id_seq`,
@@ -51,8 +200,36 @@ This entry diffs against the last push: `11b7c29`
     `staff_dashboard_access_granted_by_fkey`,
     `staff_dashboard_access_staff_id_fkey`, `staff_switch_pin_staff_id_fkey`.
   - Indexes removed: 3 primary-key, 3 unique-constraint, 3 explicit.
-- **Nothing else changed:** no table, column or constraint was added, altered or
-  renamed since the last push.
+- **Added — 1 table:** `system_settings` (key/value store for admin system
+  options; migration 016). PK index `system_settings_pkey` (+1 index).
+  - Columns added: `staff_accounts.notification_seen_at`,
+    `payments.rejected_at` (no index changes).
+- **Added — 1 table:** `menu_item_variants` (flat flavor/size list per menu
+  item, own absolute price; migration 017). +1 foreign key (`menu_items`),
+  +3 indexes (PK, unique item+name, item lookup), +1 sequence.
+  - Columns added: `order_items.variant_id` (FK → `menu_item_variants`,
+    `ON DELETE SET NULL`) and `order_items.variant_name` (snapshot;
+    +1 foreign key).
+
+### Since PR #28
+- **Migrations 012–014** (inventory category series, 2026-10-14) and
+  **015** (dashboard-switch tables dropped, 2026-10-15) — see the entries
+  above.
+- **Migration 016** (notification feature): added `system_settings`,
+  `staff_accounts.notification_seen_at`, `payments.rejected_at` — see the
+  016 entry above.
+- **Migration 017** (menu item variants): added `menu_item_variants` and
+  `order_items.variant_id` / `order_items.variant_name` — see the 017 entry
+  above.
+- Non-schema work (forgot-password OTP reset flow, User Accounts /
+  restriction management, notification feed) reused existing structures:
+  `otp_verifications` (purpose `password_reset`), `customer_restrictions`,
+  `customers.status`, and `audit_log` action rows (`self_reset_password`,
+  `customer_account_status_change`, `update_notification_settings`).
+- The dump was refreshed to capture the 016/017 schema additions plus
+  data-level drift only (orders, payments, inventory, kitchen alerts, audit
+  entries, staff accounts). Per the policy at the top of this file, data rows
+  are not tracked in this log.
 
 ### How to sync your database
 1. `git pull`

@@ -1601,3 +1601,90 @@ select.mn-field__input { cursor: pointer; }
   }
   .mn-toggle__thumb { transition: none; }
 }
+
+/* ─── Item variants (Menu Management modal) ─────────────────────────── */
+.mn-variant-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  text-align: center;
+}
+.mn-variant-groups { display: flex; flex-direction: column; gap: 14px; }
+.mn-variant-group {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--color-background);
+}
+.mn-variant-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mn-variant-group__title {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-foreground);
+}
+.mn-variant-group__limit {
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+}
+.mn-variant-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.mn-variant-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mn-variant-row .mn-field__input { padding: 7px 10px; font-size: 0.875rem; }
+.mn-variant-row .mn-field__input:first-child { flex: 1; }
+.mn-variant-row__price {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 110px;
+  color: var(--color-muted-foreground);
+  font-size: 0.8125rem;
+}
+.mn-variant-row__price .mn-field__input { width: 100%; }
+.mn-variant-row__remove {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  color: var(--color-muted-foreground);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.mn-variant-row__remove:hover {
+  border-color: var(--color-destructive);
+  color: var(--color-destructive);
+}
+.mn-variant-add {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-foreground);
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.mn-variant-add:hover:not(:disabled) { border-color: var(--color-gold); }
+.mn-variant-add:disabled { opacity: 0.5; cursor: default; }

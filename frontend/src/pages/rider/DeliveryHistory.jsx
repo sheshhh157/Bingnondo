@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getDeliveryHistory } from '../../services/riderApi';
+import { itemLabel } from '../../utils/format';
 import '../../styles/DeliveryHistory.css';
 
 function IconCalendar() {
@@ -80,7 +81,7 @@ function HistoryCard({ delivery }) {
             {(delivery.items || []).map((item, i) => (
               <li key={i} className="dh-card__item">
                 <span className="dh-card__item-qty">{item.quantity}×</span>
-                <span className="dh-card__item-name">{item.name}</span>
+                <span className="dh-card__item-name">{itemLabel(item)}</span>
               </li>
             ))}
           </ul>

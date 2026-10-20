@@ -53,7 +53,7 @@ export default function RiderProfile() {
           vehicle_type: res.rider.vehicle_type || '',
           mobile_number: res.rider.mobile_number || '',
         });
-      } catch (err) {
+      } catch {
         setError('Failed to load profile.');
       } finally {
         setLoading(false);

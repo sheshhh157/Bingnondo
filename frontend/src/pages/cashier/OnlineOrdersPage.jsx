@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ordersAPI, paymentsAPI } from '../../services/cashierApi';
 import { connectSocket } from '../../services/socket';
-import { currency } from '../../utils/format';
+import { currency, itemLabel } from '../../utils/format';
 import Pagination from '../../components/Pagination';
 import '../../styles/OnlineOrdersPage.css';
 
@@ -519,7 +519,7 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
                 {(order.items || []).map((item, i) => (
                   <li key={i} className="oo-detail__item">
                     <span className="oo-detail__item-qty">{item.quantity}×</span>
-                    <span className="oo-detail__item-name">{item.name}</span>
+                    <span className="oo-detail__item-name">{itemLabel(item)}</span>
                     <span className="oo-detail__item-price">{currency(item.unit_price * item.quantity)}</span>
                   </li>
                 ))}

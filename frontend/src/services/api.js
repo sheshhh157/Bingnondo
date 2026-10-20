@@ -190,11 +190,6 @@ export const kitchenAPI = {
 
   updateOrderStatus: (orderId, status) =>
     apiClient.patch(`/api/kitchen/orders/${orderId}/status`, { status }),
-
-  getAlerts: () => apiClient.get('/api/kitchen/alerts'),
-
-  acknowledgeAlert: (alertId) =>
-    apiClient.post(`/api/kitchen/alerts/${alertId}/acknowledge`),
 };
 
 // ─── ADMIN API ────────────────────────────────────────────────────────────────
@@ -297,6 +292,54 @@ export const adminAPI = {
       method: 'DELETE',
     }),
 
+  setCategoryVariants: (id, groupIds) =>
+    apiRequest(`/admin/system-settings/menu-categories/${id}/variants`, {
+      method: 'PUT',
+      body: JSON.stringify({ group_ids: groupIds }),
+    }),
+
+  // ── Item Variants (reusable variant groups) ─────────────────────────────────
+  listVariantGroups: () =>
+    apiRequest('/admin/system-settings/variants'),
+
+createVariantGroup: (name, maxOptions) =>
+  apiRequest('/admin/system-settings/variants', {
+    method: 'POST',
+    body: JSON.stringify({ name, max_options: maxOptions }),
+  }),
+
+updateVariantGroup: (id, name, maxOptions) =>
+  apiRequest(`/admin/system-settings/variants/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name, max_options: maxOptions }),
+  }),
+
+  deleteVariantGroup: (id) =>
+    apiRequest(`/admin/system-settings/variants/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // ── Notifications ───────────────────────────────────────────────────────────
+  getNotifications: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.limit)      q.set('limit', params.limit);
+    if (params.categories) q.set('categories', params.categories);
+    const qs = q.toString();
+    return apiRequest(`/admin/notifications${qs ? `?${qs}` : ''}`);
+  },
+
+  markNotificationsSeen: () =>
+    apiRequest('/admin/notifications/seen', { method: 'POST' }),
+
+  getNotificationSettings: () =>
+    apiRequest('/admin/system-settings/notifications'),
+
+  saveNotificationSettings: (categories) =>
+    apiRequest('/admin/system-settings/notifications', {
+      method: 'PUT',
+      body: JSON.stringify({ categories }),
+    }),
+
   // ── Customer Restrictions ────────────────────────────────────────────────────
   listCustomerRestrictions: (params = {}) => {
     const q = new URLSearchParams();
@@ -304,6 +347,8 @@ export const adminAPI = {
     if (params.limit)             q.set('limit',             params.limit);
     if (params.search)            q.set('search',            params.search);
     if (params.restriction_level) q.set('restriction_level', params.restriction_level);
+    if (params.account_status)    q.set('account_status',    params.account_status);
+    if (params.flagged)           q.set('flagged',           '1');
     const qs = q.toString();
     return apiRequest(`/admin/customer-restrictions${qs ? `?${qs}` : ''}`);
   },
@@ -315,6 +360,12 @@ export const adminAPI = {
     apiRequest(`/admin/customer-restrictions/${customerId}`, {
       method: 'PATCH',
       body: JSON.stringify({ restriction_level, reason }),
+    }),
+
+  updateCustomerAccountStatus: (customerId, { status, reason }) =>
+    apiRequest(`/admin/customer-restrictions/${customerId}/account-status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, reason }),
     }),
 
 };

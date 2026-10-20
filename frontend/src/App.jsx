@@ -6,6 +6,7 @@ import { ToastProvider } from './context/ToastContext';
 
 // Auth
 import Login from './pages/auth/Login';
+import ForgotPassword from './pages/auth/ForgotPassword';
 
 // Cashier
 import CashierLayout from './pages/cashier/CashierLayout';
@@ -94,6 +95,7 @@ export default function App() {
             <Routes>
               {/* ── Shared login (Staff + Rider) ── */}
               <Route path="/login" element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
 
               {/* ── Cashier ── */}
               <Route

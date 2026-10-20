@@ -44,17 +44,6 @@ function IconLogout({ size = 17 }) {
     </svg>
   );
 }
-function IconMotorbike({ size = 22 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="5.5" cy="17.5" r="3.5"/>
-      <circle cx="18.5" cy="17.5" r="3.5"/>
-      <path d="M15 6H9l-3 6 3 3h9l-3-6z"/>
-      <path d="M9 6l1.5-4h5L17 6"/>
-    </svg>
-  );
-}
 
 const NAV_ITEMS = [
   { to: '/rider/active',  label: 'Active',  Icon: IconDelivery },

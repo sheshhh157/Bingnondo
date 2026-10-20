@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { ordersAPI } from '../../../services/cashierApi';
-import { currency } from '../../../utils/format';
+import { currency, itemLabel } from '../../../utils/format';
 import Pagination from '../../../components/Pagination';
 import '../../../styles/TransactionHistory.css';
 
@@ -68,7 +68,7 @@ const itemsSummary = (order) => {
   const items = order.items || [];
   if (items.length === 0) return '—';
   const text = items
-    .map((i) => `${i.quantity}× ${i.name || i.menu_item?.name}`)
+    .map((i) => `${i.quantity}× ${itemLabel(i)}`)
     .filter(Boolean)
     .join(', ');
   return text || '—';
@@ -99,7 +99,7 @@ function OrderDetail({ order }) {
     <>
       {(order.items || []).map((item, idx) => (
         <div key={idx} className="th-expanded__line">
-          <span>{item.name || item.menu_item?.name} ×{item.quantity}</span>
+          <span>{itemLabel(item)} ×{item.quantity}</span>
           <span>{currency((item.unit_price || item.price || 0) * item.quantity)}</span>
         </div>
       ))}
@@ -395,7 +395,7 @@ export default function TransactionHistory() {
       list = list.filter((o) => {
         const num = String(o.order_number || o.id).toLowerCase();
         const items = (o.items || [])
-          .map((i) => (i.name || i.menu_item?.name || '').toLowerCase())
+          .map((i) => itemLabel(i).toLowerCase())
           .join(' ');
         return num.includes(q) || items.includes(q);
       });
@@ -638,7 +638,7 @@ export default function TransactionHistory() {
                             <span className="th-order-num">#{order.order_number || order.id}</span>
                           </td>
                           <td className="th-cell--items">
-                            {(order.items || []).slice(0, 2).map((i) => i.name || i.menu_item?.name).filter(Boolean).join(', ')}
+                            {(order.items || []).slice(0, 2).map((i) => itemLabel(i)).filter(Boolean).join(', ')}
                             {(order.items || []).length > 2 && <span className="th-more"> +{order.items.length - 2}</span>}
                             {(!order.items || order.items.length === 0) && <span className="th-muted">—</span>}
                           </td>
