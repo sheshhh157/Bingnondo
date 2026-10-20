@@ -1,10 +1,6 @@
 const db = require('../../config/db');
 const socketHub = require('../../sockets');
-// Shared transition rules. The kitchen used to hand-enforce its own
-// `confirmed -> preparing -> ready` chain here, which could drift from the
-// rules in the orders module. See orders/status-transitions.js.
 const { canTransition } = require('../orders/status-transitions');
-// Flowchart 2: preparing an order consumes its ingredients. See deduction.js.
 const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
 // Auto-hand a dispatchable online order to a free rider. See assignment.js.
 const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('../rider/assignment');
@@ -147,6 +143,12 @@ async function acknowledgeOrder(req, res, next) {
     );
     emitIngredientUsage(usage);
 
+    // Bridge to customer app
+    try {
+      const bridge = require('../../utils/internalBridge');
+      bridge.notifyOrderStatus(order.id, nextStatus);
+    } catch (_) {}
+
     res.json(order);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -264,6 +266,12 @@ async function updateKitchenOrderStatus(req, res, next) {
     emitAssignedDeliveries(assigned);
 
     emitIngredientUsage(usage);
+
+    // Bridge to customer app (notify on status change)
+    try {
+      const bridge = require('../../utils/internalBridge');
+      bridge.notifyOrderStatus(order.id, order.status);
+    } catch (_) {}
 
     res.json(order);
   } catch (err) {

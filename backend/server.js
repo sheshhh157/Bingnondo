@@ -30,6 +30,9 @@ const riderRoutes         = require('./src/modules/rider/rider.routes');      //
 const menuCtrl   = require('./src/modules/menu/menu.controller');
 const socketHub  = require('./src/sockets');
 
+// Idempotent schema top-ups (address pin columns) — shared DB with the app backend
+const ensureSchema = require('./src/config/ensureSchema');
+
 const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, {
@@ -136,3 +139,8 @@ server.listen(PORT, () => {
   console.log(`Settings:     GET/PUT              /api/admin/system-settings/business-hours`);
   console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);
 });
+
+// Idempotent schema top-ups (address pin columns). Non-fatal if it fails.
+ensureSchema().catch((err) =>
+  console.error('[schema] ensureSchema failed:', err.message)
+);

@@ -93,7 +93,7 @@ exports.listDeliveries = async (req, res) => {
          o.created_at,
          COALESCE(NULLIF(TRIM(CONCAT_WS(' ', c.first_name, c.last_name)), ''), c.email) AS customer_name,
          c.mobile_number   AS customer_contact,
-         c.address         AS customer_address,
+         COALESCE(o.delivery_address, c.address) AS customer_address,
          COALESCE(items.items, '[]'::json) AS order_items
        FROM deliveries d
        JOIN orders o         ON o.id = d.order_id

@@ -282,6 +282,13 @@ async function verifyPayment(req, res, next) {
 
       // 6. Notify the customer — payment verified, order confirmed
       socketHub.emitPaymentVerified({ orderId, orderNumber: order.order_number, customerId: order.customer_id });
+
+      // Bridge: create notification in customer app backend + emit in-app push
+      try {
+        const bridge = require('../../utils/internalBridge');
+        bridge.notifyPaymentStatus(orderId, 'approved');
+        bridge.notifyOrderStatus(orderId, 'confirmed');
+      } catch (_) {}
     }
 
     res.json({ success: true, message: 'Payment verified. Order sent to kitchen.' });
@@ -357,6 +364,12 @@ async function rejectPayment(req, res, next) {
       customerId: customer_id,
       reason: reason.trim(),
     });
+
+    // Bridge to customer app
+    try {
+      const bridge = require('../../utils/internalBridge');
+      bridge.notifyPaymentStatus(orderId, 'rejected', { reason: reason.trim() });
+    } catch (_) {}
 
     res.json({ success: true, message: 'Receipt rejected. Customer notified to re-upload.' });
   } catch (err) {

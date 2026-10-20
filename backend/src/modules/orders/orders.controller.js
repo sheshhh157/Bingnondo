@@ -2,8 +2,9 @@ const db = require('../../config/db');
 const socketHub = require('../../sockets');
 const { createKitchenAlert, announceKitchenAlert } = require('../kitchen/kitchen-alert');
 const { ALL_STATUSES, isKnownStatus, canTransition } = require('./status-transitions');
-// Flowchart 2: preparing an order consumes its ingredients. See deduction.js.
 const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
+const INTERNAL_BRIDGE_URL = process.env.INTERNAL_BRIDGE_URL || 'http://localhost:3000/api/internal';
+const INTERNAL_API_KEY     = process.env.INTERNAL_API_KEY;
 
 // ─── Helper: format order number ─────────────────────────────────────────────
 function orderNumber(id) {
@@ -197,7 +198,7 @@ const LATEST_PAYMENT_JOIN = `
   LEFT JOIN LATERAL (
     SELECT status, method, paid_at,
            gcash_ref_number, receipt_image_url, receipt_uploaded_at,
-           rejection_reason, verified_by, verified_at
+           rejection_reason, verified_by, verified_at, gcash_amount_sent
     FROM payments
     WHERE order_id = o.id
     ORDER BY paid_at DESC NULLS LAST, id DESC
@@ -587,7 +588,7 @@ async function getOnlineOrders(req, res, next) {
          o.customer_id,
          COALESCE(NULLIF(TRIM(c.first_name || ' ' || c.last_name), ''), c.email) AS customer_name,
          c.mobile_number AS customer_mobile,
-         c.address       AS customer_address,
+         COALESCE(o.delivery_address, c.address) AS customer_address,
 
          p.method              AS payment_method,
          p.status              AS payment_status,
@@ -596,6 +597,7 @@ async function getOnlineOrders(req, res, next) {
          p.receipt_image_url,
          p.receipt_uploaded_at,
          p.rejection_reason,
+         p.gcash_amount_sent::float AS gcash_amount_sent,
 
          d.delivery_preference,
          d.status        AS delivery_status,
@@ -624,7 +626,7 @@ async function getOnlineOrders(req, res, next) {
        JOIN menu_items  mi ON mi.id = oi.menu_item_id
        WHERE ${conditions.join(' AND ')}
        GROUP BY o.id, c.id, p.method, p.status, p.paid_at, p.gcash_ref_number,
-                p.receipt_image_url, p.receipt_uploaded_at, p.rejection_reason,
+                p.receipt_image_url, p.receipt_uploaded_at, p.rejection_reason, p.gcash_amount_sent,
                 d.delivery_preference, d.status, d.rider_name, d.rider_contact,
                 d.assigned_at, d.delivered_at
        ORDER BY o.created_at DESC
@@ -749,11 +751,16 @@ async function updateOrderStatus(req, res, next) {
     order.order_number = orderNumber(order.id);
     order.total_amount = parseFloat(order.total_amount);
 
-    // Emit status update to all relevant rooms
     socketHub.emitOrderStatus({ orderId: order.id, orderNumber: order.order_number, status });
     if (status === 'ready') {
       socketHub.emitOrderReady({ orderId: order.id, orderNumber: order.order_number });
     }
+
+    // Bridge to customer app: push notification + badge
+    try {
+      const bridge = require('../../utils/internalBridge');
+      bridge.notifyOrderStatus(order.id, status);
+    } catch (_) {}
     emitIngredientUsage(usage);
 
     res.json(order);
@@ -827,6 +834,12 @@ async function cancelOrder(req, res, next) {
     await client.query('COMMIT');
 
     socketHub.emitOrderStatus({ orderId: rows[0].id, orderNumber: orderNumber(rows[0].id), status: 'cancelled' });
+
+    // Bridge to customer app
+    try {
+      const bridge = require('../../utils/internalBridge');
+      bridge.notifyOrderStatus(rows[0].id, 'cancelled');
+    } catch (_) {}
 
     res.json({ message: 'Order cancelled.' });
   } catch (err) {

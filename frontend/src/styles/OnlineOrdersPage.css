@@ -575,6 +575,38 @@
 
 .oo-detail__row--rejection dd { color: #B91C1C; }
 
+/* GCash amount-sent indicators */
+.oo-detail__shortpay {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 7px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: #FEF2F2;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
+  vertical-align: middle;
+  white-space: nowrap;
+  animation: oo-shortpay-pop 0.2s ease;
+}
+
+@keyframes oo-shortpay-pop {
+  from { transform: scale(0.85); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+.oo-detail__unread {
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--color-muted-foreground);
+}
+
 /* Delivery block */
 .oo-detail__delivery {
   margin-top: 14px;

@@ -38,7 +38,7 @@ exports.getCurrentDelivery = async (req, res) => {
           c.first_name,
           c.last_name,
           c.mobile_number     AS customer_mobile,
-          c.address           AS delivery_address
+          COALESCE(o.delivery_address, c.address) AS delivery_address
        FROM deliveries d
        JOIN orders     o ON o.id = d.order_id
        LEFT JOIN customers c ON c.id = o.customer_id
@@ -245,7 +245,7 @@ exports.updateDeliveryStatus = async (req, res) => {
             c.first_name,
             c.last_name,
             c.mobile_number AS customer_mobile,
-            c.address       AS delivery_address
+            COALESCE(o.delivery_address, c.address) AS delivery_address
            FROM deliveries d
            JOIN orders     o ON o.id = d.order_id
            LEFT JOIN customers c ON c.id = o.customer_id
@@ -340,7 +340,7 @@ exports.getDeliveryHistory = async (req, res) => {
           o.total_amount,
           c.first_name,
           c.last_name,
-          c.address       AS delivery_address
+          COALESCE(o.delivery_address, c.address) AS delivery_address
          FROM deliveries d
          JOIN orders     o ON o.id = d.order_id
          LEFT JOIN customers c ON c.id = o.customer_id

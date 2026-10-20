@@ -139,6 +139,17 @@ exports.createRider = async (req, res) => {
       });
     }
 
+    // Full name must be unique among riders (case/whitespace-insensitive)
+    const { rows: nameTaken } = await client.query(
+      `SELECT id FROM riders
+        WHERE lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
+            = lower(regexp_replace(btrim($1),        '[[:space:]]+', ' ', 'g'))`,
+      [full_name]
+    );
+    if (nameTaken.length > 0) {
+      return res.status(409).json({ message: 'That name is already in use by another rider.' });
+    }
+
     // A rider cannot sign in without a password and there is no self-service
     // setup flow, so a missing one must fail loudly rather than creating a
     // locked-out account with a NULL hash.
@@ -219,6 +230,18 @@ exports.updateRider = async (req, res) => {
         [email.trim(), riderId]
       );
       if (dup.length) return res.status(409).json({ message: 'Email already in use.' });
+    }
+
+    // Full name must stay unique among riders, ignoring this rider.
+    if (full_name?.trim() && full_name.trim() !== current[0].full_name) {
+      const { rows: dup } = await client.query(
+        `SELECT id FROM riders
+          WHERE id <> $2
+            AND lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
+              = lower(regexp_replace(btrim($1),        '[[:space:]]+', ' ', 'g'))`,
+        [full_name.trim(), riderId]
+      );
+      if (dup.length) return res.status(409).json({ message: 'That name is already in use by another rider.' });
     }
 
     await client.query('BEGIN');

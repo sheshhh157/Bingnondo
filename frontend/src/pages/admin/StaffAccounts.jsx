@@ -23,6 +23,17 @@ const ROLE_DESC = {
   kitchen_staff: 'Kitchen Staff: sees the kitchen queue and updates order progress.',
 };
 
+// ── name uniqueness ───────────────────────────────────────────────────────────
+// Staff names must be unique. Compared case- and whitespace-insensitively so
+// "Maria  Santos" and "maria santos" are treated as the same person.
+const normalizeName = (name) => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+function isNameTaken(name, accounts, selfId) {
+  const normalized = normalizeName(name);
+  if (!normalized) return false;
+  return accounts.some((a) => a.id !== selfId && normalizeName(a.full_name) === normalized);
+}
+
 // ── tiny icons ────────────────────────────────────────────────────────────────
 const PlusIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
@@ -71,7 +82,7 @@ const KebabIcon = () => (
 );
 
 // ── Create account modal ──────────────────────────────────────────────────────
-function CreateModal({ open, onClose, onCreated, toast }) {
+function CreateModal({ open, onClose, onCreated, toast, accounts = [] }) {
   const [form, setForm] = useState({ full_name: '', email: '', role: 'cashier', temp_password: '' });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -80,7 +91,8 @@ function CreateModal({ open, onClose, onCreated, toast }) {
 
   function validate() {
     const e = {};
-    if (!form.full_name.trim())        e.full_name     = 'Full name is required.';
+    if (!form.full_name.trim())                   e.full_name     = 'Full name is required.';
+    else if (isNameTaken(form.full_name, accounts)) e.full_name   = 'This name is already in use.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email.';
     if (!form.role)                    e.role          = 'Select a role.';
     if (form.temp_password.length < 8) e.temp_password = 'Minimum 8 characters.';
@@ -136,7 +148,7 @@ function CreateModal({ open, onClose, onCreated, toast }) {
 }
 
 // ── Edit account modal ────────────────────────────────────────────────────────
-function EditModal({ account, onClose, onSaved, toast }) {
+function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
   const [form, setForm] = useState({
     full_name: account.full_name || '',
     email:     account.email || '',
@@ -150,6 +162,7 @@ function EditModal({ account, onClose, onSaved, toast }) {
   function validate() {
     const e = {};
     if (!form.full_name.trim()) e.full_name = 'Full name is required.';
+    else if (isNameTaken(form.full_name, accounts, account.id)) e.full_name = 'This name is already in use.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email.';
     if (!form.role) e.role = 'Select a role.';
     setErrors(e); return Object.keys(e).length === 0;
@@ -526,7 +539,7 @@ export default function StaffAccounts() {
       </div>
 
       {/* Modals */}
-      <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} toast={toast} />
+      <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} toast={toast} accounts={accounts} />
       {editTarget && (
         <EditModal
           key={editTarget.id}
@@ -534,6 +547,7 @@ export default function StaffAccounts() {
           onClose={() => setEditTarget(null)}
           onSaved={load}
           toast={toast}
+          accounts={accounts}
         />
       )}
       <ResetPasswordModal open={!!resetTarget} onClose={() => setResetTarget(null)} account={resetTarget} toast={toast} />
