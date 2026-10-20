@@ -42,6 +42,12 @@ const GridIcon = () => (
   </svg>
 );
 
+const ChevronIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="6 9 12 15 18 9"/>
+  </svg>
+);
+
 // ── Section wrapper ──────────────────────────────────────────────────
 function Section({ title, subtitle, action, children }) {
   return (
@@ -92,6 +98,64 @@ function BusinessHours({ hours, onChange }) {
 // Full CRUD over the master category list: add, inline rename, delete, and
 // toggle which global variant groups the category offers.
 // categories: [{ id, name, item_count, variant_group_ids }]
+
+// Compact disclosure replacing the old chip row: collapses to a one-line
+// summary ("3 of 5 variants") and expands inline to a toggle checklist, so a
+// category row stays short no matter how many variant groups exist.
+function CategoryVariantSelect({ groups, selectedIds, onToggle, disabled, categoryName }) {
+  const [open, setOpen] = useState(false);
+  const selected = selectedIds || [];
+  const count = groups.filter(g => selected.includes(g.id)).length;
+  const summary = groups.length === 0
+    ? 'No variants'
+    : count === 0
+      ? 'None selected'
+      : `${count} of ${groups.length} variant${groups.length === 1 ? '' : 's'}`;
+  const panelId = `sys-var-panel-${categoryName.replace(/\s+/g, '-').toLowerCase()}`;
+
+  return (
+    <div className={`sys-var-select${open ? ' is-open' : ''}`}>
+      <button
+        type="button"
+        className="sys-var-select__trigger"
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-haspopup="listbox"
+        disabled={disabled}
+        onClick={() => setOpen(v => !v)}
+        onKeyDown={e => { if (e.key === 'Escape' && open) { e.preventDefault(); setOpen(false); } }}
+      >
+        <span className="sys-var-select__label">Variant groups</span>
+        <span className="sys-var-select__summary">{summary}</span>
+        <span className="sys-var-select__chevron"><ChevronIcon /></span>
+      </button>
+      <div className="sys-var-select__panel" id={panelId} role="listbox" aria-multiselectable="true">
+        <div className="sys-var-select__panel-inner">
+          {groups.map(g => {
+            const on = selected.includes(g.id);
+            return (
+              <button
+                key={g.id}
+                type="button"
+                role="option"
+                aria-selected={on}
+                className={`sys-var-opt${on ? ' is-on' : ''}`}
+                disabled={disabled}
+                onClick={() => onToggle(g.id, on)}
+                title={on ? `${g.name} is offered — click to hide` : `${g.name} is not offered — click to offer`}
+              >
+                <span className="sys-var-opt__box">{on && <CheckIcon />}</span>
+                <span className="sys-var-opt__name">{g.name}</span>
+                <span className="sys-var-opt__meta">{g.max_options} option{g.max_options === 1 ? '' : 's'} max</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CategoryManager({ categories, variantGroups, onRemove, onRename, onToggleVariants, busyToggleId }) {
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState('');
@@ -166,25 +230,13 @@ function CategoryManager({ categories, variantGroups, onRemove, onRename, onTogg
                     {variantGroups.length === 0
                       ? <p className="sys-hint-inline">Add a variant group above to offer it here.</p>
                       : (
-                        <div className="ap-cat-variants">
-                          {variantGroups.map(g => {
-                            const on = (c.variant_group_ids || []).includes(g.id);
-                            return (
-                              <button
-                                key={g.id}
-                                type="button"
-                                className={`ap-cat-variant-chip ${on ? 'is-on' : 'is-off'}`}
-                                disabled={busyToggleId === c.id}
-                                aria-pressed={on}
-                                onClick={() => onToggleVariants(c, g.id, !on)}
-                                title={on ? `${g.name} is offered — click to hide` : `${g.name} is not offered — click to offer`}
-                              >
-                                <span className="ap-cat-variant-chip__icon">{on ? <CheckIcon /> : <PlusIcon size={11} stroke={3} />}</span>
-                                {g.name}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        <CategoryVariantSelect
+                          groups={variantGroups}
+                          selectedIds={c.variant_group_ids}
+                          onToggle={(gid, on) => onToggleVariants(c, gid, !on)}
+                          disabled={busyToggleId === c.id}
+                          categoryName={c.name}
+                        />
                       )}
                   </div>
                   <div className="ap-list-row__actions">
@@ -268,7 +320,7 @@ function validateVariantGroup(name, maxOptions) {
   return null;
 }
 
-function VariantGroupList({ groups, usageOf, onEdit, onDelete }) {
+function VariantGroupList({ groups, usageOf, onEdit, onDelete, flashId }) {
   if (groups.length === 0) {
     return (
       <div className="sys-empty">
@@ -285,7 +337,7 @@ function VariantGroupList({ groups, usageOf, onEdit, onDelete }) {
       {groups.map(g => {
         const used = usageOf(g.id);
         return (
-          <div key={g.id} className="ap-list-row ap-list-row--group">
+          <div key={g.id} className={`ap-list-row ap-list-row--group${g.id === flashId ? ' is-flash' : ''}`}>
             <div className="ap-list-row__info">
               <span className="ap-list-row__name">{g.name}</span>
               <span className="sys-pill">{g.max_options} option{g.max_options === 1 ? '' : 's'} max</span>
@@ -325,7 +377,7 @@ function VariantGroupModal({ group, onClose, onSaved, toast }) {
       const res = group
         ? await adminAPI.updateVariantGroup(group.id, cleanName, maxNum)
         : await adminAPI.createVariantGroup(cleanName, maxNum);
-      const saved = res.data ?? res;
+      const saved = res.data?.data ?? res.data;
       onSaved(saved);
       toast.success(group ? `Variant "${saved.name}" saved.` : `Variant "${saved.name}" created.`);
       onClose();
@@ -404,6 +456,7 @@ export default function SystemSettings() {
   const [categories, setCategories] = useState([]);
   const [addCatOpen, setAddCatOpen] = useState(false);
   const [variantGroups, setVariantGroups] = useState([]);
+  const [variantFlashId, setVariantFlashId] = useState(null);
   const [variantModal, setVariantModal] = useState(null);   // null | { group: null | group }
   const [deleteVariant, setDeleteVariant] = useState(null);
   const [deletingVariant, setDeletingVariant] = useState(false);
@@ -542,6 +595,8 @@ export default function SystemSettings() {
         ? prev.map(g => (g.id === saved.id ? saved : g))
         : [...prev, saved]
     ));
+    setVariantFlashId(saved.id);
+    setTimeout(() => setVariantFlashId(cur => (cur === saved.id ? null : cur)), 1200);
   }
 
   async function handleDeleteVariant() {
@@ -618,12 +673,13 @@ export default function SystemSettings() {
                 Each group is a name and a maximum number of options. Option names
                 and prices are entered per menu item.
               </p>
-              <VariantGroupList
-                groups={variantGroups}
-                usageOf={(id)=>categories.filter(c => (c.variant_group_ids || []).includes(id)).length}
-                onEdit={(g)=>setVariantModal({ group: g })}
-                onDelete={setDeleteVariant}
-              />
+                  <VariantGroupList
+                    groups={variantGroups}
+                    usageOf={(id)=>categories.filter(c => (c.variant_group_ids || []).includes(id)).length}
+                    onEdit={(g)=>setVariantModal({ group: g })}
+                    onDelete={setDeleteVariant}
+                    flashId={variantFlashId}
+                  />
             </div>
 
             <div className="sys-subsection">
