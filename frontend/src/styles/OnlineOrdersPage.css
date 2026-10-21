@@ -575,6 +575,74 @@
 
 .oo-detail__row--rejection dd { color: #B91C1C; }
 
+/* ── Re-submitted badge (inline in order row summary bar) ──────────────────── */
+.oo-resubmit-badge {
+  display:         inline-flex;
+  align-items:     center;
+  gap:             4px;
+  padding:         2px 8px;
+  border-radius:   999px;
+  font-size:       11px;
+  font-weight:     700;
+  letter-spacing:  0.3px;
+  color:           #92400e;          /* amber-800 */
+  background:      #fef3c7;          /* amber-100 */
+  border:          1.5px solid #f59e0b; /* amber-400 */
+  white-space:     nowrap;
+  vertical-align:  middle;
+  animation:       oo-resubmit-pulse 2s ease-in-out 3; /* pulse 3× to grab attention */
+}
+
+.oo-resubmit-badge svg {
+  flex-shrink: 0;
+  color: #d97706; /* amber-600 */
+}
+
+@keyframes oo-resubmit-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+  50%       { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.35); }
+}
+
+/* ── Re-submitted detail rows (inside expanded order card) ─────────────────── */
+.oo-detail__row--resubmit {
+  background:    #fffbeb;            /* amber-50 */
+  border-radius: 6px;
+  padding:       6px 8px;
+  border:        1px solid #fde68a; /* amber-200 */
+  margin-bottom: 4px;
+}
+
+.oo-detail__row--resubmit dt {
+  color:       #92400e;             /* amber-800 */
+  font-weight: 700;
+}
+
+.oo-detail__row--resubmit dd {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+  flex-wrap:   wrap;
+}
+
+/* Time of re-submission */
+.oo-detail__resubmit-time {
+  color:       #78350f;             /* amber-900 */
+  font-weight: 600;
+}
+
+/* "Nx rejected before" pill */
+.oo-detail__rejection-count {
+  display:       inline-flex;
+  align-items:   center;
+  padding:       1px 7px;
+  border-radius: 999px;
+  font-size:     11px;
+  font-weight:   700;
+  color:         #991b1b;           /* red-800 */
+  background:    #fee2e2;           /* red-100 */
+  border:        1px solid #fca5a5; /* red-300 */
+}
+
 /* GCash amount-sent indicators */
 .oo-detail__shortpay {
   display: inline-flex;
@@ -705,6 +773,12 @@
 }
 
 .oo-detail__note--muted { color: var(--color-muted-foreground); }
+
+/* Rejected receipt — locked, waiting on the customer to re-upload. */
+.oo-detail__note--locked {
+  color: #b91c1c; /* red-700 */
+  font-weight: 600;
+}
 
 .oo-detail__total {
   display: flex;
@@ -1193,4 +1267,107 @@
     animation: none;
   }
   .oo-row__bar, .oo-tab, .oo-chip, .oo-btn { transition: none; }
+}
+/* ── Two-receipt thumbnails wrapper ───────────────────────────────────────── */
+.oo-detail__receipts {
+  display:   flex;
+  gap:       12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* Rejected receipt thumbnail — red-tinted border */
+.oo-detail__receipt--rejected {
+  border-color: #fca5a5 !important; /* red-300 */
+  opacity: 0.85;
+}
+.oo-detail__receipt--rejected:hover {
+  border-color: #ef4444 !important; /* red-500 */
+  opacity: 1;
+}
+
+/* Rejected receipt label inside thumbnail */
+.oo-detail__receipt-label--rejected {
+  color:      #b91c1c !important; /* red-700 */
+  background: #fee2e2 !important; /* red-100 */
+}
+
+/* ── Lightbox: side-by-side compare layout ────────────────────────────────── */
+.oo-lightbox__compare {
+  display:        flex;
+  align-items:    flex-start;
+  gap:            14px;
+  width:          fit-content;   /* hug the two receipts instead of spreading apart */
+  max-width:      min(95vw, 1100px);
+  max-height:     90vh;
+  background:     #1a1a2e;
+  border-radius:  12px;
+  overflow:       hidden;
+}
+
+.oo-lightbox__compare-pane {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;        /* receipt centred inside its own column */
+  flex:           0 1 auto;
+  min-width:      0;
+  max-width:      calc((min(95vw, 1100px) - 14px) / 2);
+  max-height:     90vh;
+  overflow-y:     auto;
+}
+
+/* Each receipt must stay inside its own column so the two never collide. */
+.oo-lightbox__compare .oo-lightbox__img {
+  display:     block;
+  width:       auto;
+  height:      auto;
+  max-width:   100%;
+  max-height:  82vh;
+}
+
+.oo-lightbox__compare-label {
+  padding:        10px 16px;
+  font-size:      13px;
+  font-weight:    700;
+  letter-spacing: 0.3px;
+  text-align:     center;
+  align-self:     stretch;
+  width:          100%;
+  position:       sticky;
+  top:            0;
+  z-index:        1;
+}
+
+.oo-lightbox__compare-label--rejected {
+  background: #7f1d1d; /* red-900 */
+  color:      #fecaca; /* red-200 */
+}
+
+.oo-lightbox__compare-label--new {
+  background: #14532d; /* green-900 */
+  color:      #bbf7d0; /* green-200 */
+}
+
+.oo-lightbox__compare-divider {
+  width:      2px;
+  background: rgba(255,255,255,0.15);
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+/* On mobile: stack vertically instead of side by side */
+@media (max-width: 640px) {
+  .oo-lightbox__compare {
+    flex-direction: column;
+    width:          auto;
+    max-height:     95vh;
+    overflow-y:     auto;
+  }
+  .oo-lightbox__compare-pane {
+    max-width:      100%;
+  }
+  .oo-lightbox__compare-divider {
+    width:  100%;
+    height: 2px;
+  }
 }

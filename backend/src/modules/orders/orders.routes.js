@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
-const { authenticateToken, requireRoles, requireStaff } = require('../../middleware/auth.middleware');
+const { authenticateToken, requireRoles, requireStaff, requireCustomer } = require('../../middleware/auth.middleware');
+const { uploadReceipt } = require('../../config/cloudinary');
 const ctrl = require('./orders.controller');
 
 // All order routes require staff authentication
@@ -41,5 +42,14 @@ router.post('/:id/cancel', ...staffAuth, ctrl.cancelOrder);
 
 // PATCH /api/orders/:id/items — replace order items (cashier edited draft after confirm)
 router.patch('/:id/items', ...canOrder, ctrl.updateOrderItems);
+
+// POST /api/orders/:id/reupload-receipt — customer re-uploads after rejection
+// Uses customer JWT (not staff), multipart/form-data field: 'receipt'
+router.post(
+  '/:id/reupload-receipt',
+  requireCustomer,
+  uploadReceipt.single('receipt'),
+  ctrl.reuploadReceipt,
+);
 
 module.exports = router;

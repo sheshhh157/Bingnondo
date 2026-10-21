@@ -239,7 +239,8 @@ const LATEST_PAYMENT_JOIN = `
   LEFT JOIN LATERAL (
     SELECT status, method, paid_at,
            gcash_ref_number, receipt_image_url, receipt_uploaded_at,
-           rejection_reason, verified_by, verified_at, gcash_amount_sent
+           rejection_reason, verified_by, verified_at, gcash_amount_sent,
+           resubmitted_at, rejection_count, previous_receipt_image_url
     FROM payments
     WHERE order_id = o.id
     ORDER BY paid_at DESC NULLS LAST, id DESC
@@ -642,6 +643,9 @@ async function getOnlineOrders(req, res, next) {
          p.receipt_uploaded_at,
          p.rejection_reason,
          p.gcash_amount_sent::float AS gcash_amount_sent,
+         p.resubmitted_at,
+         p.rejection_count,
+         p.previous_receipt_image_url,
 
          d.delivery_preference,
          d.status        AS delivery_status,
@@ -673,6 +677,7 @@ async function getOnlineOrders(req, res, next) {
        WHERE ${conditions.join(' AND ')}
        GROUP BY o.id, c.id, p.method, p.status, p.paid_at, p.gcash_ref_number,
                 p.receipt_image_url, p.receipt_uploaded_at, p.rejection_reason, p.gcash_amount_sent,
+                p.resubmitted_at, p.rejection_count, p.previous_receipt_image_url,
                 d.delivery_preference, d.status, d.rider_name, d.rider_contact,
                 d.assigned_at, d.delivered_at
        ORDER BY o.created_at DESC
@@ -977,7 +982,125 @@ async function updateOrderItems(req, res, next) {
   }
 }
 
-module.exports = { createOrder, getOrders, getOnlineOrders, getOrderTotals, getOrderReport, getOrderById, updateOrderStatus, cancelOrder, updateOrderItems };
+// ─── POST /api/orders/:id/reupload-receipt (customer-facing, cashier backend) ──
+// Called by the Flutter app when a customer re-uploads after rejection.
+// Saves the new receipt, re-runs OCR, resets payment to awaiting_verification,
+// increments rejection_count, and fires payment:resubmitted to staff via socket.
+async function reuploadReceipt(req, res, next) {
+  const Tesseract = require('tesseract.js');
+  const customerId = req.customerId;  // set by requireCustomer middleware
+  const orderId    = parseInt(req.params.id, 10);
+
+  if (!req.file) {
+    return res.status(422).json({ message: 'No receipt image uploaded.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    // ── Verify order belongs to this customer and is in rejected state ───
+    const { rows } = await client.query(
+      `SELECT o.id, o.customer_id,
+              p.id            AS payment_id,
+              p.status        AS payment_status,
+              p.rejection_count
+         FROM orders o
+         JOIN payments p ON p.order_id = o.id
+        WHERE o.id = $1 AND o.customer_id = $2
+        LIMIT 1`,
+      [orderId, customerId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+    const payment = rows[0];
+    if (payment.payment_status !== 'rejected') {
+      return res.status(409).json({
+        message: 'Receipt can only be re-uploaded when payment is rejected.',
+      });
+    }
+
+    const tempUrl       = req.file.path;
+    const rejectionCount = (payment.rejection_count || 0); // keep existing count (not incrementing yet — already counted when rejected)
+
+    // ── OCR ───────────────────────────────────────────────────────────────
+    let gcashRef      = null;
+    let gcashAmount   = null;
+    let ocrConfidence = 0;
+
+    try {
+      const { data } = await Tesseract.recognize(tempUrl, 'eng', { logger: () => {} });
+      const text     = data.text ?? '';
+      ocrConfidence  = Math.round(data.confidence ?? 0);
+
+      // Inline extractors (same patterns as payments.controller)
+      // ── ref ──
+      const cleaned = text.replace(/\s+/g, ' ').trim();
+      const refLabel = cleaned.match(/reference\s+number[:\s#]*([0-9][0-9 ]{7,20}[0-9])/i);
+      if (refLabel) {
+        gcashRef = refLabel[1].replace(/\s/g, '');
+      } else {
+        const noSpace = cleaned.replace(/([0-9]) ([0-9])/g, '$1$2').replace(/([0-9]) ([0-9])/g, '$1$2');
+        const m13 = noSpace.match(/\b([0-9]{13})\b/);
+        gcashRef = m13 ? m13[1] : (noSpace.match(/\b([0-9]{10,16})\b/) || [])[1] || null;
+      }
+      // ── amount ──
+      const amtLabel = cleaned.match(/\bamount\b[:\s]*[+\-]?\s*([0-9]{1,6}(?:[.,][0-9]{2})?)/i);
+      if (amtLabel) {
+        gcashAmount = parseFloat(amtLabel[1].replace(',', '.'));
+      } else {
+        const plusAmt = cleaned.match(/\+\s*([0-9]{1,6}\.[0-9]{2})\b/);
+        gcashAmount = plusAmt ? parseFloat(plusAmt[1]) : null;
+      }
+    } catch (ocrErr) {
+      console.error('[OCR] reupload-receipt OCR failed:', ocrErr.message);
+    }
+
+    // ── Update payment row ────────────────────────────────────────────────
+    await client.query(
+      `UPDATE payments
+          SET receipt_image_url   = $1,
+              gcash_ref_number    = $2,
+              gcash_amount_sent   = $3,
+              status              = 'awaiting_verification',
+              rejection_reason    = NULL,
+              rejected_at         = NULL,
+              resubmitted_at      = NOW(),
+              receipt_uploaded_at = NOW(),
+              verified_by         = NULL,
+              verified_at         = NULL
+        WHERE id = $4`,
+      [tempUrl, gcashRef, gcashAmount, payment.payment_id]
+    );
+
+    // ── Notify staff via socket ───────────────────────────────────────────
+    try {
+      socketHub.emitPaymentResubmitted({
+        orderId,
+        customerId,
+        gcashRefNumber:  gcashRef,
+        gcashAmountSent: gcashAmount,
+        rejectionCount,
+        resubmittedAt:   new Date().toISOString(),
+      });
+    } catch (_) { /* non-fatal */ }
+
+    return res.json({
+      temp_url:         tempUrl,
+      gcash_ref_number: gcashRef,
+      gcash_amount:     gcashAmount,
+      ocr_confidence:   ocrConfidence,
+      ref_found:        gcashRef    !== null,
+      amount_found:     gcashAmount !== null,
+    });
+  } catch (err) {
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { createOrder, getOrders, getOnlineOrders, getOrderTotals, getOrderReport, getOrderById, updateOrderStatus, cancelOrder, updateOrderItems, reuploadReceipt };
 
 // Internal helpers, exposed for tests. They hold the rules that decide which
 // orders count as revenue, so they are worth asserting directly — testing them

@@ -209,7 +209,17 @@ async function verifyPayment(req, res, next) {
       return res.status(409).json({ message: 'This payment has already been verified.' });
     }
 
-    if (!['pending', 'awaiting_verification', 'rejected'].includes(payment_status)) {
+    // A rejected receipt stays locked. Only a fresh upload from the customer
+    // (POST /api/orders/:id/reupload-receipt) puts the payment back into
+    // 'awaiting_verification', and only then can it be verified.
+    if (payment_status === 'rejected') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: 'This receipt was rejected. The customer must upload a new receipt before it can be verified.',
+      });
+    }
+
+    if (!['pending', 'awaiting_verification'].includes(payment_status)) {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: `Cannot verify a payment in '${payment_status}' state.` });
     }
@@ -350,10 +360,12 @@ async function rejectPayment(req, res, next) {
       return res.status(409).json({ message: `Cannot reject a payment in '${payment_status}' state.` });
     }
 
-    // Mark payment as rejected with the reason
+    // Mark payment as rejected — increment rejection_count so cashier can see repeat history
     await client.query(
       `UPDATE payments
-       SET status = 'rejected', rejection_reason = $1, rejected_at = NOW()
+       SET status = 'rejected', rejection_reason = $1, rejected_at = NOW(),
+           resubmitted_at = NULL,
+           rejection_count = COALESCE(rejection_count, 0) + 1
        WHERE id = $2`,
       [reason.trim(), payment_id]
     );
