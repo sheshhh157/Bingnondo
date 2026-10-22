@@ -45,14 +45,16 @@ async function storeOtp(contact, purpose, client = db) {
   const otp = generateOtp();
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-  // Invalidate older unused OTPs for same contact+purpose
+  // Invalidate older unused OTPs for same contact+purpose. A code that was
+  // already verified (but not yet redeemed for a reset) is invalidated too —
+  // only the newest code may be used.
   await client.query(
     `UPDATE otp_verifications
-     SET verified_at = NOW()
+     SET verified_at = NOW(),
+         consumed_at = NOW()
      WHERE contact = $1
        AND purpose = $2
-       AND verified_at IS NULL
-       AND expires_at > NOW()`,
+       AND consumed_at IS NULL`,
     [contact, purpose]
   );
 
@@ -114,6 +116,73 @@ async function verifyOtp(contact, otpCode, purpose, client = db) {
   }
 
   return { valid: true };
+}
+
+/**
+ * Consume an OTP for a password reset, tolerating an earlier verification.
+ *
+ * The mobile app's reset flow is two calls:
+ *   1. POST /api/auth/customer/verify-otp  { purpose: 'password_reset' }
+ *   2. POST /api/auth/reset-password        { otp, new_password }
+ *
+ * Step 1 already marks the code as verified, so step 2 would always fail with
+ * "already used". A verified code therefore stays redeemable — but only once.
+ * `consumed_at` records the redemption, so a replayed code is rejected even
+ * while it is still within its lifetime.
+ *
+ * The staff console calls /api/auth/reset-password directly with a code that
+ * was never verified; that path consumes the code here as well.
+ *
+ * @param {string} contact
+ * @param {string} otpCode
+ * @param {'password_reset'} purpose
+ * @param {import('pg').Pool|import('pg').PoolClient} [client]
+ * @returns {{ valid: boolean, alreadyVerified?: boolean, reason?: 'not_found'|'expired'|'already_used' }}
+ */
+async function consumeOtpForReset(contact, otpCode, purpose, client = db) {
+  const { rows } = await client.query(
+    `SELECT id, expires_at, verified_at, consumed_at
+       FROM otp_verifications
+      WHERE contact = $1
+        AND otp_code = $2
+        AND purpose = $3
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [contact, otpCode, purpose]
+  );
+
+  if (rows.length === 0) {
+    return { valid: false, reason: 'not_found' };
+  }
+
+  const record = rows[0];
+
+  // Already redeemed for a reset — single use, always.
+  if (record.consumed_at !== null && record.consumed_at !== undefined) {
+    return { valid: false, reason: 'already_used' };
+  }
+
+  if (new Date(record.expires_at) < new Date()) {
+    return { valid: false, reason: 'expired' };
+  }
+
+  // Verified by the app's verify-otp step (or consumed straight away by the
+  // staff console) — stamp the redemption so it cannot be replayed.
+  const consumed = await client.query(
+    `UPDATE otp_verifications
+        SET verified_at = NOW(),
+            consumed_at = NOW()
+      WHERE id = $1
+        AND consumed_at IS NULL
+      RETURNING id`,
+    [record.id]
+  );
+
+  if (consumed.rowCount === 0) {
+    return { valid: false, reason: 'already_used' };
+  }
+
+  return { valid: true, alreadyVerified: record.verified_at !== null };
 }
 
 /**
@@ -195,4 +264,4 @@ ${emailHeader}
   });
 }
 
-module.exports = { generateOtp, storeOtp, verifyOtp, sendOtpEmail, sendPasswordChangedEmail };
+module.exports = { generateOtp, storeOtp, verifyOtp, consumeOtpForReset, sendOtpEmail, sendPasswordChangedEmail };

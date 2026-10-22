@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const db = require('../../config/db');
 const {
   storeOtp,
-  verifyOtp,
+  consumeOtpForReset,
   sendOtpEmail,
   sendPasswordChangedEmail,
 } = require('./auth.otp');
@@ -27,8 +27,9 @@ function sanitizeRider(row) {
   return safe;
 }
 
-// Resolve which account (staff or rider) owns an email for password reset.
-// Mirrors the shared login resolution: staff first, then riders.
+// Resolve which account (staff, rider or customer) owns an email for password
+// reset. Mirrors the shared login resolution: staff first, then riders, then
+// customers — the mobile app uses the same forgot-password endpoint.
 async function findResetAccount(email, client = db) {
   const { rows: staffRows } = await client.query(
     "SELECT id FROM staff_accounts WHERE email = $1 AND status = 'active'",
@@ -46,10 +47,18 @@ async function findResetAccount(email, client = db) {
     return { type: 'rider', id: riderRows[0].id };
   }
 
+  const { rows: customerRows } = await client.query(
+    "SELECT id FROM customers WHERE email = $1 AND status != 'suspended' ORDER BY id LIMIT 1",
+    [email]
+  );
+  if (customerRows.length > 0) {
+    return { type: 'customer', id: customerRows[0].id };
+  }
+
   return null;
 }
 
-const RESET_TABLES = { staff: 'staff_accounts', rider: 'riders' };
+const RESET_TABLES = { staff: 'staff_accounts', rider: 'riders', customer: 'customers' };
 
 async function writeAuditLog(client, actorId, action, targetType, targetId, details = {}) {
   await client.query(
@@ -234,22 +243,33 @@ exports.forgotPassword = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // RESET PASSWORD
 // POST /api/auth/reset-password
+//
+// Body (the staff web console):
+//   { email, otp, newPassword, confirmPassword }
+// Body (the mobile app):
+//   { email, otp, new_password }
+//
+// Both are accepted: the field names differ per client, and the confirmation
+// field is optional because the app shows its own confirmation screen.
 // ─────────────────────────────────────────────────────────────────────────────
 exports.resetPassword = async (req, res) => {
   try {
-    const { email, otp, newPassword, confirmPassword } = req.body;
+    const { email, otp } = req.body || {};
+    const newPassword = req.body?.newPassword ?? req.body?.new_password;
+    const confirmPassword = req.body?.confirmPassword ?? req.body?.confirm_password;
 
-    if (!email || !otp || !newPassword || !confirmPassword) {
+    if (!email || !otp || !newPassword) {
       return res.status(400).json({ message: 'All fields are required.' });
     }
-    if (typeof email !== 'string' || typeof newPassword !== 'string' || typeof confirmPassword !== 'string') {
+    if (typeof email !== 'string' || typeof newPassword !== 'string') {
       return res.status(400).json({ message: 'All fields are required.' });
+    }
+    // The confirmation is only checked when the client sent one.
+    if (confirmPassword !== undefined && confirmPassword !== null && newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'Passwords do not match.' });
     }
     if (!/^\d{6}$/.test(String(otp))) {
       return res.status(400).json({ message: 'Enter the 6-digit code from your email.' });
-    }
-    if (newPassword !== confirmPassword) {
-      return res.status(400).json({ message: 'Passwords do not match.' });
     }
     if (newPassword.length < 8) {
       return res.status(400).json({ message: 'Password must be at least 8 characters.' });
@@ -267,7 +287,9 @@ exports.resetPassword = async (req, res) => {
         return res.status(400).json({ message: 'This account can no longer reset its password. Contact your administrator.' });
       }
 
-      const result = await verifyOtp(normalizedEmail, String(otp), 'password_reset', client);
+      // Tolerant consumption: the app verifies the code first (which uses it
+      // up) and then calls this endpoint with the same code.
+      const result = await consumeOtpForReset(normalizedEmail, String(otp), 'password_reset', client);
       if (!result.valid) {
         await client.query('ROLLBACK');
         if (result.reason === 'expired') {
@@ -285,11 +307,12 @@ exports.resetPassword = async (req, res) => {
 
       await writeAuditLog(
         client,
-        // audit_log.actor_id has a FK to staff_accounts, so a rider-initiated
-        // reset logs no actor — the target columns identify the account.
+        // audit_log.actor_id has a FK to staff_accounts, so a rider- or
+        // customer-initiated reset logs no actor — the target columns
+        // identify the account.
         account.type === 'staff' ? account.id : null,
         'self_reset_password',
-        account.type === 'staff' ? 'staff_account' : 'rider',
+        account.type === 'staff' ? 'staff_account' : account.type,
         account.id,
         { email: normalizedEmail, account_type: account.type }
       );
@@ -334,6 +357,14 @@ exports.refreshToken = async (req, res) => {
     if (decoded.type === 'rider') {
       const { rows } = await db.query(
         "SELECT id, status FROM riders WHERE id = $1 AND status != 'inactive'",
+        [decoded.sub]
+      );
+      if (rows.length === 0) {
+        return res.status(401).json({ message: 'Account not found or inactive.' });
+      }
+    } else if (decoded.type === 'customer') {
+      const { rows } = await db.query(
+        "SELECT id, status FROM customers WHERE id = $1 AND status != 'suspended'",
         [decoded.sub]
       );
       if (rows.length === 0) {
@@ -385,11 +416,80 @@ exports.me = async (req, res) => {
       return res.status(200).json({ user: { ...sanitizeRider(rows[0]), type: 'rider' } });
     }
 
+    if (type === 'customer') {
+      const { rows } = await db.query('SELECT * FROM customers WHERE id = $1', [sub]);
+      if (rows.length === 0) return res.status(404).json({ message: 'Customer not found.' });
+      const { password_hash, ...safe } = rows[0];
+      return res.status(200).json({ user: { ...safe, type: 'customer' } });
+    }
+
     const { rows } = await db.query('SELECT * FROM staff_accounts WHERE id = $1', [sub]);
     if (rows.length === 0) return res.status(404).json({ message: 'User not found.' });
     return res.status(200).json({ user: { ...sanitizeStaff(rows[0]), type: 'staff' } });
   } catch (err) {
     console.error('[me]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHANGE PASSWORD (signed-in customer)
+// POST /api/auth/change-password
+// Body: { current_password, new_password }
+// ─────────────────────────────────────────────────────────────────────────────
+exports.changePassword = async (req, res) => {
+  try {
+    const { sub, type } = req.user;
+    const currentPassword = req.body?.current_password ?? req.body?.currentPassword;
+    const newPassword = req.body?.new_password ?? req.body?.newPassword;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Both your current and new password are required.' });
+    }
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+      return res.status(400).json({ message: 'Both your current and new password are required.' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ message: 'Your new password must be different from the current one.' });
+    }
+
+    // Only customer accounts use this endpoint today; staff change their
+    // password through the admin console.
+    if (type !== 'customer') {
+      return res.status(403).json({ message: "You don't have permission to perform this action." });
+    }
+
+    const { rows } = await db.query(
+      'SELECT id, email, password_hash FROM customers WHERE id = $1',
+      [sub]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Account not found.' });
+    }
+    const customer = rows[0];
+
+    const match = await bcrypt.compare(currentPassword, customer.password_hash);
+    if (!match) {
+      return res.status(401).json({ message: 'Your current password is incorrect.' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await db.query(
+      'UPDATE customers SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [passwordHash, customer.id]
+    );
+
+    // Alert the owner (detached — never affects the result).
+    sendPasswordChangedEmail(customer.email).catch((err) =>
+      console.error('[changePassword] password-changed email failed:', err.message)
+    );
+
+    return res.status(200).json({ message: 'Password changed successfully.' });
+  } catch (err) {
+    console.error('[changePassword]', err);
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 };

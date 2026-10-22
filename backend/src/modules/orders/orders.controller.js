@@ -3,6 +3,8 @@ const socketHub = require('../../sockets');
 const { createKitchenAlert, announceKitchenAlert } = require('../kitchen/kitchen-alert');
 const { ALL_STATUSES, isKnownStatus, canTransition } = require('./status-transitions');
 const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
+const { notifyOrderStatus } = require('../customer/customer-notifications');
+const { maybeLockThreadForCustomer } = require('../support-chat/support-chat.controller');
 
 // ─── Helper: format order number ─────────────────────────────────────────────
 function orderNumber(id) {
@@ -14,7 +16,11 @@ function orderNumber(id) {
 // cannot be ordered bare — the caller must pick one, and the variant's
 // absolute price wins over the base price. The chosen variant is snapshotted
 // onto the line (variant_name) so history survives a variant delete/rename.
-async function _resolveOrderItems(queryable, items) {
+//
+// `options.defaultVariant` relaxes that rule for the customer app, which has
+// no variant picker: the first available variant is chosen instead of the
+// order being rejected. The staff/POS path keeps the strict behaviour.
+async function _resolveOrderItems(queryable, items, options = {}) {
   const menuIds = items.map((i) => Number(i.menu_item_id));
   const [menuRes, variantRes] = await Promise.all([
     queryable.query(
@@ -55,7 +61,15 @@ async function _resolveOrderItems(queryable, items) {
         return { error: `Variant "${variant.name}" of "${mi.name}" is currently unavailable.` };
       }
     } else if (itemVariants.length > 0) {
-      return { error: `"${mi.name}" has variants — pick one before adding it to the order.` };
+      if (!options.defaultVariant) {
+        return { error: `"${mi.name}" has variants — pick one before adding it to the order.` };
+      }
+      // Customer app path: no variant picker exists, so take the first
+      // available variant rather than rejecting the whole order.
+      variant = itemVariants.find((v) => v.is_available) || null;
+      if (!variant) {
+        return { error: `"${mi.name}" is currently unavailable.` };
+      }
     }
 
     const unitPrice = variant ? parseFloat(variant.price) : parseFloat(mi.price);
@@ -803,6 +817,27 @@ async function updateOrderStatus(req, res, next) {
       socketHub.emitOrderReady({ orderId: order.id, orderNumber: order.order_number });
     }
 
+    // Bridge to the customer app: live tracking update + notification.
+    // Skipped for counter orders (no customer_id).
+    if (order.customer_id) {
+      socketHub.emitCustomerOrderStatus({
+        orderId: order.id,
+        status,
+        customerId: order.customer_id,
+      });
+
+      notifyOrderStatus({ orderId: order.id, customerId: order.customer_id, status }).catch((err) =>
+        console.error('[orders] customer notification failed:', err.message)
+      );
+
+      // The support thread locks once the customer has no active order left.
+      if (status === 'completed' || status === 'cancelled') {
+        maybeLockThreadForCustomer(order.customer_id).catch((err) =>
+          console.error('[orders] support thread lock failed:', err.message)
+        );
+      }
+    }
+
     // Bridge to customer app: push notification + badge
     try {
       const bridge = require('../../utils/internalBridge');
@@ -837,7 +872,7 @@ async function cancelOrder(req, res, next) {
     // agree on which row is "the" payment. A unique index on
     // payments(order_id) now guarantees there is only ever one.
     const { rows } = await client.query(
-      `SELECT o.id, o.status,
+      `SELECT o.id, o.status, o.customer_id,
               (SELECT p.status FROM payments p
                 WHERE p.order_id = o.id
                 ORDER BY p.paid_at DESC NULLS LAST, p.id DESC
@@ -882,11 +917,27 @@ async function cancelOrder(req, res, next) {
 
     socketHub.emitOrderStatus({ orderId: rows[0].id, orderNumber: orderNumber(rows[0].id), status: 'cancelled' });
 
-    // Bridge to customer app
+    // Bridge to the customer app
     try {
       const bridge = require('../../utils/internalBridge');
       bridge.notifyOrderStatus(rows[0].id, 'cancelled');
     } catch (_) {}
+
+    if (rows[0].customer_id) {
+      socketHub.emitCustomerOrderStatus({
+        orderId: rows[0].id,
+        status: 'cancelled',
+        customerId: rows[0].customer_id,
+      });
+      notifyOrderStatus({
+        orderId: rows[0].id,
+        customerId: rows[0].customer_id,
+        status: 'cancelled',
+      }).catch((err) => console.error('[orders] customer notification failed:', err.message));
+      maybeLockThreadForCustomer(rows[0].customer_id).catch((err) =>
+        console.error('[orders] support thread lock failed:', err.message)
+      );
+    }
 
     res.json({ message: 'Order cancelled.' });
   } catch (err) {
@@ -982,4 +1033,4 @@ module.exports = { createOrder, getOrders, getOnlineOrders, getOrderTotals, getO
 // Internal helpers, exposed for tests. They hold the rules that decide which
 // orders count as revenue, so they are worth asserting directly — testing them
 // through HTTP would only prove the numbers moved.
-module.exports.__internal = { buildOrderFilters, escapeLike, isValidTimeZone, isIsoDateTime, LATEST_PAYMENT_JOIN, DEFAULT_REPORT_TZ };
+module.exports.__internal = { buildOrderFilters, escapeLike, isValidTimeZone, isIsoDateTime, LATEST_PAYMENT_JOIN, DEFAULT_REPORT_TZ, _resolveOrderItems };

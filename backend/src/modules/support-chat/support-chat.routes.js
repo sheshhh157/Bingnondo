@@ -39,6 +39,15 @@ router.post(
   ctrl.sendCustomerMessage
 );
 
+// PUT /api/support-chat/read
+// Customer marks the staff messages in their thread as read.
+router.put(
+  '/read',
+  authenticateToken,
+  requireCustomer,
+  ctrl.markMessagesRead
+);
+
 // ─── Staff routes ─────────────────────────────────────────────────────────────
 
 // GET /api/support-chat/threads

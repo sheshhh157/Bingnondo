@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict nYU36kAuY1TigVNlhKzAGoCFlzNHKw3h71lJ75e8CzzVfR8yNAnhNYvcn5eup1Q
+\restrict fVYx7Gzhn4FdmKxLHOUtBPWehr7617VFoPEP7gNuvmz79zCfxa6lvItuZDCYymG
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -36,6 +36,8 @@ ALTER TABLE IF EXISTS ONLY public.notifications DROP CONSTRAINT IF EXISTS notifi
 ALTER TABLE IF EXISTS ONLY public.menu_items DROP CONSTRAINT IF EXISTS menu_items_category_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_variants DROP CONSTRAINT IF EXISTS menu_item_variants_variant_group_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_variants DROP CONSTRAINT IF EXISTS menu_item_variants_menu_item_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.menu_item_reviews DROP CONSTRAINT IF EXISTS menu_item_reviews_menu_item_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.menu_item_reviews DROP CONSTRAINT IF EXISTS menu_item_reviews_customer_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_ingredients DROP CONSTRAINT IF EXISTS menu_item_ingredients_menu_item_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_ingredients DROP CONSTRAINT IF EXISTS menu_item_ingredients_inventory_item_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_category_variant_groups DROP CONSTRAINT IF EXISTS menu_category_variant_groups_variant_group_id_fkey;
@@ -63,6 +65,7 @@ ALTER TABLE IF EXISTS ONLY public.audit_log DROP CONSTRAINT IF EXISTS audit_log_
 DROP INDEX IF EXISTS public.uq_variant_groups_name;
 DROP INDEX IF EXISTS public.uq_menu_item_variants_item_name_legacy;
 DROP INDEX IF EXISTS public.uq_menu_item_variants_item_group_name;
+DROP INDEX IF EXISTS public.uq_menu_item_reviews_item_customer;
 DROP INDEX IF EXISTS public.idx_violations_customer;
 DROP INDEX IF EXISTS public.idx_violations_created;
 DROP INDEX IF EXISTS public.idx_support_chat_messages_chat;
@@ -85,6 +88,8 @@ DROP INDEX IF EXISTS public.idx_menu_items_not_deleted;
 DROP INDEX IF EXISTS public.idx_menu_items_display_order;
 DROP INDEX IF EXISTS public.idx_menu_item_variants_menu_item_id;
 DROP INDEX IF EXISTS public.idx_menu_item_variants_menu_item_group;
+DROP INDEX IF EXISTS public.idx_menu_item_reviews_menu_item_id;
+DROP INDEX IF EXISTS public.idx_menu_item_reviews_customer_id;
 DROP INDEX IF EXISTS public.idx_menu_category_variant_groups_variant_group_id;
 DROP INDEX IF EXISTS public.idx_menu_category_variant_groups_category_id;
 DROP INDEX IF EXISTS public.idx_menu_categories_display_order;
@@ -116,6 +121,7 @@ ALTER TABLE IF EXISTS ONLY public.order_items DROP CONSTRAINT IF EXISTS order_it
 ALTER TABLE IF EXISTS ONLY public.notifications DROP CONSTRAINT IF EXISTS notifications_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_items DROP CONSTRAINT IF EXISTS menu_items_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_variants DROP CONSTRAINT IF EXISTS menu_item_variants_pkey;
+ALTER TABLE IF EXISTS ONLY public.menu_item_reviews DROP CONSTRAINT IF EXISTS menu_item_reviews_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_ingredients DROP CONSTRAINT IF EXISTS menu_item_ingredients_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_category_variant_groups DROP CONSTRAINT IF EXISTS menu_category_variant_groups_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_categories DROP CONSTRAINT IF EXISTS menu_categories_pkey;
@@ -151,6 +157,7 @@ ALTER TABLE IF EXISTS public.order_items ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.notifications ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.menu_items ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.menu_item_variants ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.menu_item_reviews ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.menu_categories ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.kitchen_alerts ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.inventory_transactions ALTER COLUMN id DROP DEFAULT;
@@ -191,6 +198,8 @@ DROP SEQUENCE IF EXISTS public.menu_items_id_seq;
 DROP TABLE IF EXISTS public.menu_items;
 DROP SEQUENCE IF EXISTS public.menu_item_variants_id_seq;
 DROP TABLE IF EXISTS public.menu_item_variants;
+DROP SEQUENCE IF EXISTS public.menu_item_reviews_id_seq;
+DROP TABLE IF EXISTS public.menu_item_reviews;
 DROP TABLE IF EXISTS public.menu_item_ingredients;
 DROP TABLE IF EXISTS public.menu_category_variant_groups;
 DROP SEQUENCE IF EXISTS public.menu_categories_id_seq;
@@ -689,8 +698,60 @@ CREATE TABLE public.menu_category_variant_groups (
 CREATE TABLE public.menu_item_ingredients (
     menu_item_id integer NOT NULL,
     inventory_item_id integer NOT NULL,
-    quantity_required numeric(10,2)
+    quantity_required numeric(10,2),
+    unit character varying(20),
+    conversion_factor numeric(14,6)
 );
+
+
+--
+-- Name: COLUMN menu_item_ingredients.unit; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.menu_item_ingredients.unit IS 'Unit the recipe amount is expressed in (e.g. ml). NULL = same as the inventory item stock unit.';
+
+
+--
+-- Name: COLUMN menu_item_ingredients.conversion_factor; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.menu_item_ingredients.conversion_factor IS 'Multiplier converting the recipe unit into the inventory stock unit (e.g. 1 ml = 0.001 liter). NULL = 1 (same unit).';
+
+
+--
+-- Name: menu_item_reviews; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.menu_item_reviews (
+    id integer NOT NULL,
+    menu_item_id integer NOT NULL,
+    customer_id integer,
+    author_name character varying(100) NOT NULL,
+    rating smallint NOT NULL,
+    comment text,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT menu_item_reviews_rating_check CHECK (((rating >= 1) AND (rating <= 5)))
+);
+
+
+--
+-- Name: menu_item_reviews_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.menu_item_reviews_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: menu_item_reviews_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.menu_item_reviews_id_seq OWNED BY public.menu_item_reviews.id;
 
 
 --
@@ -1302,6 +1363,13 @@ ALTER TABLE ONLY public.menu_categories ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
+-- Name: menu_item_reviews id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.menu_item_reviews ALTER COLUMN id SET DEFAULT nextval('public.menu_item_reviews_id_seq'::regclass);
+
+
+--
 -- Name: menu_item_variants id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1424,8 +1492,13 @@ COPY public.audit_log (id, actor_id, action, target_type, target_id, details, cr
 25	1	activate_staff_account	staff_accounts	4	{"new_status": "active"}	2026-10-14 22:48:37.696996
 26	1	update_inventory_item	inventory_items	49	{"name": "Burger Steak Silog", "unit": "pack", "new_stock": 20, "old_stock": 99, "category_ids": [8]}	2026-10-14 22:54:19.616476
 27	1	create_rider	rider	1	{"email": "rider@bingnondo.com", "full_name": "RiderNyoko", "mobile_number": "09482785422"}	2026-10-15 14:13:11.814234
+508	1	create_variant_group	variant_groups	74	{"name": "Solo/Sharing", "max_options": 2}	2026-10-20 11:13:59.066125
+515	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 11:25:29.891435
 30	1	update_rider	rider	1	{"after": {"email": "rider@bingnondo.com", "full_name": "RiderNyoko", "plate_number": "ABC 1234", "vehicle_type": "motorcycle", "mobile_number": "09482785422"}, "before": {"email": "rider@bingnondo.com", "full_name": "RiderNyoko", "plate_number": "ABC 1234", "vehicle_type": "motorcycle", "mobile_number": "09482785422"}}	2026-10-15 15:42:29.445893
+516	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 11:25:30.379372
+517	1	create_variant_group	variant_groups	76	{"name": "adsa", "max_options": 3}	2026-10-20 11:25:47.115995
 33	1	reset_rider_password	rider	1	{"rider_name": "RiderNyoko"}	2026-10-15 16:15:58.404767
+518	1	delete_variant_group	variant_groups	76	{"name": "adsa"}	2026-10-20 11:25:49.613143
 254	1	create_variant_group	variant_groups	10	{"name": "Flavor", "options": [{"name": "flavor1"}, {"name": "flavor"}]}	2026-10-20 01:27:58.70719
 255	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 01:28:06.065135
 256	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 01:28:07.342256
@@ -1433,9 +1506,19 @@ COPY public.audit_log (id, actor_id, action, target_type, target_id, details, cr
 86	56	self_reset_password	staff_account	56	{"email": "buenaflordaniel371@gmail.com", "account_type": "staff"}	2026-10-17 12:13:46.755099
 145	1	create_menu_category	menu_categories	25	{"name": "dsf"}	2026-10-17 22:51:39.305589
 146	1	delete_menu_category	menu_categories	25	{"name": "dsf"}	2026-10-17 22:51:43.540236
+509	1	create_variant_group	variant_groups	75	{"name": "Hot/Cold", "max_options": 2}	2026-10-20 11:15:14.303465
+519	56	self_reset_password	staff_account	56	{"email": "buenaflordaniel371@gmail.com", "account_type": "staff"}	2026-10-20 11:29:16.811306
+510	1	update_variant_group	variant_groups	10	{"new_name": "Flavors", "old_name": "Flavors", "max_options": 10}	2026-10-20 11:15:46.126127
 466	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 02:33:27.355184
 467	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 02:33:28.044143
 338	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 01:38:24.439664
+559	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 14:00:06.883068
+560	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10, 74], "removed_group_ids": []}	2026-10-20 14:00:07.634981
+561	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10, 74, 75], "removed_group_ids": []}	2026-10-20 14:00:08.345913
+511	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 11:22:25.04519
+512	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 11:22:25.988611
+513	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 11:22:26.548472
+514	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 11:22:27.316937
 404	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 02:20:46.473014
 405	1	update_variant_group	variant_groups	10	{"new_name": "Flavors", "old_name": "Flavor", "max_options": 3}	2026-10-20 02:20:53.123194
 \.
@@ -1493,6 +1576,7 @@ COPY public.customer_restrictions (customer_id, restriction_level, reason, updat
 --
 
 COPY public.customers (id, email, password_hash, email_verified, first_name, last_name, mobile_number, mobile_verified, address, profile_completed, status, created_at, updated_at, latitude, longitude) FROM stdin;
+159	__probe@example.com	x	f	A	B	\N	f	\N	f	active	2026-10-21 21:31:17.73402	2026-10-21 21:31:17.73402	\N	\N
 \.
 
 
@@ -1608,6 +1692,9 @@ COPY public.menu_categories (id, name, display_order) FROM stdin;
 --
 
 COPY public.menu_category_variant_groups (category_id, variant_group_id) FROM stdin;
+8	10
+8	74
+8	75
 \.
 
 
@@ -1615,16 +1702,31 @@ COPY public.menu_category_variant_groups (category_id, variant_group_id) FROM st
 -- Data for Name: menu_item_ingredients; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required) FROM stdin;
-119	49	1.00
-116	46	1.00
-117	47	1.00
-120	51	1.00
-121	52	\N
-123	50	\N
-115	45	1.00
-118	48	1.00
-122	53	1.00
+COPY public.menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required, unit, conversion_factor) FROM stdin;
+119	49	1.00	\N	\N
+116	46	1.00	\N	\N
+117	47	1.00	\N	\N
+120	51	1.00	\N	\N
+121	52	\N	\N	\N
+123	50	\N	\N	\N
+115	45	1.00	\N	\N
+118	48	1.00	\N	\N
+122	53	1.00	\N	\N
+\.
+
+
+--
+-- Data for Name: menu_item_reviews; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.menu_item_reviews (id, menu_item_id, customer_id, author_name, rating, comment, created_at) FROM stdin;
+1	115	\N	Mariel S.	5	Sobrang sarap! Authentic ang lasa, parang nasa Binondo talaga. Bababalik-balikan ko ito.	2026-09-28 09:12:00
+2	115	\N	Jonas R.	4	Great value for the portion. Medyo matagal lang ang waiting time noong peak hour.	2026-09-24 14:05:00
+3	115	\N	Alyssa T.	5	Perfectly seasoned and served hot. Recommended!	2026-09-19 18:40:00
+4	115	\N	Marco D.	3	Okay naman, pero sana mas malaki ang serving para sa price.	2026-09-15 11:22:00
+5	115	\N	Katrina L.	5	Favourite ko na! Consistent ang quality every order.	2026-09-10 20:15:00
+6	115	\N	Paolo M.	4	Solid comfort food. Presentation is neat and appetising.	2026-09-04 12:30:00
+7	115	\N	Bea C.	4	Masarap at bagong luto. Ang packaging ay maayos din.	2026-08-30 16:48:00
 \.
 
 
@@ -1794,6 +1896,7 @@ COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verif
 47	cashier@bingnondo.com	874310	password_reset	2026-10-16 22:10:48.005	\N	2026-10-16 22:00:48.008024
 53	buenaflordaniel371@gmail.com	628620	password_reset	2026-10-17 12:20:38.804	2026-10-17 12:13:46.755099	2026-10-17 12:10:38.807686
 21	cashier@bingnondo.com	535925	password_reset	2026-10-16 21:38:45.4	\N	2026-10-16 21:28:45.40364
+127	buenaflordaniel371@gmail.com	171443	password_reset	2026-10-20 11:38:10.732	2026-10-20 11:29:16.811306	2026-10-20 11:28:10.733974
 \.
 
 
@@ -1832,7 +1935,7 @@ COPY public.pending_registrations (email, password_hash, expires_at, created_at)
 --
 
 COPY public.riders (id, full_name, mobile_number, plate_number, vehicle_type, notes, status, created_by, created_at, updated_at, email, password_hash, last_login) FROM stdin;
-1	RiderNyoko	09482785422	ABC 1234	motorcycle	\N	available	1	2026-10-15 14:13:11.814234	2026-10-15 19:01:56.515006	rider@bingnondo.com	$2b$12$bxYm9KwA5JYHjxXk1GIk/OU/EPev2wJ3LfULlb/0vvnXuXtxuXjKy	2026-10-15 19:37:11.329796
+1	RiderNyoko	09482785422	ABC 1234	motorcycle	\N	available	1	2026-10-15 14:13:11.814234	2026-10-20 12:21:15.693442	rider@bingnondo.com	$2b$12$bxYm9KwA5JYHjxXk1GIk/OU/EPev2wJ3LfULlb/0vvnXuXtxuXjKy	2026-10-20 11:30:38.426626
 \.
 
 
@@ -1843,8 +1946,8 @@ COPY public.riders (id, full_name, mobile_number, plate_number, vehicle_type, no
 COPY public.staff_accounts (id, full_name, email, password_hash, role, status, created_by, created_at, updated_at, notification_seen_at) FROM stdin;
 3	Cashier One	cashier@bingnondo.com	$2b$12$VHxWiJDzMyy9..udZAG.4uZMIIyw8Knb01KQZ8LICYXj2e90M2ksK	cashier	active	\N	2026-10-13 00:02:24.280064	2026-10-13 00:02:24.280064	\N
 4	Kitchen Staff	kitchen@bingnondo.com	$2b$12$1Cwh2bqIxanUIrZC8vRbfOTsZar9oba1kwkbiSnT./qFUqmw5LAXi	kitchen_staff	active	\N	2026-10-13 00:02:24.520095	2026-10-14 22:48:37.696996	\N
-56	Daniel	buenaflordaniel371@gmail.com	$2b$12$QGwmI17GXzC6HyZ2RVBEvOxnG9d49cCeO2VtnSB.L2b34TUemQ/Nm	cashier	active	1	2026-10-17 12:10:10.92647	2026-10-17 12:13:46.755099	\N
-1	Admin User	admin@bingnondo.com	$2b$12$JURyzssCxXhchWcJPHNOPOC.8Kx9w/S7CpsyIb9JnNYzosvNY3D0e	admin	active	\N	2026-10-13 00:02:23.780245	2026-10-13 00:02:23.780245	2026-10-17 21:41:34.274
+1	Admin User	admin@bingnondo.com	$2b$12$JURyzssCxXhchWcJPHNOPOC.8Kx9w/S7CpsyIb9JnNYzosvNY3D0e	admin	active	\N	2026-10-13 00:02:23.780245	2026-10-13 00:02:23.780245	2026-10-20 12:30:04.952
+56	Daniel	buenaflordaniel371@gmail.com	$2b$12$6eYkN.sAQXamnq9mpIfLouY35wiImE2eEXflvV9MHgueRFErsAp52	cashier	active	1	2026-10-17 12:10:10.92647	2026-10-20 11:29:16.811306	\N
 \.
 
 
@@ -1869,7 +1972,7 @@ COPY public.support_chats (id, customer_id, status, opened_at, locked_at) FROM s
 --
 
 COPY public.system_settings (key, value, updated_at) FROM stdin;
-notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "payments": true, "customers": true, "inventory": true, "deliveries": true}}	2026-10-20 02:23:54.321607
+notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "payments": true, "customers": true, "inventory": true, "deliveries": true}}	2026-10-21 21:32:07.425779
 \.
 
 
@@ -1878,7 +1981,9 @@ notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "
 --
 
 COPY public.variant_groups (id, name, created_at, updated_at, max_options) FROM stdin;
-10	Flavors	2026-10-20 01:27:58.70719	2026-10-20 02:20:53.123194	3
+74	Solo/Sharing	2026-10-20 11:13:59.066125	2026-10-20 11:13:59.066125	2
+75	Hot/Cold	2026-10-20 11:15:14.303465	2026-10-20 11:15:14.303465	2
+10	Flavors	2026-10-20 01:27:58.70719	2026-10-20 11:15:46.126127	10
 \.
 
 
@@ -1886,7 +1991,7 @@ COPY public.variant_groups (id, name, created_at, updated_at, max_options) FROM 
 -- Name: audit_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.audit_log_id_seq', 468, true);
+SELECT pg_catalog.setval('public.audit_log_id_seq', 639, true);
 
 
 --
@@ -1921,63 +2026,70 @@ SELECT pg_catalog.setval('public.customer_order_violations_id_seq', 1, false);
 -- Name: customers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.customers_id_seq', 129, true);
+SELECT pg_catalog.setval('public.customers_id_seq', 172, true);
 
 
 --
 -- Name: deliveries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.deliveries_id_seq', 441, true);
+SELECT pg_catalog.setval('public.deliveries_id_seq', 481, true);
 
 
 --
 -- Name: esp32_devices_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.esp32_devices_id_seq', 8, true);
+SELECT pg_catalog.setval('public.esp32_devices_id_seq', 10, true);
 
 
 --
 -- Name: inventory_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.inventory_items_id_seq', 582, true);
+SELECT pg_catalog.setval('public.inventory_items_id_seq', 637, true);
 
 
 --
 -- Name: inventory_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 407, true);
+SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 446, true);
 
 
 --
 -- Name: kitchen_alerts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.kitchen_alerts_id_seq', 182, true);
+SELECT pg_catalog.setval('public.kitchen_alerts_id_seq', 206, true);
 
 
 --
 -- Name: menu_categories_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_categories_id_seq', 87, true);
+SELECT pg_catalog.setval('public.menu_categories_id_seq', 119, true);
+
+
+--
+-- Name: menu_item_reviews_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.menu_item_reviews_id_seq', 41, true);
 
 
 --
 -- Name: menu_item_variants_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_item_variants_id_seq', 152, true);
+SELECT pg_catalog.setval('public.menu_item_variants_id_seq', 232, true);
 
 
 --
 -- Name: menu_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_items_id_seq', 1954, true);
+SELECT pg_catalog.setval('public.menu_items_id_seq', 2182, true);
 
 
 --
@@ -1991,49 +2103,49 @@ SELECT pg_catalog.setval('public.notifications_id_seq', 1, false);
 -- Name: order_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.order_items_id_seq', 2062, true);
+SELECT pg_catalog.setval('public.order_items_id_seq', 2225, true);
 
 
 --
 -- Name: order_status_history_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.order_status_history_id_seq', 1057, true);
+SELECT pg_catalog.setval('public.order_status_history_id_seq', 1140, true);
 
 
 --
 -- Name: orders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.orders_id_seq', 2019, true);
+SELECT pg_catalog.setval('public.orders_id_seq', 2182, true);
 
 
 --
 -- Name: otp_verifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.otp_verifications_id_seq', 122, true);
+SELECT pg_catalog.setval('public.otp_verifications_id_seq', 139, true);
 
 
 --
 -- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.payments_id_seq', 1375, true);
+SELECT pg_catalog.setval('public.payments_id_seq', 1475, true);
 
 
 --
 -- Name: riders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.riders_id_seq', 427, true);
+SELECT pg_catalog.setval('public.riders_id_seq', 471, true);
 
 
 --
 -- Name: staff_accounts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.staff_accounts_id_seq', 126, true);
+SELECT pg_catalog.setval('public.staff_accounts_id_seq', 142, true);
 
 
 --
@@ -2054,7 +2166,7 @@ SELECT pg_catalog.setval('public.support_chats_id_seq', 1, false);
 -- Name: variant_groups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.variant_groups_id_seq', 64, true);
+SELECT pg_catalog.setval('public.variant_groups_id_seq', 103, true);
 
 
 --
@@ -2231,6 +2343,14 @@ ALTER TABLE ONLY public.menu_category_variant_groups
 
 ALTER TABLE ONLY public.menu_item_ingredients
     ADD CONSTRAINT menu_item_ingredients_pkey PRIMARY KEY (menu_item_id, inventory_item_id);
+
+
+--
+-- Name: menu_item_reviews menu_item_reviews_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.menu_item_reviews
+    ADD CONSTRAINT menu_item_reviews_pkey PRIMARY KEY (id);
 
 
 --
@@ -2472,6 +2592,20 @@ CREATE INDEX idx_menu_category_variant_groups_variant_group_id ON public.menu_ca
 
 
 --
+-- Name: idx_menu_item_reviews_customer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_menu_item_reviews_customer_id ON public.menu_item_reviews USING btree (customer_id);
+
+
+--
+-- Name: idx_menu_item_reviews_menu_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_menu_item_reviews_menu_item_id ON public.menu_item_reviews USING btree (menu_item_id);
+
+
+--
 -- Name: idx_menu_item_variants_menu_item_group; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2623,6 +2757,13 @@ CREATE INDEX idx_violations_created ON public.customer_order_violations USING bt
 --
 
 CREATE INDEX idx_violations_customer ON public.customer_order_violations USING btree (customer_id);
+
+
+--
+-- Name: uq_menu_item_reviews_item_customer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_menu_item_reviews_item_customer ON public.menu_item_reviews USING btree (menu_item_id, customer_id) WHERE (customer_id IS NOT NULL);
 
 
 --
@@ -2839,6 +2980,22 @@ ALTER TABLE ONLY public.menu_item_ingredients
 
 
 --
+-- Name: menu_item_reviews menu_item_reviews_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.menu_item_reviews
+    ADD CONSTRAINT menu_item_reviews_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: menu_item_reviews menu_item_reviews_menu_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.menu_item_reviews
+    ADD CONSTRAINT menu_item_reviews_menu_item_id_fkey FOREIGN KEY (menu_item_id) REFERENCES public.menu_items(id) ON DELETE CASCADE;
+
+
+--
 -- Name: menu_item_variants menu_item_variants_menu_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2986,5 +3143,5 @@ ALTER TABLE ONLY public.support_chats
 -- PostgreSQL database dump complete
 --
 
-\unrestrict nYU36kAuY1TigVNlhKzAGoCFlzNHKw3h71lJ75e8CzzVfR8yNAnhNYvcn5eup1Q
+\unrestrict fVYx7Gzhn4FdmKxLHOUtBPWehr7617VFoPEP7gNuvmz79zCfxa6lvItuZDCYymG
 

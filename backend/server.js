@@ -26,6 +26,13 @@ const adminCustomerRestrictionsRoutes = require('./src/modules/admin/customer-re
 const supportChatRoutes   = require('./src/modules/support-chat/support-chat.routes');
 const uploadRoutes        = require('./src/modules/upload/upload.routes');
 
+// Customer (mobile app) routes
+const customerAuthRoutes  = require('./src/modules/customer/customer.routes');
+const customerApiRoutes   = require('./src/modules/customer/customer-api.routes');
+const customerNotifRoutes = require('./src/modules/customer/customer-notification.routes');
+const chatbotRoutes       = require('./src/modules/chatbot/chatbot.routes');
+const geoRoutes           = require('./src/modules/geo/geo.routes');
+
 const riderRoutes         = require('./src/modules/rider/rider.routes');      // rider-scoped (/api/rider/*)
 // ── Controllers that need the io instance ──────────────────────────────────────
 const menuCtrl   = require('./src/modules/menu/menu.controller');
@@ -58,7 +65,23 @@ app.use('/api/auth/login',           loginLimiter);   // shared login (staff + r
 app.use('/api/auth/staff/login',     loginLimiter);   // legacy staff-only route
 app.use('/api/auth/forgot-password', otpLimiter);
 app.use('/api/auth/reset-password',  resetLimiter);
+app.use('/api/auth/customer/login',       loginLimiter);  // customer login
+app.use('/api/auth/customer/register',    otpLimiter);    // registration mails a code
+app.use('/api/auth/customer/verify-otp',  otpLimiter);    // code checking
+app.use('/api/auth/customer/resend-otp',  otpLimiter);    // code resending
 app.use('/api/auth', authRoutes);
+
+// ─── Customer (mobile app) Routes ─────────────────────────────────────────────
+// /api/auth/customer/*  → register / verify-otp / resend-otp / login
+app.use('/api/auth/customer', customerAuthRoutes);
+// /api/customer/*        → profile / notifications / saved payment
+app.use('/api/customer',  customerApiRoutes);
+// /api/notifications/*   → read receipts
+app.use('/api/notifications', customerNotifRoutes);
+// /api/chatbot/*         → menu assistant
+app.use('/api/chatbot',   chatbotRoutes);
+// /api/geo/*             → address search / reverse geocode
+app.use('/api/geo',       geoRoutes);
 
 // ─── Menu & Inventory Routes ───────────────────────────────────────────────────
 app.use('/api/menu',      menuRoutes);
@@ -118,33 +141,47 @@ app.use((err, req, res, next) => {
 
 // ─── Start Server ───────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`\nBingnondo backend running on http://localhost:${PORT}`);
-  console.log(`Auth:         POST /api/auth/login  (shared staff + rider)`);
-  console.log(`              POST /api/auth/staff/login  (legacy)`);
-  console.log(`Menu:         GET /api/menu  |  GET /api/menu/staff  |  POST/PUT/DELETE /api/menu/:id`);
-  console.log(`Inventory:    GET /api/inventory  |  POST /api/inventory/:id/transaction`);
-  console.log(`Orders:       POST /api/orders  |  GET /api/orders  |  PATCH /api/orders/:id/status`);
-  console.log(`Payments:     POST /api/payments  |  GET /api/payments/:orderId`);
-  console.log(`Kitchen:      GET /api/kitchen/orders  |  PATCH /api/kitchen/orders/:id/status`);
-  console.log(`Admin:        GET/POST /api/admin/staff-accounts`);
-  console.log(`Rider:        GET  /api/rider/delivery/current`);
-  console.log(`              PATCH /api/rider/delivery/:id/status`);
-  console.log(`              GET  /api/rider/deliveries`);
-  console.log(`              GET/PATCH /api/rider/profile`);
-  console.log(`Riders (admin): GET/POST             /api/admin/riders`);
-  console.log(`                GET/PUT              /api/admin/riders/:id`);
-  console.log(`                PATCH                /api/admin/riders/:id/status`);
-  console.log(`                POST                 /api/admin/riders/:id/reset-password`);
-  console.log(`Restrictions: GET                  /api/admin/customer-restrictions`);
-  console.log(`              GET                  /api/admin/customer-restrictions/:id/violations`);
-  console.log(`              PATCH                /api/admin/customer-restrictions/:id`);
-  console.log(`              PATCH                /api/admin/customer-restrictions/:id/account-status`);
-  console.log(`Settings:     GET/PUT              /api/admin/system-settings/business-hours`);
-  console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);
-});
 
-// Idempotent schema top-ups (address pin columns). Non-fatal if it fails.
-ensureSchema().catch((err) =>
-  console.error('[schema] ensureSchema failed:', err.message)
-);
+// Idempotent schema top-ups (address pin columns, customer_notifications,
+// support_chat_messages.is_read). Runs BEFORE the server starts accepting
+// requests so a freshly provisioned database is ready on the first call.
+ensureSchema()
+  .catch((err) => console.error('[schema] ensureSchema failed:', err.message))
+  .finally(() => {
+    server.listen(PORT, () => {
+      console.log(`\nBingnondo backend running on http://localhost:${PORT}`);
+      console.log(`Auth:         POST /api/auth/login  (shared staff + rider)`);
+      console.log(`              POST /api/auth/staff/login  (legacy)`);
+      console.log(`              POST /api/auth/change-password  (customer)`);
+      console.log(`Customer:     POST /api/auth/customer/register | /verify-otp | /login`);
+      console.log(`              GET/PATCH /api/customer/profile`);
+      console.log(`              GET /api/customer/notifications`);
+      console.log(`              GET /api/notifications | PUT /api/notifications/:id/read | /read-all`);
+      console.log(`Menu:         GET /api/menu  |  GET /api/menu/staff  |  POST/PUT/DELETE /api/menu/:id`);
+      console.log(`              POST /api/menu/availability-check`);
+      console.log(`Inventory:    GET /api/inventory  |  POST /api/inventory/:id/transaction`);
+      console.log(`Orders:       POST /api/orders  |  GET /api/orders  |  PATCH /api/orders/:id/status`);
+      console.log(`              GET /api/orders/:id/timeline | /:id/status | POST /api/orders/:id/cancel`);
+      console.log(`Payments:     POST /api/payments  |  GET /api/payments/:orderId`);
+      console.log(`              POST /api/payments/extract-receipt | POST /api/orders/:id/reupload-receipt`);
+      console.log(`Kitchen:      GET /api/kitchen/orders  |  PATCH /api/kitchen/orders/:id/status`);
+      console.log(`Support:      GET/POST /api/support-chat  |  PUT /api/support-chat/read`);
+      console.log(`Chatbot:      POST /api/chatbot/message`);
+      console.log(`Geo:          GET /api/geo/search  |  GET /api/geo/reverse`);
+      console.log(`Admin:        GET/POST /api/admin/staff-accounts`);
+      console.log(`Rider:        GET  /api/rider/delivery/current`);
+      console.log(`              PATCH /api/rider/delivery/:id/status`);
+      console.log(`              GET  /api/rider/deliveries`);
+      console.log(`              GET/PATCH /api/rider/profile`);
+      console.log(`Riders (admin): GET/POST             /api/admin/riders`);
+      console.log(`                GET/PUT              /api/admin/riders/:id`);
+      console.log(`                PATCH                /api/admin/riders/:id/status`);
+      console.log(`                POST                 /api/admin/riders/:id/reset-password`);
+      console.log(`Restrictions: GET                  /api/admin/customer-restrictions`);
+      console.log(`              GET                  /api/admin/customer-restrictions/:id/violations`);
+      console.log(`              PATCH                /api/admin/customer-restrictions/:id`);
+      console.log(`              PATCH                /api/admin/customer-restrictions/:id/account-status`);
+      console.log(`Settings:     GET/PUT              /api/admin/system-settings/business-hours`);
+      console.log(`              GET/POST/PATCH/DELETE /api/admin/system-settings/menu-categories`);
+    });
+  });

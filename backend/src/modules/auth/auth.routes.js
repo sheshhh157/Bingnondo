@@ -14,9 +14,13 @@ router.post('/login', authController.login);
 // POST /api/auth/staff/login
 router.post('/staff/login', authController.staffLogin);
 
-// ── Forgot / Reset Password (staff only) ──────────────────────────────────────
+// ── Forgot / Reset Password (staff, riders + customers) ───────────────────────
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password',  authController.resetPassword);
+
+// ── Change Password (signed-in customer) ─────────────────────────────────────
+// Body: { current_password, new_password }
+router.post('/change-password', authenticateToken, authController.changePassword);
 
 // ── Token Management ───────────────────────────────────────────────────────────
 router.post('/refresh', authController.refreshToken);

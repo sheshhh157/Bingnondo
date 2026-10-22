@@ -11,6 +11,55 @@ Migrations 012–020 below are not on `main` yet.
 
 ---
 
+## 022 — Menu item ratings & reviews
+- **Date:** 2026-10-21
+- **Type:** Schema
+- **File:** `backend/migrations/022_menu_item_reviews.sql`
+- **Why:** The customer app shows a "Ratings & Reviews" section on each menu
+  item, but the endpoint behind it was never built. This table backs
+  `GET /api/menu/items/:id/reviews` and also feeds the `avg_rating` /
+  `review_count` shown on the manager dashboard's menu cards.
+- **Applied:**
+  - Added table `menu_item_reviews` (`id`, `menu_item_id`, `customer_id`,
+    `author_name`, `rating`, `comment`, `created_at`).
+  - `menu_item_id → menu_items(id)` **ON DELETE CASCADE** — removing an item
+    removes its reviews.
+  - `customer_id → customers(id)` **ON DELETE SET NULL**, nullable — the
+    reviewing account is optional; `author_name` is a display snapshot so it
+    survives account deletion or renaming.
+  - `CHECK (rating BETWEEN 1 AND 5)`.
+  - Indexes on `(menu_item_id)` and `(customer_id)`.
+  - Partial unique index `uq_menu_item_reviews_item_customer` on
+    `(menu_item_id, customer_id)` **WHERE `customer_id IS NOT NULL`** — one
+    review per customer per item (re-submitting updates); anonymous/seed rows
+    are exempt.
+  - Backward compatible: new table only; no existing data touched. Sample rows
+    are seeded separately via `npm --prefix backend run seed:reviews` (data, not
+    schema — not logged here).
+
+---
+
+## 021 — Recipe units for menu item ingredients
+- **Date:** 2026-10-20
+- **Type:** Schema
+- **File:** `backend/migrations/021_recipe_units.sql`
+- **Why:** An inventory item's stock is tracked in one unit (e.g. Milk in
+  liters), but recipes commonly use a smaller unit (e.g. 150 ml per serving).
+  Each ingredient link can now carry the unit the recipe is written in plus the
+  factor that converts it into the ingredient's stock unit, so stock deduction
+  stays correct without admins doing the math by hand.
+- **Applied:**
+  - Added `menu_item_ingredients.unit` (`varchar(20)`, nullable — the recipe
+    unit; `NULL` means "same as the inventory stock unit").
+  - Added `menu_item_ingredients.conversion_factor` (`numeric(14,6)`, nullable —
+    multiplier recipe unit → stock unit, e.g. `1 ml = 0.001 liter`; `NULL`
+    means factor `1`).
+  - Backward compatible: existing links keep `unit = NULL` /
+    `conversion_factor = NULL`, which deduction treats as same-unit (no change
+    to current behaviour).
+
+---
+
 ## 020 — Variant groups: name + max options only
 - **Date:** 2026-10-20
 - **Type:** Schema

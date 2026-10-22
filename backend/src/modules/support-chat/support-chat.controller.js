@@ -30,6 +30,7 @@
 
 const db        = require('../../config/db');
 const socketHub = require('../../sockets');
+const { createCustomerNotification } = require('../customer/customer-notifications');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,10 @@ async function getOrCreateChatRow(customerId, client) {
  * Returns the customer's thread status + messages.
  * If the thread is locked, returns status with an explanatory UI message.
  * Creates the row on first access (locked) so future unlocks work smoothly.
+ *
+ * The response is FLAT — { id, status, messages, active_order_id } — because
+ * that is what the mobile app parses (SupportChat.fromJson). The legacy
+ * `data` key is kept alongside it so nothing that still reads `data` breaks.
  */
 async function getOrCreateThread(req, res, next) {
   try {
@@ -91,6 +96,12 @@ async function getOrCreateThread(req, res, next) {
 
     if (chat.status === 'locked') {
       return res.json({
+        id: chat.id,
+        status: 'locked',
+        messages: [],
+        active_order_id: null,
+        ui_message:
+          'No active order. Ask our chatbot for menu questions, or place an order to chat with staff.',
         data: {
           chat_id:  chat.id,
           status:   'locked',
@@ -110,6 +121,7 @@ async function getOrCreateThread(req, res, next) {
          scm.content,
          scm.related_order_id,
          scm.sent_at,
+         COALESCE(scm.is_read, FALSE) AS is_read,
          CASE
            WHEN scm.sender_type = 'customer'
              THEN CONCAT(c.first_name, ' ', c.last_name)
@@ -133,7 +145,14 @@ async function getOrCreateThread(req, res, next) {
       [customerId]
     );
 
+    const activeOrderId = activeOrders.length > 0 ? activeOrders[0].id : null;
+
     return res.json({
+      id: chat.id,
+      status: chat.status,
+      messages,
+      active_order_id: activeOrderId,
+      opened_at: chat.opened_at,
       data: {
         chat_id:       chat.id,
         status:        chat.status,
@@ -154,6 +173,8 @@ async function getOrCreateThread(req, res, next) {
  * Gate: thread must be unlocked (i.e. customer has an active order).
  * We re-check on every send (not just on GET) to prevent a race
  * where the last order completes while the customer is typing.
+ *
+ * The response is { message: {...} } — the shape the mobile app parses.
  */
 async function sendCustomerMessage(req, res, next) {
   try {
@@ -194,7 +215,7 @@ async function sendCustomerMessage(req, res, next) {
        RETURNING *`,
       [chat.id, customerId, content.trim(), related_order_id || null]
     );
-    const message = rows[0];
+    const message = { ...rows[0], is_read: false };
 
     // 5. Emit real-time event to staff room + customer's own room
     emitSupportChatMessage({
@@ -207,7 +228,33 @@ async function sendCustomerMessage(req, res, next) {
       relatedOrderId: message.related_order_id,
     });
 
-    return res.status(201).json({ data: message });
+    return res.status(201).json({ message, data: message });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── Customer: PUT /api/support-chat/read ────────────────────────────────────
+/**
+ * Marks the staff messages in this customer's thread as read.
+ * Read receipts are non-critical, so the app ignores failures.
+ */
+async function markMessagesRead(req, res, next) {
+  try {
+    const customerId = req.user.sub;
+
+    const chat = await getOrCreateChatRow(customerId);
+
+    const { rowCount } = await db.query(
+      `UPDATE support_chat_messages
+          SET is_read = TRUE
+        WHERE chat_id = $1
+          AND sender_type = 'staff'
+          AND COALESCE(is_read, FALSE) = FALSE`,
+      [chat.id]
+    );
+
+    return res.status(200).json({ success: true, updated: rowCount });
   } catch (err) {
     next(err);
   }
@@ -443,6 +490,14 @@ async function sendStaffReply(req, res, next) {
       [message.id]
     );
 
+    // …and one for the mobile app, which reads its own table.
+    await createCustomerNotification({
+      customerId: chat.customer_id,
+      type: 'support_message',
+      message: `Support replied: ${message.content.slice(0, 120)}`,
+      relatedOrderId: message.related_order_id || null,
+    });
+
     return res.status(201).json({ data: message });
   } catch (err) {
     next(err);
@@ -484,14 +539,24 @@ async function maybeLockThreadForCustomer(customerId, client) {
   const hasActive = await customerHasActiveOrder(customerId, conn);
   if (hasActive) return; // still has active orders — keep unlocked
 
-  await conn.query(
+  const { rows } = await conn.query(
     `UPDATE support_chats
         SET status    = 'locked',
             locked_at = NOW()
       WHERE customer_id = $1
-        AND status      = 'unlocked'`,
+        AND status      = 'unlocked'
+      RETURNING id`,
     [customerId]
   );
+
+  if (rows.length > 0) {
+    // Tell the app so it can grey out the chat button.
+    socketHub.emitSupportChatStatus({
+      customerId,
+      status: 'locked',
+      chatId: rows[0].id,
+    });
+  }
 }
 
 // ─── Socket.io emitter ────────────────────────────────────────────────────────
@@ -516,6 +581,7 @@ module.exports = {
   // Route handlers
   getOrCreateThread,
   sendCustomerMessage,
+  markMessagesRead,
   getAllThreads,
   getThreadMessages,
   sendStaffReply,

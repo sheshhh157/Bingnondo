@@ -1,6 +1,7 @@
 const db         = require('../../config/db');
 const socketHub  = require('../../sockets');
 const { createKitchenAlert, announceKitchenAlert } = require('../kitchen/kitchen-alert');
+const { createCustomerNotification } = require('../customer/customer-notifications');
 
 // ─── POST /api/payments ───────────────────────────────────────────────────────
 // Cashier marks a counter order as paid (Cash or GCash counter).
@@ -284,6 +285,19 @@ async function verifyPayment(req, res, next) {
 
       // 6. Notify the customer — payment verified, order confirmed
       socketHub.emitPaymentVerified({ orderId, orderNumber: order.order_number, customerId: order.customer_id });
+      socketHub.emitCustomerOrderStatus({
+        orderId,
+        status: 'confirmed',
+        customerId: order.customer_id,
+      });
+
+      // The mobile app reads its own notification feed.
+      await createCustomerNotification({
+        customerId: order.customer_id,
+        type: 'payment_received',
+        message: 'Your GCash payment was verified. Your order is confirmed and the kitchen is on it!',
+        relatedOrderId: orderId,
+      });
 
       // Bridge: create notification in customer app backend + emit in-app push
       try {
@@ -365,6 +379,14 @@ async function rejectPayment(req, res, next) {
       orderId,
       customerId: customer_id,
       reason: reason.trim(),
+    });
+
+    // The mobile app reads its own notification feed.
+    await createCustomerNotification({
+      customerId: customer_id,
+      type: 'payment_failed',
+      message: `Your GCash receipt was rejected: ${reason.trim()}. Please upload a new one.`,
+      relatedOrderId: orderId,
     });
 
     // Bridge to customer app
