@@ -32,4 +32,28 @@ const upload = multer({
   },
 });
 
-module.exports = { cloudinary, upload };
+// ─── Multer storage: receipts ────────────────────────────────────────────────
+const receiptStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder:          'bingnondo/receipts',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+    transformation: [
+      { quality: 'auto:good', fetch_format: 'auto' },
+    ],
+  },
+});
+
+const uploadReceipt = multer({
+  storage: receiptStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowed.includes(file.mimetype)) {
+      return cb(new Error('Only image or PDF receipts are allowed.'));
+    }
+    cb(null, true);
+  },
+});
+
+module.exports = { cloudinary, upload, uploadReceipt };

@@ -115,6 +115,26 @@ async function reuploadOrderReceipt(req, res, next) {
     const finalRef = bodyRef || refNumber;
     const finalAmount = Number.isFinite(bodyAmount) ? bodyAmount : amount;
 
+    // Read the payment's current state first. The cashier's online-orders
+    // console shows the rejected receipt beside the new one, so the receipt
+    // that was just rejected has to be archived before it gets overwritten.
+    const { rows: existingRows } = await db.query(
+      `SELECT p.id, p.status, p.receipt_image_url, p.rejection_count, o.order_number
+         FROM payments p
+         JOIN orders o ON o.id = p.order_id
+        WHERE p.order_id = $1
+        ORDER BY p.id DESC
+        LIMIT 1`,
+      [orderId]
+    );
+    if (existingRows.length === 0) {
+      return res.status(404).json({ message: 'No payment found for this order.' });
+    }
+    const existing = existingRows[0];
+    // Only a rejected receipt is worth keeping as the "previous" one — an
+    // upload over a pending payment has nothing to compare against.
+    const wasRejected = existing.status === 'rejected';
+
     const { rows: paymentRows } = await db.query(
       `UPDATE payments
           SET gcash_ref_number    = $1,
@@ -123,10 +143,16 @@ async function reuploadOrderReceipt(req, res, next) {
               receipt_uploaded_at = NOW(),
               status              = 'awaiting_verification',
               rejection_reason    = NULL,
-              rejected_at         = NULL
+              rejected_at         = NULL,
+              resubmitted_at      = NOW(),
+              previous_receipt_image_url = CASE
+                WHEN $5 THEN COALESCE(previous_receipt_image_url, receipt_image_url)
+                ELSE previous_receipt_image_url
+              END
         WHERE order_id = $4
-        RETURNING id, order_id, status, gcash_ref_number, gcash_amount_sent, receipt_image_url`,
-      [finalRef, finalAmount, req.file.path, orderId]
+        RETURNING id, order_id, status, gcash_ref_number, gcash_amount_sent,
+                  receipt_image_url, rejection_count`,
+      [finalRef, finalAmount, req.file.path, orderId, wasRejected]
     );
 
     if (paymentRows.length === 0) {
@@ -143,6 +169,20 @@ async function reuploadOrderReceipt(req, res, next) {
       customerName: null,
       totalAmount: null,
     });
+
+    // The cashier's online-orders console listens for this event so it can
+    // swap in the new receipt and show the rejected one next to it.
+    try {
+      socketHub.emitPaymentResubmitted({
+        orderId,
+        orderNumber: existing.order_number || `ORD-${String(orderId).padStart(4, '0')}`,
+        customerId: order.customer_id,
+        gcashRefNumber: payment.gcash_ref_number,
+        gcashAmountSent: payment.gcash_amount_sent !== null ? parseFloat(payment.gcash_amount_sent) : null,
+        rejectionCount: Number(payment.rejection_count) || 0,
+        resubmittedAt: new Date().toISOString(),
+      });
+    } catch (_) { /* non-fatal — the poll still picks the row up */ }
 
     await createCustomerNotification({
       customerId: order.customer_id,

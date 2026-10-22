@@ -11,6 +11,30 @@ Migrations 012–020 below are not on `main` yet.
 
 ---
 
+## 023 — GCash receipt re-submission columns
+- **Date:** 2026-10-21
+- **Type:** Schema
+- **Files:** `backend/migrations/add_previous_receipt.sql`,
+  `backend/migrations/add_resubmit_columns.sql`
+- **Why:** The cashier's online-orders console can now compare a rejected
+  GCash receipt against the customer's replacement side by side. That needs the
+  rejected receipt to survive the replacement, plus a record of how many times
+  a payment has been rejected and when it was last re-uploaded.
+- **Applied:**
+  - Added `payments.previous_receipt_image_url` (`text`, nullable) — the URL of
+    the receipt that was rejected, archived when the customer uploads a
+    replacement.
+  - Added `payments.resubmitted_at` (`timestamp`, nullable) — when the customer
+    last re-uploaded after a rejection.
+  - Added `payments.rejection_count` (`integer`, default `0`) — incremented
+    every time staff rejects the payment.
+  - Backfill: `rejection_count = 1` for rows that already had `rejected_at`
+    set (best estimate for pre-existing data).
+  - Backward compatible: new columns only; the defaults keep existing rows
+    valid and no existing data was rewritten apart from the backfill above.
+
+---
+
 ## 022 — Menu item ratings & reviews
 - **Date:** 2026-10-21
 - **Type:** Schema

@@ -545,6 +545,18 @@ function _emitSupportChatMessage({ chatId, customerId, messageId, senderType, co
   }
 }
 
+/**
+ * emitPaymentResubmitted
+ * Customer re-uploaded a receipt after rejection → staff notified in real time.
+ * Carries the new ref/amount so the cashier's row updates without a page reload.
+ * @param {{ orderId, orderNumber, customerId, gcashRefNumber, gcashAmountSent, rejectionCount }} payload
+ */
+function emitPaymentResubmitted(payload) {
+  if (!_io) return;
+  _io.to('staff').to('manager').emit('payment:resubmitted', payload);
+  console.log(`[socket] → payment:resubmitted: order ${payload.orderId} (attempt ${payload.rejectionCount})`);
+}
+
 module.exports = {
   setIO,
   emitNewOrder,
@@ -565,4 +577,5 @@ module.exports = {
   emitSupportChatStatus,
   emitCustomerNotification,
   _emitSupportChatMessage,
+  emitPaymentResubmitted,
 };

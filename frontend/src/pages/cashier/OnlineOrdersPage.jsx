@@ -98,6 +98,19 @@ function PaymentBadge({ method, status, amount }) {
   );
 }
 
+// Shown in the summary bar when customer has re-uploaded after a rejection
+function ResubmittedBadge() {
+  return (
+    <span className="oo-resubmit-badge" title="Customer re-uploaded receipt after rejection">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+      Re-submitted
+    </span>
+  );
+}
+
 function DeliveryBadge({ preference, status }) {
   if (!preference) {
     return <span className="oo-delivery oo-delivery--pickup">For pickup</span>;
@@ -119,7 +132,8 @@ function DeliveryBadge({ preference, status }) {
 }
 
 // ─── Receipt lightbox ─────────────────────────────────────────────────────────
-function ReceiptLightbox({ src, orderNumber, onClose }) {
+// Supports single receipt OR two-receipt comparison (original rejected + new)
+function ReceiptLightbox({ src, previousSrc, orderNumber, onClose }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -130,6 +144,8 @@ function ReceiptLightbox({ src, orderNumber, onClose }) {
     };
   }, [onClose]);
 
+  const hasTwo = !!(src && previousSrc);
+
   return (
     <div className="oo-lightbox" onClick={onClose} role="dialog" aria-modal="true" aria-label={`Receipt for ${orderNumber}`}>
       <button className="oo-lightbox__close" onClick={onClose} aria-label="Close receipt">
@@ -137,21 +153,42 @@ function ReceiptLightbox({ src, orderNumber, onClose }) {
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
-      <div className="oo-lightbox__frame" onClick={e => e.stopPropagation()}>
-        <div className="oo-lightbox__label">GCash Receipt — {orderNumber}</div>
-        {src ? (
-          <img src={src} alt={`GCash receipt for ${orderNumber}`} className="oo-lightbox__img" />
-        ) : (
-          <div className="oo-lightbox__placeholder">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-            <span>Receipt image not available</span>
+
+      {hasTwo ? (
+        // ── Two-receipt side-by-side comparison ───────────────────────────
+        <div className="oo-lightbox__compare" onClick={e => e.stopPropagation()}>
+          <div className="oo-lightbox__compare-pane">
+            <div className="oo-lightbox__compare-label oo-lightbox__compare-label--rejected">
+              ✕ Rejected Receipt
+            </div>
+            <img src={previousSrc} alt="Rejected receipt" className="oo-lightbox__img" />
           </div>
-        )}
-      </div>
+          <div className="oo-lightbox__compare-divider" aria-hidden="true" />
+          <div className="oo-lightbox__compare-pane">
+            <div className="oo-lightbox__compare-label oo-lightbox__compare-label--new">
+              ↺ New Receipt
+            </div>
+            <img src={src} alt="New receipt" className="oo-lightbox__img" />
+          </div>
+        </div>
+      ) : (
+        // ── Single receipt ────────────────────────────────────────────────
+        <div className="oo-lightbox__frame" onClick={e => e.stopPropagation()}>
+          <div className="oo-lightbox__label">GCash Receipt — {orderNumber}</div>
+          {src ? (
+            <img src={src} alt={`GCash receipt for ${orderNumber}`} className="oo-lightbox__img" />
+          ) : (
+            <div className="oo-lightbox__placeholder">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <span>Receipt image not available</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -349,6 +386,10 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
   const detailId = `oo-detail-${order.id}`;
 
   const isGcashUnpaid = order.payment_method === 'gcash' && order.payment_status !== 'paid';
+  // A rejected receipt is locked: it can only be verified again after the
+  // customer uploads a new one (which flips the payment back to
+  // 'awaiting_verification'), so no accept/reject buttons are offered.
+  const isGcashRejected = order.payment_method === 'gcash' && order.payment_status === 'rejected';
   const isNew = order.status === 'pending';
   const inKitchen = ['confirmed', 'preparing'].includes(order.status);
   const dispatchable = ['ready', 'out_for_delivery'].includes(order.status);
@@ -387,6 +428,9 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
 
         <span className="oo-row__method">
           <PaymentBadge method={order.payment_method} status={order.payment_status} />
+          {order.resubmitted_at && order.payment_status === 'awaiting_verification' && (
+            <ResubmittedBadge />
+          )}
         </span>
 
         <span className="oo-row__amount">{currency(order.total_amount)}</span>
@@ -486,29 +530,78 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
                     </dd>
                   </div>
                 )}
-                {order.rejection_reason && (
+                {/* ── Re-submission info — shown when customer re-uploaded ── */}
+                {order.resubmitted_at && (
+                  <div className="oo-detail__row oo-detail__row--resubmit">
+                    <dt>Re-submitted</dt>
+                    <dd>
+                      <span className="oo-detail__resubmit-time">
+                        {formatTime(order.resubmitted_at)}
+                      </span>
+                      {order.rejection_count > 0 && (
+                        <span className="oo-detail__rejection-count" title="Number of times rejected">
+                          {order.rejection_count}× rejected before
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                )}
+                {/* Previous rejection reason — still shown for context */}
+                {order.previous_rejection_reason && order.resubmitted_at && (
                   <div className="oo-detail__row oo-detail__row--rejection">
-                    <dt>Last Rejection</dt>
+                    <dt>Was rejected for</dt>
+                    <dd>{order.previous_rejection_reason}</dd>
+                  </div>
+                )}
+                {/* Current rejection reason — shown when still rejected */}
+                {order.rejection_reason && !order.resubmitted_at && (
+                  <div className="oo-detail__row oo-detail__row--rejection">
+                    <dt>Rejection reason</dt>
                     <dd>{order.rejection_reason}</dd>
                   </div>
                 )}
               </dl>
 
               {order.payment_method === 'gcash' && order.receipt_image_url && (
-                <button
-                  className="oo-detail__receipt"
-                  onClick={() => onViewReceipt(order)}
-                  aria-label={`View full receipt for ${order.order_number}`}
-                  type="button"
-                >
-                  <img
-                    src={order.receipt_image_url}
-                    alt=""
-                    className="oo-detail__receipt-img"
-                    loading="lazy"
-                  />
-                  <span className="oo-detail__receipt-label">View full receipt</span>
-                </button>
+                <div className="oo-detail__receipts">
+                  {/* New / current receipt */}
+                  <button
+                    className="oo-detail__receipt"
+                    onClick={() => onViewReceipt(order)}
+                    aria-label={`View full receipt for ${order.order_number}`}
+                    type="button"
+                  >
+                    <img
+                      src={order.receipt_image_url}
+                      alt=""
+                      className="oo-detail__receipt-img"
+                      loading="lazy"
+                    />
+                    <span className="oo-detail__receipt-label">
+                      {order.previous_receipt_image_url ? '↺ New Receipt' : 'View full receipt'}
+                    </span>
+                  </button>
+
+                  {/* Original rejected receipt — only shown when customer re-uploaded */}
+                  {order.previous_receipt_image_url && (
+                    <button
+                      className="oo-detail__receipt oo-detail__receipt--rejected"
+                      onClick={() => onViewReceipt(order)}
+                      aria-label={`View rejected receipt for ${order.order_number}`}
+                      type="button"
+                    >
+                      <img
+                        src={order.previous_receipt_image_url}
+                        alt=""
+                        className="oo-detail__receipt-img"
+                        loading="lazy"
+                      />
+                      <span className="oo-detail__receipt-label oo-detail__receipt-label--rejected">
+                        ✕ Rejected Receipt
+                      </span>
+                    </button>
+                  )}
+                </div>
               )}
             </section>
 
@@ -534,7 +627,7 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
 
               {/* ── Actions ── */}
               <div className="oo-detail__actions">
-                {isNew && isGcashUnpaid && (
+                {isNew && isGcashUnpaid && !isGcashRejected && (
                   <>
                     <button
                       className="oo-btn oo-btn--danger oo-btn--sm"
@@ -554,6 +647,24 @@ function OrderRow({ order, onAccept, onReject, onCancel, onComplete, onViewRecei
                       aria-busy={busy}
                     >
                       {busy ? 'Accepting…' : 'Accept & Verify'}
+                    </button>
+                  </>
+                )}
+
+                {/* Rejected receipt — locked until the customer re-uploads. */}
+                {isNew && isGcashRejected && (
+                  <>
+                    <span className="oo-detail__note oo-detail__note--locked">
+                      Receipt rejected — verification is locked until the customer uploads a new receipt.
+                    </span>
+                    <button
+                      className="oo-btn oo-btn--ghost oo-btn--sm"
+                      onClick={() => onCancel(order)}
+                      disabled={busy}
+                      type="button"
+                      aria-label={`Cancel ${order.order_number}`}
+                    >
+                      Cancel order
                     </button>
                   </>
                 )}
@@ -661,9 +772,12 @@ const TABS = [
   { key: 'all',        label: 'All',        statuses: null },
   { key: 'incoming',   label: 'Incoming',   statuses: ['pending'] },
   { key: 'verify',     label: 'Needs verification',
+    // 'rejected' is deliberately excluded — a rejected receipt is locked and
+    // only needs attention again once the customer re-uploads (status flips
+    // back to 'awaiting_verification' and it reappears here by itself).
     predicate: (o) =>
       o.payment_method === 'gcash' &&
-      ['pending', 'awaiting_verification', 'rejected'].includes(o.payment_status) &&
+      ['pending', 'awaiting_verification'].includes(o.payment_status) &&
       !['completed', 'cancelled'].includes(o.status) },
   { key: 'in_kitchen', label: 'In Kitchen', statuses: ['confirmed', 'preparing'] },
   { key: 'ready',      label: 'Ready',      statuses: ['ready', 'out_for_delivery'] },
@@ -751,7 +865,27 @@ export default function OnlineOrdersPage() {
 
     // payment:rejected — receipt rejected (incl. our own reject)
     const onPaymentRejected = ({ orderId, reason }) => {
-      patchOrder(orderId, { payment_status: 'rejected', rejection_reason: reason });
+      patchOrder(orderId, { payment_status: 'rejected', rejection_reason: reason, resubmitted_at: null });
+    };
+
+    // payment:resubmitted — customer re-uploaded receipt after rejection
+    // Patch the row so cashier sees updated ref/amount + re-submitted timestamp
+    const onPaymentResubmitted = ({ orderId, gcashRefNumber, gcashAmountSent, rejectionCount, resubmittedAt }) => {
+      setOrders(prev => prev.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          payment_status:             'awaiting_verification',
+          gcash_ref_number:           gcashRefNumber  ?? o.gcash_ref_number,
+          gcash_amount_sent:          gcashAmountSent ?? o.gcash_amount_sent,
+          rejection_count:            rejectionCount,
+          resubmitted_at:             resubmittedAt,
+          // keep old reason under a different key so cashier can still see why it was rejected
+          previous_rejection_reason:  o.rejection_reason,
+          rejection_reason:           null,
+        };
+      }));
+      flashLive('Customer re-submitted receipt — ready to verify');
     };
 
     // delivery:update — rider moved the delivery forward
@@ -761,20 +895,22 @@ export default function OnlineOrdersPage() {
       patchOrder(order_id, row);
     };
 
-    socket.on('connect',          onConnect);
-    socket.on('order:status',     onOrderStatus);
-    socket.on('order:ready',      onOrderReady);
-    socket.on('payment:verified', onPaymentVerified);
-    socket.on('payment:rejected', onPaymentRejected);
-    socket.on('delivery:update',  onDeliveryUpdate);
+    socket.on('connect',              onConnect);
+    socket.on('order:status',         onOrderStatus);
+    socket.on('order:ready',          onOrderReady);
+    socket.on('payment:verified',     onPaymentVerified);
+    socket.on('payment:rejected',     onPaymentRejected);
+    socket.on('payment:resubmitted',  onPaymentResubmitted);
+    socket.on('delivery:update',      onDeliveryUpdate);
 
     return () => {
-      socket.off('connect',          onConnect);
-      socket.off('order:status',     onOrderStatus);
-      socket.off('order:ready',      onOrderReady);
-      socket.off('payment:verified', onPaymentVerified);
-      socket.off('payment:rejected', onPaymentRejected);
-      socket.off('delivery:update',  onDeliveryUpdate);
+      socket.off('connect',             onConnect);
+      socket.off('order:status',        onOrderStatus);
+      socket.off('order:ready',         onOrderReady);
+      socket.off('payment:verified',    onPaymentVerified);
+      socket.off('payment:rejected',    onPaymentRejected);
+      socket.off('payment:resubmitted', onPaymentResubmitted);
+      socket.off('delivery:update',     onDeliveryUpdate);
       clearTimeout(liveTimerRef.current);
     };
   }, [showToast]);
@@ -999,6 +1135,7 @@ export default function OnlineOrdersPage() {
       {lightboxOrder && (
         <ReceiptLightbox
           src={lightboxOrder.receipt_image_url}
+          previousSrc={lightboxOrder.previous_receipt_image_url}
           orderNumber={lightboxOrder.order_number}
           onClose={() => setLightboxOrder(null)}
         />

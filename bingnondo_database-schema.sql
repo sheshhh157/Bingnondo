@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict fVYx7Gzhn4FdmKxLHOUtBPWehr7617VFoPEP7gNuvmz79zCfxa6lvItuZDCYymG
+\restrict ay9u4pvo8EyhBTTLNsR0VEhhxaCblnxycjGYi9r3wYISSNfOXXb9apF97bViaab
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -58,6 +58,8 @@ ALTER TABLE IF EXISTS ONLY public.customer_restrictions DROP CONSTRAINT IF EXIST
 ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_order_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_flagged_by_fkey;
 ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_customer_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.customer_notifications DROP CONSTRAINT IF EXISTS customer_notifications_related_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.customer_notifications DROP CONSTRAINT IF EXISTS customer_notifications_customer_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.chatbot_messages DROP CONSTRAINT IF EXISTS chatbot_messages_conversation_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.chatbot_conversations DROP CONSTRAINT IF EXISTS chatbot_conversations_customer_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.business_hours DROP CONSTRAINT IF EXISTS business_hours_updated_by_fkey;
@@ -99,6 +101,7 @@ DROP INDEX IF EXISTS public.idx_inventory_item_categories_category_id;
 DROP INDEX IF EXISTS public.idx_esp32_devices_device_code_unique;
 DROP INDEX IF EXISTS public.idx_deliveries_status;
 DROP INDEX IF EXISTS public.idx_deliveries_rider;
+DROP INDEX IF EXISTS public.idx_customer_notifications_customer;
 DROP INDEX IF EXISTS public.idx_audit_log_actor;
 ALTER TABLE IF EXISTS ONLY public.variant_groups DROP CONSTRAINT IF EXISTS variant_groups_pkey;
 ALTER TABLE IF EXISTS ONLY public.system_settings DROP CONSTRAINT IF EXISTS system_settings_pkey;
@@ -139,6 +142,7 @@ ALTER TABLE IF EXISTS ONLY public.customers DROP CONSTRAINT IF EXISTS customers_
 ALTER TABLE IF EXISTS ONLY public.customers DROP CONSTRAINT IF EXISTS customers_email_key;
 ALTER TABLE IF EXISTS ONLY public.customer_restrictions DROP CONSTRAINT IF EXISTS customer_restrictions_pkey;
 ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_pkey;
+ALTER TABLE IF EXISTS ONLY public.customer_notifications DROP CONSTRAINT IF EXISTS customer_notifications_pkey;
 ALTER TABLE IF EXISTS ONLY public.chatbot_messages DROP CONSTRAINT IF EXISTS chatbot_messages_pkey;
 ALTER TABLE IF EXISTS ONLY public.chatbot_conversations DROP CONSTRAINT IF EXISTS chatbot_conversations_pkey;
 ALTER TABLE IF EXISTS ONLY public.business_hours DROP CONSTRAINT IF EXISTS business_hours_pkey;
@@ -166,6 +170,7 @@ ALTER TABLE IF EXISTS public.esp32_devices ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.deliveries ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.customers ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.customer_order_violations ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.customer_notifications ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.chatbot_messages ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.chatbot_conversations ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.business_hours ALTER COLUMN id DROP DEFAULT;
@@ -220,6 +225,8 @@ DROP TABLE IF EXISTS public.customers;
 DROP TABLE IF EXISTS public.customer_restrictions;
 DROP SEQUENCE IF EXISTS public.customer_order_violations_id_seq;
 DROP TABLE IF EXISTS public.customer_order_violations;
+DROP SEQUENCE IF EXISTS public.customer_notifications_id_seq;
+DROP TABLE IF EXISTS public.customer_notifications;
 DROP SEQUENCE IF EXISTS public.chatbot_messages_id_seq;
 DROP TABLE IF EXISTS public.chatbot_messages;
 DROP SEQUENCE IF EXISTS public.chatbot_conversations_id_seq;
@@ -366,6 +373,41 @@ CREATE SEQUENCE public.chatbot_messages_id_seq
 --
 
 ALTER SEQUENCE public.chatbot_messages_id_seq OWNED BY public.chatbot_messages.id;
+
+
+--
+-- Name: customer_notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customer_notifications (
+    id integer NOT NULL,
+    customer_id integer NOT NULL,
+    type character varying(50) NOT NULL,
+    message text NOT NULL,
+    related_order_id integer,
+    is_read boolean DEFAULT false NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: customer_notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.customer_notifications_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: customer_notifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.customer_notifications_id_seq OWNED BY public.customer_notifications.id;
 
 
 --
@@ -992,6 +1034,7 @@ CREATE TABLE public.otp_verifications (
     expires_at timestamp without time zone NOT NULL,
     verified_at timestamp without time zone,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    consumed_at timestamp without time zone,
     CONSTRAINT otp_verifications_purpose_check CHECK (((purpose)::text = ANY (ARRAY[('email_verification'::character varying)::text, ('mobile_verification'::character varying)::text, ('password_reset'::character varying)::text])))
 );
 
@@ -1037,6 +1080,9 @@ CREATE TABLE public.payments (
     rejection_reason character varying(255) DEFAULT NULL::character varying,
     rejected_at timestamp without time zone,
     gcash_amount_sent numeric(10,2) DEFAULT NULL::numeric,
+    previous_receipt_image_url text,
+    resubmitted_at timestamp without time zone,
+    rejection_count integer DEFAULT 0,
     CONSTRAINT payments_method_check CHECK (((method)::text = ANY (ARRAY[('gcash'::character varying)::text, ('cash'::character varying)::text, ('cash_on_delivery'::character varying)::text]))),
     CONSTRAINT payments_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'awaiting_verification'::character varying, 'paid'::character varying, 'rejected'::character varying, 'refunded'::character varying])::text[])))
 );
@@ -1047,6 +1093,27 @@ CREATE TABLE public.payments (
 --
 
 COMMENT ON COLUMN public.payments.gcash_amount_sent IS 'Amount extracted from the customer''s GCash receipt screenshot via OCR. NULL means OCR could not read it — staff must verify manually. Compare against `amount` to detect short payments.';
+
+
+--
+-- Name: COLUMN payments.previous_receipt_image_url; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payments.previous_receipt_image_url IS 'The receipt URL that was rejected. Saved when customer re-uploads so cashier can compare the original rejected receipt vs the new one side by side.';
+
+
+--
+-- Name: COLUMN payments.resubmitted_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payments.resubmitted_at IS 'Timestamp of the most recent customer re-upload after a rejection. NULL means never re-submitted.';
+
+
+--
+-- Name: COLUMN payments.rejection_count; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payments.rejection_count IS 'How many times this payment has been rejected so far. Incremented when staff rejects. Helps cashier know if this is a repeat offender.';
 
 
 --
@@ -1175,6 +1242,7 @@ CREATE TABLE public.support_chat_messages (
     related_order_id integer,
     content text NOT NULL,
     sent_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    is_read boolean DEFAULT false,
     CONSTRAINT support_chat_messages_sender_type_check CHECK (((sender_type)::text = ANY (ARRAY[('customer'::character varying)::text, ('staff'::character varying)::text])))
 );
 
@@ -1304,6 +1372,13 @@ ALTER TABLE ONLY public.chatbot_conversations ALTER COLUMN id SET DEFAULT nextva
 --
 
 ALTER TABLE ONLY public.chatbot_messages ALTER COLUMN id SET DEFAULT nextval('public.chatbot_messages_id_seq'::regclass);
+
+
+--
+-- Name: customer_notifications id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_notifications ALTER COLUMN id SET DEFAULT nextval('public.customer_notifications_id_seq'::regclass);
 
 
 --
@@ -1519,6 +1594,7 @@ COPY public.audit_log (id, actor_id, action, target_type, target_id, details, cr
 512	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 11:22:25.988611
 513	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 11:22:26.548472
 514	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 11:22:27.316937
+643	\N	self_reset_password	rider_account	473	{"email": "__fp_test_1792598523666_4@example.test", "account_type": "rider"}	2026-10-22 00:02:03.685535
 404	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 02:20:46.473014
 405	1	update_variant_group	variant_groups	10	{"new_name": "Flavors", "old_name": "Flavor", "max_options": 3}	2026-10-20 02:20:53.123194
 \.
@@ -1552,6 +1628,14 @@ COPY public.chatbot_conversations (id, customer_id, started_at) FROM stdin;
 --
 
 COPY public.chatbot_messages (id, conversation_id, sender, content, sent_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: customer_notifications; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.customer_notifications (id, customer_id, type, message, related_order_id, is_read, created_at) FROM stdin;
 \.
 
 
@@ -1892,11 +1976,158 @@ COPY public.orders (id, order_type, customer_id, cashier_id, status, order_chann
 -- Data for Name: otp_verifications; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verified_at, created_at) FROM stdin;
-47	cashier@bingnondo.com	874310	password_reset	2026-10-16 22:10:48.005	\N	2026-10-16 22:00:48.008024
-53	buenaflordaniel371@gmail.com	628620	password_reset	2026-10-17 12:20:38.804	2026-10-17 12:13:46.755099	2026-10-17 12:10:38.807686
-21	cashier@bingnondo.com	535925	password_reset	2026-10-16 21:38:45.4	\N	2026-10-16 21:28:45.40364
-127	buenaflordaniel371@gmail.com	171443	password_reset	2026-10-20 11:38:10.732	2026-10-20 11:29:16.811306	2026-10-20 11:28:10.733974
+COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verified_at, created_at, consumed_at) FROM stdin;
+152	__cust_test_1792598867440_0@example.test	883139	email_verification	2026-10-22 00:17:48.498	2026-10-22 00:07:48.798704	2026-10-22 00:07:48.501248	2026-10-22 00:07:48.798704
+47	cashier@bingnondo.com	874310	password_reset	2026-10-16 22:10:48.005	\N	2026-10-16 22:00:48.008024	\N
+153	__cust_test_1792598867440_0@example.test	409772	email_verification	2026-10-22 00:17:48.798	\N	2026-10-22 00:07:48.800223	\N
+154	__cust_test_1792598868806_1@example.test	694801	email_verification	2026-10-22 00:17:49.08	2026-10-22 00:07:49.092344	2026-10-22 00:07:49.081655	\N
+53	buenaflordaniel371@gmail.com	628620	password_reset	2026-10-17 12:20:38.804	2026-10-17 12:13:46.755099	2026-10-17 12:10:38.807686	\N
+21	cashier@bingnondo.com	535925	password_reset	2026-10-16 21:38:45.4	\N	2026-10-16 21:28:45.40364	\N
+127	buenaflordaniel371@gmail.com	171443	password_reset	2026-10-20 11:38:10.732	2026-10-20 11:29:16.811306	2026-10-20 11:28:10.733974	\N
+155	__cust_test_1792598869409_2@example.test	231378	email_verification	2026-10-22 00:17:49.682	2026-10-22 00:07:49.704233	2026-10-22 00:07:49.683878	\N
+156	__cust_test_1792598869709_3@example.test	264484	email_verification	2026-10-22 00:17:50.055	2026-10-22 00:07:50.066495	2026-10-22 00:07:50.057161	\N
+157	__cust_test_1792598870655_4@example.test	988399	email_verification	2026-10-22 00:17:50.946	\N	2026-10-22 00:07:50.947639	\N
+158	__cust_test_1792598871240_5@example.test	343811	email_verification	2026-10-22 00:17:51.517	2026-10-22 00:07:51.524945	2026-10-22 00:07:51.518621	\N
+159	__cust_test_1792598871859_6@example.test	849360	email_verification	2026-10-22 00:17:52.149	2026-10-22 00:07:52.162255	2026-10-22 00:07:52.150435	\N
+160	__cust_test_1792598872467_7@example.test	649971	email_verification	2026-10-22 00:17:52.752	2026-10-22 00:07:52.757652	2026-10-22 00:07:52.753572	\N
+161	__cust_test_1792598874525_8@example.test	739055	email_verification	2026-10-22 00:17:54.807	2026-10-22 00:07:54.82684	2026-10-22 00:07:54.808679	\N
+162	__cust_test_1792598875188_9@example.test	582980	email_verification	2026-10-22 00:17:55.498	2026-10-22 00:07:55.504503	2026-10-22 00:07:55.499282	\N
+163	__cust_test_1792598875801_10@example.test	101558	email_verification	2026-10-22 00:17:56.074	2026-10-22 00:07:56.081688	2026-10-22 00:07:56.075943	\N
+164	__cust_test_1792598876389_11@example.test	228188	email_verification	2026-10-22 00:17:56.696	2026-10-22 00:07:56.702123	2026-10-22 00:07:56.697602	\N
+165	__cust_test_1792598876980_12@example.test	965562	email_verification	2026-10-22 00:17:57.254	2026-10-22 00:07:57.273969	2026-10-22 00:07:57.256036	\N
+166	__cust_test_1792598877587_13@example.test	519015	email_verification	2026-10-22 00:17:57.89	2026-10-22 00:07:57.908766	2026-10-22 00:07:57.891865	\N
+167	__cust_test_1792598878204_14@example.test	789723	email_verification	2026-10-22 00:17:58.48	2026-10-22 00:07:58.495616	2026-10-22 00:07:58.48133	\N
+168	__cust_test_1792598878882_15@example.test	502523	email_verification	2026-10-22 00:17:59.198	2026-10-22 00:07:59.214883	2026-10-22 00:07:59.199771	\N
+169	__cust_test_1792598879540_16@example.test	796506	email_verification	2026-10-22 00:17:59.835	2026-10-22 00:07:59.852997	2026-10-22 00:07:59.83701	\N
+170	__cust_test_1792598880140_17@example.test	386388	email_verification	2026-10-22 00:18:00.414	2026-10-22 00:08:00.419939	2026-10-22 00:08:00.415236	\N
+171	__cust_test_1792598880753_18@example.test	103733	email_verification	2026-10-22 00:18:01.02	2026-10-22 00:08:01.029954	2026-10-22 00:08:01.021396	\N
+172	__cust_test_1792598890482_0@example.test	840009	email_verification	2026-10-22 00:18:11.561	2026-10-22 00:08:11.903897	2026-10-22 00:08:11.566711	2026-10-22 00:08:11.903897
+173	__cust_test_1792598890482_0@example.test	439298	email_verification	2026-10-22 00:18:11.901	\N	2026-10-22 00:08:11.905559	\N
+174	__cust_test_1792598891911_1@example.test	698349	email_verification	2026-10-22 00:18:12.181	2026-10-22 00:08:12.193296	2026-10-22 00:08:12.185272	\N
+175	__cust_test_1792598892557_2@example.test	890345	email_verification	2026-10-22 00:18:12.874	2026-10-22 00:08:12.897283	2026-10-22 00:08:12.877298	\N
+176	__cust_test_1792598892904_3@example.test	977190	email_verification	2026-10-22 00:18:13.201	2026-10-22 00:08:13.225163	2026-10-22 00:08:13.204258	\N
+177	__cust_test_1792598893866_4@example.test	793617	email_verification	2026-10-22 00:18:14.143	\N	2026-10-22 00:08:14.147492	\N
+178	__cust_test_1792598894467_5@example.test	844254	email_verification	2026-10-22 00:18:14.777	2026-10-22 00:08:14.789631	2026-10-22 00:08:14.783149	\N
+179	__cust_test_1792598895089_6@example.test	116865	email_verification	2026-10-22 00:18:15.373	2026-10-22 00:08:15.389722	2026-10-22 00:08:15.37641	\N
+180	__cust_test_1792598895741_7@example.test	674136	email_verification	2026-10-22 00:18:16.032	2026-10-22 00:08:16.039754	2026-10-22 00:08:16.035774	\N
+181	__cust_test_1792598897866_8@example.test	753718	email_verification	2026-10-22 00:18:18.148	2026-10-22 00:08:18.164684	2026-10-22 00:08:18.15185	\N
+182	__cust_test_1792598898516_9@example.test	907228	email_verification	2026-10-22 00:18:18.783	2026-10-22 00:08:18.793546	2026-10-22 00:08:18.786621	\N
+183	__cust_test_1792598899143_10@example.test	397103	email_verification	2026-10-22 00:18:19.439	2026-10-22 00:08:19.461576	2026-10-22 00:08:19.44306	\N
+184	__cust_test_1792598899754_11@example.test	793124	email_verification	2026-10-22 00:18:20.031	2026-10-22 00:08:20.038875	2026-10-22 00:08:20.03433	\N
+185	__cust_test_1792598900386_12@example.test	560377	email_verification	2026-10-22 00:18:20.643	2026-10-22 00:08:20.659067	2026-10-22 00:08:20.646279	\N
+186	__cust_test_1792598901011_13@example.test	320903	email_verification	2026-10-22 00:18:21.315	2026-10-22 00:08:21.326807	2026-10-22 00:08:21.318058	\N
+187	__cust_test_1792598901677_14@example.test	755123	email_verification	2026-10-22 00:18:21.941	2026-10-22 00:08:21.952132	2026-10-22 00:08:21.945163	\N
+188	__cust_test_1792598902344_15@example.test	349763	email_verification	2026-10-22 00:18:22.61	2026-10-22 00:08:22.62079	2026-10-22 00:08:22.614348	\N
+189	__cust_test_1792598902947_16@example.test	498189	email_verification	2026-10-22 00:18:23.248	2026-10-22 00:08:23.264655	2026-10-22 00:08:23.25165	\N
+190	__cust_test_1792598903577_17@example.test	131635	email_verification	2026-10-22 00:18:23.877	2026-10-22 00:08:23.89256	2026-10-22 00:08:23.880601	\N
+191	__cust_test_1792598904201_18@example.test	962845	email_verification	2026-10-22 00:18:24.476	2026-10-22 00:08:24.487801	2026-10-22 00:08:24.479341	\N
+192	__dbg_1792598959964@example.test	807519	email_verification	2026-10-22 00:19:20.386	2026-10-22 00:09:20.413882	2026-10-22 00:09:20.392962	\N
+193	__cust_test_1792598977725_0@example.test	264438	email_verification	2026-10-22 00:19:38.834	2026-10-22 00:09:38.866822	2026-10-22 00:09:38.841589	\N
+194	__cust_test_1792599037020_0@example.test	766836	email_verification	2026-10-22 00:20:38.113	2026-10-22 00:10:38.408636	2026-10-22 00:10:38.121249	2026-10-22 00:10:38.408636
+195	__cust_test_1792599037020_0@example.test	973636	email_verification	2026-10-22 00:20:38.402	\N	2026-10-22 00:10:38.410116	\N
+196	__cust_test_1792599038412_1@example.test	945368	email_verification	2026-10-22 00:20:38.681	2026-10-22 00:10:38.695829	2026-10-22 00:10:38.687941	\N
+197	__cust_test_1792599039012_2@example.test	341064	email_verification	2026-10-22 00:20:39.323	2026-10-22 00:10:39.36695	2026-10-22 00:10:39.330918	\N
+198	__cust_test_1792599039369_3@example.test	560327	email_verification	2026-10-22 00:20:39.667	2026-10-22 00:10:39.680098	2026-10-22 00:10:39.673766	\N
+199	__cust_test_1792599040599_4@example.test	615886	email_verification	2026-10-22 00:20:40.876	\N	2026-10-22 00:10:40.882867	\N
+200	__cust_test_1792599041184_5@example.test	366922	email_verification	2026-10-22 00:20:41.47	2026-10-22 00:10:41.490116	2026-10-22 00:10:41.476774	\N
+201	__cust_test_1792599041814_6@example.test	511194	email_verification	2026-10-22 00:20:42.088	2026-10-22 00:10:42.115284	2026-10-22 00:10:42.094738	\N
+202	__cust_test_1792599042482_7@example.test	137160	email_verification	2026-10-22 00:20:42.781	2026-10-22 00:10:42.80277	2026-10-22 00:10:42.788114	\N
+203	__cust_test_1792599044580_8@example.test	914065	email_verification	2026-10-22 00:20:44.85	2026-10-22 00:10:44.87784	2026-10-22 00:10:44.856559	\N
+204	__cust_test_1792599045216_9@example.test	954618	email_verification	2026-10-22 00:20:45.507	2026-10-22 00:10:45.518942	2026-10-22 00:10:45.514005	\N
+205	__cust_test_1792599045816_10@example.test	393574	email_verification	2026-10-22 00:20:46.12	2026-10-22 00:10:46.137256	2026-10-22 00:10:46.127478	\N
+206	__cust_test_1792599046454_11@example.test	251057	email_verification	2026-10-22 00:20:46.756	2026-10-22 00:10:46.771766	2026-10-22 00:10:46.763037	\N
+207	__cust_test_1792599047158_12@example.test	505476	email_verification	2026-10-22 00:20:47.501	2026-10-22 00:10:47.513076	2026-10-22 00:10:47.508161	\N
+208	__cust_test_1792599047956_13@example.test	264635	email_verification	2026-10-22 00:20:48.253	2026-10-22 00:10:48.267538	2026-10-22 00:10:48.260228	\N
+209	__cust_test_1792599048656_14@example.test	977809	email_verification	2026-10-22 00:20:49	2026-10-22 00:10:49.017913	2026-10-22 00:10:49.006288	\N
+210	__cust_test_1792599049437_15@example.test	479610	email_verification	2026-10-22 00:20:49.721	2026-10-22 00:10:49.738783	2026-10-22 00:10:49.728233	\N
+211	__cust_test_1792599050065_16@example.test	695366	email_verification	2026-10-22 00:20:50.362	2026-10-22 00:10:50.377777	2026-10-22 00:10:50.368803	\N
+212	__cust_test_1792599050658_17@example.test	609275	email_verification	2026-10-22 00:20:50.984	2026-10-22 00:10:50.994878	2026-10-22 00:10:50.991087	\N
+213	__cust_test_1792599051716_18@example.test	823781	email_verification	2026-10-22 00:20:52.009	2026-10-22 00:10:52.021908	2026-10-22 00:10:52.016192	\N
+214	__cust_test_1792599374418_0@example.test	553346	email_verification	2026-10-22 00:26:15.432	2026-10-22 00:16:15.46772	2026-10-22 00:16:15.437072	\N
+215	__cust_test_1792599422327_0@example.test	628421	email_verification	2026-10-22 00:27:02.713	2026-10-22 00:17:02.746271	2026-10-22 00:17:02.720223	\N
+216	__cust_test_1792599423027_1@example.test	930128	email_verification	2026-10-22 00:27:03.318	2026-10-22 00:17:03.331562	2026-10-22 00:17:03.323928	\N
+217	__cust_test_1792599628044_0@example.test	800986	email_verification	2026-10-22 00:30:28.401	2026-10-22 00:20:28.42693	2026-10-22 00:20:28.404814	\N
+218	__cust_test_1792599628769_1@example.test	144047	email_verification	2026-10-22 00:30:29.052	2026-10-22 00:20:29.069917	2026-10-22 00:20:29.054655	\N
+219	__cust_test_1792599641037_0@example.test	643109	email_verification	2026-10-22 00:30:42.164	2026-10-22 00:20:42.53438	2026-10-22 00:20:42.166852	2026-10-22 00:20:42.53438
+220	__cust_test_1792599641037_0@example.test	273449	email_verification	2026-10-22 00:30:42.534	\N	2026-10-22 00:20:42.535746	\N
+221	__cust_test_1792599642545_1@example.test	979746	email_verification	2026-10-22 00:30:42.817	2026-10-22 00:20:42.829993	2026-10-22 00:20:42.818822	\N
+222	__cust_test_1792599643216_2@example.test	146632	email_verification	2026-10-22 00:30:43.488	2026-10-22 00:20:43.523418	2026-10-22 00:20:43.490108	\N
+223	__cust_test_1792599643532_3@example.test	197370	email_verification	2026-10-22 00:30:43.838	2026-10-22 00:20:43.853027	2026-10-22 00:20:43.839126	\N
+224	__cust_test_1792599644866_4@example.test	776550	email_verification	2026-10-22 00:30:45.201	\N	2026-10-22 00:20:45.202708	\N
+225	__cust_test_1792599645535_5@example.test	160032	email_verification	2026-10-22 00:30:45.838	2026-10-22 00:20:45.855402	2026-10-22 00:20:45.839956	\N
+226	__cust_test_1792599646163_6@example.test	565900	email_verification	2026-10-22 00:30:46.509	2026-10-22 00:20:46.526812	2026-10-22 00:20:46.514158	\N
+227	__cust_test_1792599646872_7@example.test	505570	email_verification	2026-10-22 00:30:47.248	2026-10-22 00:20:47.253522	2026-10-22 00:20:47.249612	\N
+228	__cust_test_1792599649276_8@example.test	288419	email_verification	2026-10-22 00:30:49.61	2026-10-22 00:20:49.622211	2026-10-22 00:20:49.612305	\N
+229	__cust_test_1792599650002_9@example.test	286381	email_verification	2026-10-22 00:30:50.26	2026-10-22 00:20:50.267062	2026-10-22 00:20:50.261069	\N
+230	__cust_test_1792599650585_10@example.test	311872	email_verification	2026-10-22 00:30:50.902	2026-10-22 00:20:50.922436	2026-10-22 00:20:50.903443	\N
+231	__cust_test_1792599651225_11@example.test	920991	email_verification	2026-10-22 00:30:51.523	2026-10-22 00:20:51.54395	2026-10-22 00:20:51.524689	\N
+232	__cust_test_1792599651939_12@example.test	226910	email_verification	2026-10-22 00:30:52.22	2026-10-22 00:20:52.231898	2026-10-22 00:20:52.221756	\N
+233	__cust_test_1792599652640_13@example.test	848383	email_verification	2026-10-22 00:30:52.942	2026-10-22 00:20:52.951019	2026-10-22 00:20:52.943035	\N
+234	__cust_test_1792599653327_14@example.test	962951	email_verification	2026-10-22 00:30:53.644	2026-10-22 00:20:53.652093	2026-10-22 00:20:53.645594	\N
+235	__cust_test_1792599654021_15@example.test	635100	email_verification	2026-10-22 00:30:54.291	2026-10-22 00:20:54.312366	2026-10-22 00:20:54.292712	\N
+236	__cust_test_1792599654650_16@example.test	931877	email_verification	2026-10-22 00:30:54.942	2026-10-22 00:20:54.950621	2026-10-22 00:20:54.943639	\N
+237	__cust_test_1792599655294_17@example.test	572882	email_verification	2026-10-22 00:30:55.59	2026-10-22 00:20:55.597306	2026-10-22 00:20:55.59101	\N
+238	__cust_test_1792599656738_18@example.test	192019	email_verification	2026-10-22 00:30:57.145	2026-10-22 00:20:57.166411	2026-10-22 00:20:57.146857	\N
+243	__cust_test_1792599674022_0@example.test	704049	email_verification	2026-10-22 00:31:15.068	2026-10-22 00:21:15.399622	2026-10-22 00:21:15.071384	2026-10-22 00:21:15.399622
+244	__cust_test_1792599674022_0@example.test	316298	email_verification	2026-10-22 00:31:15.398	\N	2026-10-22 00:21:15.402205	\N
+245	__cust_test_1792599675411_1@example.test	492287	email_verification	2026-10-22 00:31:15.709	2026-10-22 00:21:15.717885	2026-10-22 00:21:15.711001	\N
+246	__cust_test_1792599676060_2@example.test	311454	email_verification	2026-10-22 00:31:16.366	2026-10-22 00:21:16.393518	2026-10-22 00:21:16.367826	\N
+247	__cust_test_1792599676398_3@example.test	187801	email_verification	2026-10-22 00:31:16.671	2026-10-22 00:21:16.68446	2026-10-22 00:21:16.673359	\N
+248	__cust_test_1792599677677_4@example.test	671317	email_verification	2026-10-22 00:31:17.962	\N	2026-10-22 00:21:17.964455	\N
+249	__cust_test_1792599678286_5@example.test	327458	email_verification	2026-10-22 00:31:18.635	2026-10-22 00:21:18.652501	2026-10-22 00:21:18.636863	\N
+250	__cust_test_1792599678995_6@example.test	778664	email_verification	2026-10-22 00:31:19.362	2026-10-22 00:21:19.371231	2026-10-22 00:21:19.363608	\N
+251	__cust_test_1792599679668_7@example.test	888887	email_verification	2026-10-22 00:31:19.985	2026-10-22 00:21:19.994624	2026-10-22 00:21:19.987345	\N
+252	__cust_test_1792599681780_8@example.test	797023	email_verification	2026-10-22 00:31:22.067	2026-10-22 00:21:22.079043	2026-10-22 00:21:22.069075	\N
+253	__cust_test_1792599682504_9@example.test	905881	email_verification	2026-10-22 00:31:22.787	2026-10-22 00:21:22.793107	2026-10-22 00:21:22.788934	\N
+254	__cust_test_1792599683116_10@example.test	738493	email_verification	2026-10-22 00:31:23.395	2026-10-22 00:21:23.407506	2026-10-22 00:21:23.398027	\N
+255	__cust_test_1792599683708_11@example.test	621273	email_verification	2026-10-22 00:31:23.99	2026-10-22 00:21:24.00282	2026-10-22 00:21:23.992053	\N
+256	__cust_test_1792599684366_12@example.test	702403	email_verification	2026-10-22 00:31:24.67	2026-10-22 00:21:24.691045	2026-10-22 00:21:24.671722	\N
+257	__cust_test_1792599685050_13@example.test	399541	email_verification	2026-10-22 00:31:25.33	2026-10-22 00:21:25.335921	2026-10-22 00:21:25.331804	\N
+258	__cust_test_1792599685739_14@example.test	278550	email_verification	2026-10-22 00:31:26.023	2026-10-22 00:21:26.032301	2026-10-22 00:21:26.02521	\N
+259	__cust_test_1792599686407_15@example.test	931341	email_verification	2026-10-22 00:31:26.677	2026-10-22 00:21:26.699502	2026-10-22 00:21:26.679648	\N
+260	__cust_test_1792599687021_16@example.test	982970	email_verification	2026-10-22 00:31:27.314	2026-10-22 00:21:27.336253	2026-10-22 00:21:27.31613	\N
+261	__cust_test_1792599687660_17@example.test	565909	email_verification	2026-10-22 00:31:27.991	2026-10-22 00:21:28.006599	2026-10-22 00:21:27.993152	\N
+262	__cust_test_1792599689158_18@example.test	316745	email_verification	2026-10-22 00:31:29.511	2026-10-22 00:21:29.526707	2026-10-22 00:21:29.513746	\N
+267	__cust_test_1792663733445_0@example.test	488254	email_verification	2026-10-22 18:18:54.885	2026-10-22 18:08:55.223833	2026-10-22 18:08:54.8886	2026-10-22 18:08:55.223833
+268	__cust_test_1792663733445_0@example.test	173677	email_verification	2026-10-22 18:18:55.223	\N	2026-10-22 18:08:55.225356	\N
+269	__cust_test_1792663735230_1@example.test	304240	email_verification	2026-10-22 18:18:55.522	2026-10-22 18:08:55.532847	2026-10-22 18:08:55.523683	\N
+270	__cust_test_1792663735858_2@example.test	230839	email_verification	2026-10-22 18:18:56.169	2026-10-22 18:08:56.198173	2026-10-22 18:08:56.170955	\N
+271	__cust_test_1792663736206_3@example.test	761691	email_verification	2026-10-22 18:18:56.507	2026-10-22 18:08:56.525297	2026-10-22 18:08:56.508695	\N
+272	__cust_test_1792663737445_4@example.test	352476	email_verification	2026-10-22 18:18:57.734	\N	2026-10-22 18:08:57.736521	\N
+273	__cust_test_1792663738017_5@example.test	234406	email_verification	2026-10-22 18:18:58.295	2026-10-22 18:08:58.30618	2026-10-22 18:08:58.296581	\N
+274	__cust_test_1792663738595_6@example.test	843835	email_verification	2026-10-22 18:18:58.929	2026-10-22 18:08:58.952364	2026-10-22 18:08:58.930824	\N
+275	__cust_test_1792663739253_7@example.test	671297	email_verification	2026-10-22 18:18:59.524	2026-10-22 18:08:59.53163	2026-10-22 18:08:59.525345	\N
+276	__cust_test_1792663741299_8@example.test	995770	email_verification	2026-10-22 18:19:01.62	2026-10-22 18:09:01.628416	2026-10-22 18:09:01.622081	\N
+277	__cust_test_1792663742021_9@example.test	733196	email_verification	2026-10-22 18:19:02.324	2026-10-22 18:09:02.330961	2026-10-22 18:09:02.325423	\N
+278	__cust_test_1792663742630_10@example.test	993102	email_verification	2026-10-22 18:19:02.929	2026-10-22 18:09:02.93523	2026-10-22 18:09:02.931156	\N
+279	__cust_test_1792663743223_11@example.test	234234	email_verification	2026-10-22 18:19:03.539	2026-10-22 18:09:03.547995	2026-10-22 18:09:03.541492	\N
+280	__cust_test_1792663743933_12@example.test	793606	email_verification	2026-10-22 18:19:04.226	2026-10-22 18:09:04.236128	2026-10-22 18:09:04.227679	\N
+281	__cust_test_1792663744613_13@example.test	567862	email_verification	2026-10-22 18:19:04.887	2026-10-22 18:09:04.907737	2026-10-22 18:09:04.888645	\N
+282	__cust_test_1792663745351_14@example.test	704700	email_verification	2026-10-22 18:19:05.615	2026-10-22 18:09:05.622534	2026-10-22 18:09:05.616573	\N
+283	__cust_test_1792663746007_15@example.test	795191	email_verification	2026-10-22 18:19:06.311	2026-10-22 18:09:06.322176	2026-10-22 18:09:06.313824	\N
+284	__cust_test_1792663746732_16@example.test	470341	email_verification	2026-10-22 18:19:06.992	2026-10-22 18:09:07.006374	2026-10-22 18:09:06.994021	\N
+285	__cust_test_1792663747291_17@example.test	995001	email_verification	2026-10-22 18:19:07.563	2026-10-22 18:09:07.575651	2026-10-22 18:09:07.564322	\N
+286	__cust_test_1792663748671_18@example.test	875276	email_verification	2026-10-22 18:19:08.936	2026-10-22 18:09:08.945616	2026-10-22 18:09:08.937717	\N
+291	__cust_test_1792664604889_0@example.test	203466	email_verification	2026-10-22 18:33:26.021	2026-10-22 18:23:26.316759	2026-10-22 18:23:26.025611	2026-10-22 18:23:26.316759
+292	__cust_test_1792664604889_0@example.test	123308	email_verification	2026-10-22 18:33:26.316	\N	2026-10-22 18:23:26.318078	\N
+293	__cust_test_1792664606326_1@example.test	275564	email_verification	2026-10-22 18:33:26.607	2026-10-22 18:23:26.617546	2026-10-22 18:23:26.608964	\N
+294	__cust_test_1792664606928_2@example.test	926660	email_verification	2026-10-22 18:33:27.232	2026-10-22 18:23:27.262768	2026-10-22 18:23:27.234195	\N
+295	__cust_test_1792664607272_3@example.test	828374	email_verification	2026-10-22 18:33:27.558	2026-10-22 18:23:27.567726	2026-10-22 18:23:27.55925	\N
+296	__cust_test_1792664608471_4@example.test	239806	email_verification	2026-10-22 18:33:28.798	\N	2026-10-22 18:23:28.799547	\N
+297	__cust_test_1792664609111_5@example.test	972404	email_verification	2026-10-22 18:33:29.407	2026-10-22 18:23:29.426185	2026-10-22 18:23:29.408975	\N
+298	__cust_test_1792664609771_6@example.test	411236	email_verification	2026-10-22 18:33:30.098	2026-10-22 18:23:30.114848	2026-10-22 18:23:30.099819	\N
+299	__cust_test_1792664610420_7@example.test	274641	email_verification	2026-10-22 18:33:30.733	2026-10-22 18:23:30.753824	2026-10-22 18:23:30.734356	\N
+300	__cust_test_1792664612578_8@example.test	296701	email_verification	2026-10-22 18:33:32.91	2026-10-22 18:23:32.921502	2026-10-22 18:23:32.911925	\N
+301	__cust_test_1792664613318_9@example.test	261980	email_verification	2026-10-22 18:33:33.648	2026-10-22 18:23:33.658711	2026-10-22 18:23:33.650194	\N
+302	__cust_test_1792664613988_10@example.test	171861	email_verification	2026-10-22 18:33:34.305	2026-10-22 18:23:34.325592	2026-10-22 18:23:34.306313	\N
+303	__cust_test_1792664614648_11@example.test	918413	email_verification	2026-10-22 18:33:34.949	2026-10-22 18:23:34.965755	2026-10-22 18:23:34.950337	\N
+304	__cust_test_1792664615378_12@example.test	879467	email_verification	2026-10-22 18:33:35.683	2026-10-22 18:23:35.702599	2026-10-22 18:23:35.684681	\N
+305	__cust_test_1792664616115_13@example.test	912119	email_verification	2026-10-22 18:33:36.403	2026-10-22 18:23:36.421877	2026-10-22 18:23:36.405226	\N
+306	__cust_test_1792664616816_14@example.test	532303	email_verification	2026-10-22 18:33:37.118	2026-10-22 18:23:37.125797	2026-10-22 18:23:37.119126	\N
+307	__cust_test_1792664617541_15@example.test	558430	email_verification	2026-10-22 18:33:37.866	2026-10-22 18:23:37.876374	2026-10-22 18:23:37.868785	\N
+308	__cust_test_1792664618250_16@example.test	661430	email_verification	2026-10-22 18:33:38.571	2026-10-22 18:23:38.593388	2026-10-22 18:23:38.572739	\N
+309	__cust_test_1792664618909_17@example.test	357868	email_verification	2026-10-22 18:33:39.25	2026-10-22 18:23:39.256519	2026-10-22 18:23:39.251629	\N
+310	__cust_test_1792664620326_18@example.test	644495	email_verification	2026-10-22 18:33:40.723	2026-10-22 18:23:40.737181	2026-10-22 18:23:40.72494	\N
 \.
 
 
@@ -1904,21 +2135,21 @@ COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verif
 -- Data for Name: payments; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.payments (id, order_id, method, amount, paymongo_payment_id, status, paid_at, created_at, gcash_ref_number, receipt_image_url, receipt_uploaded_at, verified_by, verified_at, rejection_reason, rejected_at, gcash_amount_sent) FROM stdin;
-666	875	cash	90.00	\N	paid	2026-10-16 18:20:49.921908	2026-10-16 18:20:49.921908	\N	\N	\N	\N	\N	\N	\N	\N
-667	876	cash	80.00	\N	paid	2026-10-16 18:40:05.849307	2026-10-16 18:40:05.849307	\N	\N	\N	\N	\N	\N	\N	\N
-668	877	cash	85.00	\N	paid	2026-10-16 19:15:22.367247	2026-10-16 19:15:22.367247	\N	\N	\N	\N	\N	\N	\N	\N
-909	1268	cash	90.00	\N	paid	2026-10-17 11:56:31.316423	2026-10-17 11:56:31.316423	\N	\N	\N	\N	\N	\N	\N	\N
-589	752	cash	80.00	\N	paid	2026-10-16 00:08:14.50445	2026-10-16 00:08:14.50445	\N	\N	\N	\N	\N	\N	\N	\N
-590	753	cash	90.00	\N	paid	2026-10-16 08:16:13.220702	2026-10-16 08:16:13.220702	\N	\N	\N	\N	\N	\N	\N	\N
-591	754	cash	80.00	\N	paid	2026-10-16 08:26:02.422425	2026-10-16 08:26:02.422425	\N	\N	\N	\N	\N	\N	\N	\N
-640	833	cash	90.00	\N	paid	2026-10-16 15:06:07.572905	2026-10-16 15:06:07.572905	\N	\N	\N	\N	\N	\N	\N	\N
-641	834	cash	80.00	\N	paid	2026-10-16 15:06:43.272603	2026-10-16 15:06:43.272603	\N	\N	\N	\N	\N	\N	\N	\N
-235	253	cash	95.00	\N	paid	2026-10-14 22:45:31.900671	2026-10-14 22:45:31.900671	\N	\N	\N	\N	\N	\N	\N	\N
-236	254	cash	265.00	\N	paid	2026-10-15 12:49:24.98439	2026-10-15 12:49:24.98439	\N	\N	\N	\N	\N	\N	\N	\N
-237	255	cash	270.00	\N	paid	2026-10-15 12:49:32.848972	2026-10-15 12:49:32.848972	\N	\N	\N	\N	\N	\N	\N	\N
-238	256	cash	270.00	\N	paid	2026-10-15 12:49:40.128487	2026-10-15 12:49:40.128487	\N	\N	\N	\N	\N	\N	\N	\N
-239	257	cash	90.00	\N	paid	2026-10-15 12:49:45.897507	2026-10-15 12:49:45.897507	\N	\N	\N	\N	\N	\N	\N	\N
+COPY public.payments (id, order_id, method, amount, paymongo_payment_id, status, paid_at, created_at, gcash_ref_number, receipt_image_url, receipt_uploaded_at, verified_by, verified_at, rejection_reason, rejected_at, gcash_amount_sent, previous_receipt_image_url, resubmitted_at, rejection_count) FROM stdin;
+666	875	cash	90.00	\N	paid	2026-10-16 18:20:49.921908	2026-10-16 18:20:49.921908	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+667	876	cash	80.00	\N	paid	2026-10-16 18:40:05.849307	2026-10-16 18:40:05.849307	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+668	877	cash	85.00	\N	paid	2026-10-16 19:15:22.367247	2026-10-16 19:15:22.367247	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+909	1268	cash	90.00	\N	paid	2026-10-17 11:56:31.316423	2026-10-17 11:56:31.316423	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+589	752	cash	80.00	\N	paid	2026-10-16 00:08:14.50445	2026-10-16 00:08:14.50445	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+590	753	cash	90.00	\N	paid	2026-10-16 08:16:13.220702	2026-10-16 08:16:13.220702	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+591	754	cash	80.00	\N	paid	2026-10-16 08:26:02.422425	2026-10-16 08:26:02.422425	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+640	833	cash	90.00	\N	paid	2026-10-16 15:06:07.572905	2026-10-16 15:06:07.572905	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+641	834	cash	80.00	\N	paid	2026-10-16 15:06:43.272603	2026-10-16 15:06:43.272603	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+235	253	cash	95.00	\N	paid	2026-10-14 22:45:31.900671	2026-10-14 22:45:31.900671	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+236	254	cash	265.00	\N	paid	2026-10-15 12:49:24.98439	2026-10-15 12:49:24.98439	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+237	255	cash	270.00	\N	paid	2026-10-15 12:49:32.848972	2026-10-15 12:49:32.848972	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+238	256	cash	270.00	\N	paid	2026-10-15 12:49:40.128487	2026-10-15 12:49:40.128487	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
+239	257	cash	90.00	\N	paid	2026-10-15 12:49:45.897507	2026-10-15 12:49:45.897507	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0
 \.
 
 
@@ -1946,7 +2177,7 @@ COPY public.riders (id, full_name, mobile_number, plate_number, vehicle_type, no
 COPY public.staff_accounts (id, full_name, email, password_hash, role, status, created_by, created_at, updated_at, notification_seen_at) FROM stdin;
 3	Cashier One	cashier@bingnondo.com	$2b$12$VHxWiJDzMyy9..udZAG.4uZMIIyw8Knb01KQZ8LICYXj2e90M2ksK	cashier	active	\N	2026-10-13 00:02:24.280064	2026-10-13 00:02:24.280064	\N
 4	Kitchen Staff	kitchen@bingnondo.com	$2b$12$1Cwh2bqIxanUIrZC8vRbfOTsZar9oba1kwkbiSnT./qFUqmw5LAXi	kitchen_staff	active	\N	2026-10-13 00:02:24.520095	2026-10-14 22:48:37.696996	\N
-1	Admin User	admin@bingnondo.com	$2b$12$JURyzssCxXhchWcJPHNOPOC.8Kx9w/S7CpsyIb9JnNYzosvNY3D0e	admin	active	\N	2026-10-13 00:02:23.780245	2026-10-13 00:02:23.780245	2026-10-20 12:30:04.952
+1	Admin User	admin@bingnondo.com	$2b$12$JURyzssCxXhchWcJPHNOPOC.8Kx9w/S7CpsyIb9JnNYzosvNY3D0e	admin	active	\N	2026-10-13 00:02:23.780245	2026-10-13 00:02:23.780245	2026-10-21 22:20:27.084
 56	Daniel	buenaflordaniel371@gmail.com	$2b$12$6eYkN.sAQXamnq9mpIfLouY35wiImE2eEXflvV9MHgueRFErsAp52	cashier	active	1	2026-10-17 12:10:10.92647	2026-10-20 11:29:16.811306	\N
 \.
 
@@ -1955,7 +2186,7 @@ COPY public.staff_accounts (id, full_name, email, password_hash, role, status, c
 -- Data for Name: support_chat_messages; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.support_chat_messages (id, chat_id, sender_type, sender_id, related_order_id, content, sent_at) FROM stdin;
+COPY public.support_chat_messages (id, chat_id, sender_type, sender_id, related_order_id, content, sent_at, is_read) FROM stdin;
 \.
 
 
@@ -1972,7 +2203,7 @@ COPY public.support_chats (id, customer_id, status, opened_at, locked_at) FROM s
 --
 
 COPY public.system_settings (key, value, updated_at) FROM stdin;
-notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "payments": true, "customers": true, "inventory": true, "deliveries": true}}	2026-10-21 21:32:07.425779
+notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "payments": true, "customers": true, "inventory": true, "deliveries": true}}	2026-10-22 18:23:52.468611
 \.
 
 
@@ -1991,7 +2222,7 @@ COPY public.variant_groups (id, name, created_at, updated_at, max_options) FROM 
 -- Name: audit_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.audit_log_id_seq', 639, true);
+SELECT pg_catalog.setval('public.audit_log_id_seq', 837, true);
 
 
 --
@@ -2005,14 +2236,21 @@ SELECT pg_catalog.setval('public.business_hours_id_seq', 7, true);
 -- Name: chatbot_conversations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chatbot_conversations_id_seq', 1, false);
+SELECT pg_catalog.setval('public.chatbot_conversations_id_seq', 7, true);
 
 
 --
 -- Name: chatbot_messages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chatbot_messages_id_seq', 1, false);
+SELECT pg_catalog.setval('public.chatbot_messages_id_seq', 14, true);
+
+
+--
+-- Name: customer_notifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.customer_notifications_id_seq', 45, true);
 
 
 --
@@ -2026,70 +2264,70 @@ SELECT pg_catalog.setval('public.customer_order_violations_id_seq', 1, false);
 -- Name: customers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.customers_id_seq', 172, true);
+SELECT pg_catalog.setval('public.customers_id_seq', 368, true);
 
 
 --
 -- Name: deliveries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.deliveries_id_seq', 481, true);
+SELECT pg_catalog.setval('public.deliveries_id_seq', 572, true);
 
 
 --
 -- Name: esp32_devices_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.esp32_devices_id_seq', 10, true);
+SELECT pg_catalog.setval('public.esp32_devices_id_seq', 11, true);
 
 
 --
 -- Name: inventory_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.inventory_items_id_seq', 637, true);
+SELECT pg_catalog.setval('public.inventory_items_id_seq', 707, true);
 
 
 --
 -- Name: inventory_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 446, true);
+SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 496, true);
 
 
 --
 -- Name: kitchen_alerts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.kitchen_alerts_id_seq', 206, true);
+SELECT pg_catalog.setval('public.kitchen_alerts_id_seq', 236, true);
 
 
 --
 -- Name: menu_categories_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_categories_id_seq', 119, true);
+SELECT pg_catalog.setval('public.menu_categories_id_seq', 159, true);
 
 
 --
 -- Name: menu_item_reviews_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_item_reviews_id_seq', 41, true);
+SELECT pg_catalog.setval('public.menu_item_reviews_id_seq', 81, true);
 
 
 --
 -- Name: menu_item_variants_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_item_variants_id_seq', 232, true);
+SELECT pg_catalog.setval('public.menu_item_variants_id_seq', 332, true);
 
 
 --
 -- Name: menu_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_items_id_seq', 2182, true);
+SELECT pg_catalog.setval('public.menu_items_id_seq', 2467, true);
 
 
 --
@@ -2103,70 +2341,70 @@ SELECT pg_catalog.setval('public.notifications_id_seq', 1, false);
 -- Name: order_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.order_items_id_seq', 2225, true);
+SELECT pg_catalog.setval('public.order_items_id_seq', 2483, true);
 
 
 --
 -- Name: order_status_history_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.order_status_history_id_seq', 1140, true);
+SELECT pg_catalog.setval('public.order_status_history_id_seq', 1303, true);
 
 
 --
 -- Name: orders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.orders_id_seq', 2182, true);
+SELECT pg_catalog.setval('public.orders_id_seq', 2440, true);
 
 
 --
 -- Name: otp_verifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.otp_verifications_id_seq', 139, true);
+SELECT pg_catalog.setval('public.otp_verifications_id_seq', 310, true);
 
 
 --
 -- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.payments_id_seq', 1475, true);
+SELECT pg_catalog.setval('public.payments_id_seq', 1641, true);
 
 
 --
 -- Name: riders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.riders_id_seq', 471, true);
+SELECT pg_catalog.setval('public.riders_id_seq', 528, true);
 
 
 --
 -- Name: staff_accounts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.staff_accounts_id_seq', 142, true);
+SELECT pg_catalog.setval('public.staff_accounts_id_seq', 166, true);
 
 
 --
 -- Name: support_chat_messages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.support_chat_messages_id_seq', 1, false);
+SELECT pg_catalog.setval('public.support_chat_messages_id_seq', 5, true);
 
 
 --
 -- Name: support_chats_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.support_chats_id_seq', 1, false);
+SELECT pg_catalog.setval('public.support_chats_id_seq', 48, true);
 
 
 --
 -- Name: variant_groups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.variant_groups_id_seq', 103, true);
+SELECT pg_catalog.setval('public.variant_groups_id_seq', 148, true);
 
 
 --
@@ -2207,6 +2445,14 @@ ALTER TABLE ONLY public.chatbot_conversations
 
 ALTER TABLE ONLY public.chatbot_messages
     ADD CONSTRAINT chatbot_messages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: customer_notifications customer_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_notifications
+    ADD CONSTRAINT customer_notifications_pkey PRIMARY KEY (id);
 
 
 --
@@ -2529,6 +2775,13 @@ CREATE INDEX idx_audit_log_actor ON public.audit_log USING btree (actor_id);
 
 
 --
+-- Name: idx_customer_notifications_customer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customer_notifications_customer ON public.customer_notifications USING btree (customer_id, created_at DESC);
+
+
+--
 -- Name: idx_deliveries_rider; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2817,6 +3070,22 @@ ALTER TABLE ONLY public.chatbot_conversations
 
 ALTER TABLE ONLY public.chatbot_messages
     ADD CONSTRAINT chatbot_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.chatbot_conversations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: customer_notifications customer_notifications_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_notifications
+    ADD CONSTRAINT customer_notifications_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: customer_notifications customer_notifications_related_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_notifications
+    ADD CONSTRAINT customer_notifications_related_order_id_fkey FOREIGN KEY (related_order_id) REFERENCES public.orders(id) ON DELETE SET NULL;
 
 
 --
@@ -3143,5 +3412,5 @@ ALTER TABLE ONLY public.support_chats
 -- PostgreSQL database dump complete
 --
 
-\unrestrict fVYx7Gzhn4FdmKxLHOUtBPWehr7617VFoPEP7gNuvmz79zCfxa6lvItuZDCYymG
+\unrestrict ay9u4pvo8EyhBTTLNsR0VEhhxaCblnxycjGYi9r3wYISSNfOXXb9apF97bViaab
 
