@@ -203,8 +203,11 @@ async function cleanup() {
     await db.query(`DELETE FROM chatbot_conversations WHERE customer_id = $1`, [id]);
     await db.query(`DELETE FROM support_chats WHERE customer_id = $1`, [id]);
     await db.query(`DELETE FROM orders WHERE customer_id = $1`, [id]);
-    await db.query(`DELETE FROM customers WHERE id = $1`, [id]);
+    // The OTP rows are found by the customer's email, so they have to go
+    // before the customer row does — otherwise the subquery finds nothing
+    // and every test run leaves its codes behind.
     await db.query(`DELETE FROM otp_verifications WHERE contact IN (SELECT email FROM customers WHERE id = $1)`, [id]);
+    await db.query(`DELETE FROM customers WHERE id = $1`, [id]);
   }
   createdCustomerIds.length = 0;
 }

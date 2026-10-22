@@ -254,7 +254,8 @@ const LATEST_PAYMENT_JOIN = `
     SELECT status, method, paid_at,
            gcash_ref_number, receipt_image_url, receipt_uploaded_at,
            rejection_reason, verified_by, verified_at, gcash_amount_sent,
-           resubmitted_at, rejection_count, previous_receipt_image_url
+           resubmitted_at, rejection_count, previous_receipt_image_url,
+           previous_rejection_reason
     FROM payments
     WHERE order_id = o.id
     ORDER BY paid_at DESC NULLS LAST, id DESC
@@ -660,6 +661,7 @@ async function getOnlineOrders(req, res, next) {
          p.resubmitted_at,
          p.rejection_count,
          p.previous_receipt_image_url,
+         p.previous_rejection_reason,
 
          d.delivery_preference,
          d.status        AS delivery_status,
@@ -692,6 +694,7 @@ async function getOnlineOrders(req, res, next) {
        GROUP BY o.id, c.id, p.method, p.status, p.paid_at, p.gcash_ref_number,
                 p.receipt_image_url, p.receipt_uploaded_at, p.rejection_reason, p.gcash_amount_sent,
                 p.resubmitted_at, p.rejection_count, p.previous_receipt_image_url,
+                p.previous_rejection_reason,
                 d.delivery_preference, d.status, d.rider_name, d.rider_contact,
                 d.assigned_at, d.delivered_at
        ORDER BY o.created_at DESC

@@ -870,7 +870,7 @@ export default function OnlineOrdersPage() {
 
     // payment:resubmitted — customer re-uploaded receipt after rejection
     // Patch the row so cashier sees updated ref/amount + re-submitted timestamp
-    const onPaymentResubmitted = ({ orderId, gcashRefNumber, gcashAmountSent, rejectionCount, resubmittedAt }) => {
+    const onPaymentResubmitted = ({ orderId, gcashRefNumber, gcashAmountSent, rejectionCount, resubmittedAt, previousRejectionReason }) => {
       setOrders(prev => prev.map(o => {
         if (o.id !== orderId) return o;
         return {
@@ -881,7 +881,7 @@ export default function OnlineOrdersPage() {
           rejection_count:            rejectionCount,
           resubmitted_at:             resubmittedAt,
           // keep old reason under a different key so cashier can still see why it was rejected
-          previous_rejection_reason:  o.rejection_reason,
+          previous_rejection_reason:  previousRejectionReason ?? o.previous_rejection_reason ?? o.rejection_reason,
           rejection_reason:           null,
         };
       }));

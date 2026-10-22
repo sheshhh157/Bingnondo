@@ -549,7 +549,7 @@ function _emitSupportChatMessage({ chatId, customerId, messageId, senderType, co
  * emitPaymentResubmitted
  * Customer re-uploaded a receipt after rejection → staff notified in real time.
  * Carries the new ref/amount so the cashier's row updates without a page reload.
- * @param {{ orderId, orderNumber, customerId, gcashRefNumber, gcashAmountSent, rejectionCount }} payload
+ * @param {{ orderId, orderNumber, customerId, gcashRefNumber, gcashAmountSent, rejectionCount, resubmittedAt, previousRejectionReason }} payload
  */
 function emitPaymentResubmitted(payload) {
   if (!_io) return;

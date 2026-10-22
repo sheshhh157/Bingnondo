@@ -374,11 +374,15 @@ async function rejectPayment(req, res, next) {
       return res.status(409).json({ message: `Cannot reject a payment in '${payment_status}' state.` });
     }
 
-    // Mark payment as rejected — increment rejection_count so cashier can see repeat history
+    // Mark payment as rejected — increment rejection_count so cashier can see repeat history.
+    // previous_rejection_reason keeps a copy of the reason: the re-upload clears
+    // rejection_reason, and the cashier still wants to show why the customer
+    // had to send a new receipt.
     await client.query(
       `UPDATE payments
        SET status = 'rejected', rejection_reason = $1, rejected_at = NOW(),
            resubmitted_at = NULL,
+           previous_rejection_reason = $1,
            rejection_count = COALESCE(rejection_count, 0) + 1
        WHERE id = $2`,
       [reason.trim(), payment_id]

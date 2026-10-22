@@ -83,7 +83,10 @@ async function loadCustomerOrder(orderId, customerId) {
             p.gcash_ref_number,
             p.gcash_amount_sent::float,
             p.receipt_image_url,
-            p.rejection_reason,
+            -- The app shows one reason: why this receipt was rejected. A
+            -- re-upload clears rejection_reason, so fall back to the copy
+            -- that was kept at rejection time.
+            COALESCE(p.rejection_reason, p.previous_rejection_reason) AS rejection_reason,
             d.delivery_preference,
             d.status        AS delivery_status,
             d.rider_name,
@@ -92,7 +95,7 @@ async function loadCustomerOrder(orderId, customerId) {
        FROM orders o
        LEFT JOIN LATERAL (
          SELECT method, status, gcash_ref_number, gcash_amount_sent,
-                receipt_image_url, rejection_reason
+                receipt_image_url, rejection_reason, previous_rejection_reason
            FROM payments
           WHERE order_id = o.id
           ORDER BY paid_at DESC NULLS LAST, id DESC

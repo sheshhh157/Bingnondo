@@ -70,6 +70,27 @@ try {
 }
 
 const { signAccessToken } = require('../src/modules/auth/auth.jwt');
+const socketHub = require('../src/sockets');
+
+// ─── Socket capture ───────────────────────────────────────────────────────────
+// A stand-in for the Socket.IO server, so the payloads the backend pushes to
+// the cashier's console can be inspected without opening a real socket.
+const emitted = [];
+socketHub.setIO({
+  use: () => {},
+  on: () => {},
+  to: () => ({
+    to: () => ({
+      emit: (event, payload) => emitted.push({ event, payload }),
+    }),
+    emit: (event, payload) => emitted.push({ event, payload }),
+  }),
+});
+
+const lastEmitted = (event) => {
+  const matches = emitted.filter((entry) => entry.event === event);
+  return matches.length === 0 ? null : matches[matches.length - 1].payload;
+};
 
 // ─── HTTP harness (mirrors server.js) ────────────────────────────────────────
 
@@ -84,6 +105,7 @@ async function startHarness() {
 
   app.use(express.json());
   app.use('/api/orders', require('../src/modules/orders/orders.routes'));
+  app.use('/api/payments', require('../src/modules/payments/payments.routes'));
 
   await new Promise((resolve) => server.listen(0, resolve));
   return { server, port: server.address().port };
@@ -210,13 +232,16 @@ async function markPaymentRejected(orderId, { reason = 'The receipt is blurry.',
 async function paymentRow(orderId) {
   const { rows } = await db.query(
     `SELECT status, receipt_image_url, previous_receipt_image_url, rejection_reason,
-            rejected_at, resubmitted_at, rejection_count, gcash_ref_number,
-            gcash_amount_sent
+            previous_rejection_reason, rejected_at, resubmitted_at, rejection_count,
+            gcash_ref_number, gcash_amount_sent
        FROM payments WHERE order_id = $1`,
     [orderId]
   );
   return rows[0] || null;
 }
+
+/** A cashier token — staff is what rejects a receipt in the first place. */
+const staffToken = () => signAccessToken({ sub: 1, type: 'staff', role: 'cashier' });
 
 async function cleanup() {
   if (!db) return;
@@ -429,4 +454,73 @@ test('a staff account cannot use the customer re-upload route', async (t) => {
   });
 
   assert.equal(res.status, 403, JSON.stringify(res.body));
+});
+
+test('the reason a receipt was rejected survives the customer re-upload', async (t) => {
+  if (!db) return t.skip('database unavailable');
+
+  const customer = await makeCustomer();
+  const orderId = await placeGcashOrder(customer);
+  if (!orderId) return t.skip('no available menu item');
+
+  // The cashier rejects the receipt.
+  const rejected = await request('POST', `/api/payments/${orderId}/reject`, {
+    token: staffToken(),
+    body: { reason: 'The receipt is blurry.' },
+  });
+  assert.equal(rejected.status, 200, JSON.stringify(rejected.body));
+
+  let row = await paymentRow(orderId);
+  assert.equal(row.status, 'rejected');
+  assert.equal(row.rejection_reason, 'The receipt is blurry.');
+  assert.equal(
+    row.previous_rejection_reason,
+    'The receipt is blurry.',
+    'the reason is copied so that the re-upload cannot lose it'
+  );
+  assert.equal(row.rejection_count, 1);
+
+  // The customer sends a new receipt.
+  const reuploaded = await request('POST', `/api/orders/${orderId}/reupload-receipt`, {
+    token: customer.token,
+    form: receiptForm(),
+  });
+  assert.equal(reuploaded.status, 200, JSON.stringify(reuploaded.body));
+
+  row = await paymentRow(orderId);
+  assert.equal(row.rejection_reason, null, 'the current rejection is over');
+  assert.equal(
+    row.previous_rejection_reason,
+    'The receipt is blurry.',
+    'the reason the receipt was rejected is still on file'
+  );
+
+  // The cashier console shows it after a reload.
+  const online = await request('GET', '/api/orders/online', { token: staffToken() });
+  assert.equal(online.status, 200, JSON.stringify(online.body));
+  const listed = online.body.orders.find((order) => order.id === orderId);
+  assert.ok(listed, 'the order is in the online-orders console');
+  assert.equal(listed.previous_rejection_reason, 'The receipt is blurry.');
+  assert.equal(listed.rejection_reason, null, 'the current rejection is over');
+  assert.ok(listed.resubmitted_at, 'the console knows the receipt was re-uploaded');
+
+  // ...and it is pushed to the console live, so the row is right before the
+  // next poll comes back.
+  const pushed = lastEmitted('payment:resubmitted');
+  assert.ok(pushed, 'the cashier console was notified');
+  assert.equal(pushed.orderId, orderId);
+  assert.equal(
+    pushed.previousRejectionReason,
+    'The receipt is blurry.',
+    'the live event carries the reason as well'
+  );
+
+  // The customer keeps seeing why they were asked for a new receipt.
+  const detail = await request('GET', `/api/orders/${orderId}`, { token: customer.token });
+  assert.equal(detail.status, 200, JSON.stringify(detail.body));
+  assert.equal(
+    detail.body.rejection_reason,
+    'The receipt is blurry.',
+    'the app still shows the reason it asked for a new receipt'
+  );
 });

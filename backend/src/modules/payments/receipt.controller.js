@@ -151,7 +151,7 @@ async function reuploadOrderReceipt(req, res, next) {
               END
         WHERE order_id = $4
         RETURNING id, order_id, status, gcash_ref_number, gcash_amount_sent,
-                  receipt_image_url, rejection_count`,
+                  receipt_image_url, rejection_count, previous_rejection_reason`,
       [finalRef, finalAmount, req.file.path, orderId, wasRejected]
     );
 
@@ -181,6 +181,10 @@ async function reuploadOrderReceipt(req, res, next) {
         gcashAmountSent: payment.gcash_amount_sent !== null ? parseFloat(payment.gcash_amount_sent) : null,
         rejectionCount: Number(payment.rejection_count) || 0,
         resubmittedAt: new Date().toISOString(),
+        // The reason the first receipt was rejected. The cashier's console
+        // shows it next to the new receipt; without it the row would only
+        // have the reason until the page is reloaded.
+        previousRejectionReason: payment.previous_rejection_reason || null,
       });
     } catch (_) { /* non-fatal — the poll still picks the row up */ }
 

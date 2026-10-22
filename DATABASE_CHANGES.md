@@ -11,6 +11,28 @@ Migrations 012–020 below are not on `main` yet.
 
 ---
 
+## 024 — Keep the reason a receipt was rejected
+- **Date:** 2026-10-22
+- **Type:** Schema
+- **Files:** `backend/migrations/023_payments_previous_rejection_reason.sql`
+- **Why:** The customer re-upload clears `payments.rejection_reason` — the
+  payment goes back into the verification queue, so it no longer carries a
+  rejection. That meant the cashier's online-orders console lost the reason
+  the customer had to re-upload: it survived only in the browser, until a
+  reload. The cashier's console already renders a "Was rejected for" row from
+  `previous_rejection_reason`; the backend now supplies it.
+- **Applied:**
+  - Added `payments.previous_rejection_reason` (`varchar(255)`, nullable) —
+    why the receipt was rejected, copied from `rejection_reason` when staff
+    rejects a receipt and kept after the customer re-uploads.
+  - Backfill: `previous_rejection_reason = rejection_reason` for rows that
+    already carried a rejection.
+  - Backward compatible: new column only. No existing data was rewritten apart
+    from the backfill above, and no existing query changes shape — the column
+    is only added to the `payments` read path.
+
+---
+
 ## 023 — GCash receipt re-submission columns
 - **Date:** 2026-10-21
 - **Type:** Schema
