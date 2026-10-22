@@ -12,6 +12,7 @@
  *      linked menu items down with it.
  *   5. An ingredient that crosses its reorder level is reported as "newly low".
  *   6. Links with no quantity set are skipped.
+ *   7. A recipe unit (ml) converts into the ingredient stock unit (liter).
  *
  * Database-backed tests are skipped when no database is reachable. Each test
  * builds its own throwaway ingredient / menu item / order and removes it
@@ -110,23 +111,23 @@ let seq = 0;
  * A self-contained order over one menu item that requires `qtyRequired` of one
  * ingredient per serving.
  */
-async function createFixture({ stock, reorder = 0, qtyRequired = 1, orderQty = 1, status = 'confirmed' }) {
+async function createFixture({ stock, reorder = 0, qtyRequired = 1, orderQty = 1, status = 'confirmed', stockUnit = 'g', recipeUnit = null, conversionFactor = null }) {
   const suffix = `${Date.now()}_${seq++}`;
   const cat = await db.query('SELECT id FROM menu_categories ORDER BY id LIMIT 1');
 
   const ing = await db.query(
     `INSERT INTO inventory_items (name, unit, current_stock, reorder_level)
-     VALUES ($1, 'g', $2, $3) RETURNING id`,
-    [`__test_ing_${suffix}`, stock, reorder]
+     VALUES ($1, $2, $3, $4) RETURNING id`,
+    [`__test_ing_${suffix}`, stockUnit, stock, reorder]
   );
   const item = await db.query(
     `INSERT INTO menu_items (category_id, name, price) VALUES ($1, $2, 10) RETURNING id`,
     [cat.rows[0].id, `__test_item_${suffix}`]
   );
   await db.query(
-    `INSERT INTO menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required)
-     VALUES ($1, $2, $3)`,
-    [item.rows[0].id, ing.rows[0].id, qtyRequired]
+    `INSERT INTO menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required, unit, conversion_factor)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [item.rows[0].id, ing.rows[0].id, qtyRequired, recipeUnit, conversionFactor]
   );
   const order = await db.query(
     `INSERT INTO orders (order_type, status, order_channel, total_amount)
@@ -298,6 +299,33 @@ test('links with no quantity set are skipped', async (t) => {
     assert.equal(res.status, 200);
     assert.equal(await stockOf(fx.ingId), 1000, 'no cost to apply, so no deduction');
     assert.equal((await deductionsOf(fx.orderId)).length, 0);
+  } finally {
+    await cleanup(fx);
+  }
+});
+
+// ─── 7. Recipe unit converts to the stock unit ────────────────────────────────
+
+test('a recipe unit converts into the ingredient stock unit', async (t) => {
+  if (!(await canQuery())) return t.skip('no database reachable');
+
+  // Milk stocked in liters; recipe uses 150 ml per serving (= 0.15 L).
+  const fx = await createFixture({
+    stock: 12, stockUnit: 'liter',
+    qtyRequired: 150, recipeUnit: 'ml', conversionFactor: 0.001,
+    orderQty: 2,
+  });
+  try {
+    const res = await kitchenSet(fx.orderId, 'preparing');
+    assert.equal(res.status, 200);
+
+    // 150 ml x 0.001 x 2 servings = 0.30 L — NOT 300.
+    const remaining = await stockOf(fx.ingId);
+    assert.ok(Math.abs(remaining - 11.7) < 1e-9, `expected 11.7 L remaining, got ${remaining}`);
+
+    const rows = await deductionsOf(fx.orderId);
+    assert.equal(rows.length, 1);
+    assert.ok(Math.abs(parseFloat(rows[0].quantity) - 0.3) < 1e-6, 'deduction is recorded in stock units');
   } finally {
     await cleanup(fx);
   }

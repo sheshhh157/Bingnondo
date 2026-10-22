@@ -3,24 +3,10 @@ import { createPortal } from 'react-dom';
 import { inventoryAPI, categoriesAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
+import { UNIT_OPTIONS } from '../../utils/units';
 import '../../styles/InventoryPage.css';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const UNIT_OPTIONS = [
-  { value: 'pcs',      label: 'Pieces (pcs)' },
-  { value: 'kilogram', label: 'Kilogram (kg)' },
-  { value: 'gram',     label: 'Gram (g)' },
-  { value: 'liter',    label: 'Liter (L)' },
-  { value: 'ml',       label: 'Milliliter (ml)' },
-  { value: 'pack',     label: 'Pack' },
-  { value: 'tub',      label: 'Tub' },
-  { value: 'bottle',   label: 'Bottle' },
-  { value: 'sachet',   label: 'Sachet' },
-  { value: 'cup',      label: 'Cup' },
-  { value: 'tbsp',     label: 'Tablespoon (tbsp)' },
-  { value: 'tsp',      label: 'Teaspoon (tsp)' },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function stockStatus(current, reorder) {
   if (current <= 0) return 'out';

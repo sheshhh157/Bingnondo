@@ -47,7 +47,7 @@ async function applyOrderIngredientUsage(client, orderId, performedBy = null) {
   // there is no cost to apply, so they cannot drive a deduction.
   const need = await client.query(
     `SELECT mii.inventory_item_id AS id,
-            SUM(mii.quantity_required * oi.quantity) AS needed
+            SUM(mii.quantity_required * COALESCE(mii.conversion_factor, 1) * oi.quantity) AS needed
        FROM order_items oi
        JOIN menu_item_ingredients mii ON mii.menu_item_id = oi.menu_item_id
       WHERE oi.order_id = $1

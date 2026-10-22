@@ -314,6 +314,108 @@
   overflow: hidden;
 }
 
+.mn-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--color-muted-foreground);
+}
+
+.mn-rating svg { color: var(--color-accent, #c8a24a); flex-shrink: 0; }
+
+.mn-rating__avg { font-weight: 700; color: var(--color-foreground); }
+
+.mn-rating__count { opacity: 0.75; }
+
+/* ── Reviews panel inside the item modal ────────────────────────────────────── */
+.mn-reviews__state {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+}
+
+.mn-reviews__empty { padding: 0.5rem 0; }
+
+.mn-reviews__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.mn-reviews__avg {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-foreground);
+  line-height: 1;
+}
+
+.mn-reviews__stars,
+.mn-reviews__item-stars {
+  display: inline-flex;
+  gap: 1px;
+  color: var(--color-accent, #c8a24a);
+}
+
+.mn-reviews__count {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+}
+
+.mn-reviews__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.mn-reviews__item {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface, transparent);
+}
+
+.mn-reviews__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.mn-reviews__author {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.mn-reviews__head .mn-reviews__item-stars { margin-left: 2px; }
+
+.mn-reviews__date {
+  margin-left: auto;
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  color: var(--color-muted-foreground);
+}
+
+.mn-reviews__comment {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--color-muted-foreground);
+}
+
 .mn-card__footer {
   display: flex;
   align-items: center;
@@ -1126,6 +1228,13 @@ select.mn-field__input { cursor: pointer; }
 
 .mn-linker__edit-input { width: 84px; padding: 5px 8px; font-size: 0.8125rem; }
 
+.mn-linker__edit-unit-select {
+  width: auto;
+  min-width: 96px;
+  padding: 5px 8px;
+  font-size: 0.8125rem;
+}
+
 .mn-linker__edit-unit {
   font-family: var(--font-body);
   font-size: 0.75rem;
@@ -1188,6 +1297,7 @@ select.mn-field__input { cursor: pointer; }
 
 .mn-linker__add-field { display: flex; flex-direction: column; gap: 4px; }
 .mn-linker__add-field--qty { max-width: 160px; }
+.mn-linker__add-field--unit { max-width: 190px; }
 
 /* Searchable ingredient picker */
 .mn-linker__filters {

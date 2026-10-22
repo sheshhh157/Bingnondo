@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { staffMenuAPI, adminAPI, inventoryAPI, uploadAPI } from '../../services/api';
+import { staffMenuAPI, adminAPI, inventoryAPI, uploadAPI, reviewsAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import useMediaQuery from '../../hooks/useMediaQuery';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
+import { recipeUnitOptions, conversionFactor, unitLabel } from '../../utils/units';
 import '../../styles/AdminMenuPage.css';
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -172,14 +173,28 @@ function getOutOfStockBlockers(item) {
 }
 
 // ─── Ingredient linker ────────────────────────────────────────────────────────
+// Renders the "= 0.15 L" suffix when a recipe unit differs from the stock unit.
+function _convertedHint(l) {
+  const stockUnit = l.stock_unit || l.unit;
+  const recipeUnit = l.unit || stockUnit;
+  if (!l.quantity_required || !stockUnit || recipeUnit === stockUnit) return '';
+  const factor = l.conversion_factor != null ? l.conversion_factor : conversionFactor(recipeUnit, stockUnit);
+  if (factor == null) return '';
+  const converted = l.quantity_required * factor;
+  const rounded = Math.round(converted * 1e6) / 1e6;
+  return ` (= ${rounded} ${unitLabel(stockUnit)})`;
+}
+
 function IngredientLinker({ inventoryItems, linked, onChange }) {
   const [adding, setAdding]     = useState(false);
   const [selId, setSelId]       = useState('');
   const [qty, setQty]           = useState('');
+  const [unit, setUnit]         = useState('');
   const [addError, setAddError] = useState('');
   // editing: index of the linked item whose qty is being edited inline
   const [editingIdx, setEditingIdx] = useState(null);
   const [editQty, setEditQty]       = useState('');
+  const [editUnit, setEditUnit]     = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCat, setFilterCat]     = useState('all');
   const searchRef = useRef(null);
@@ -220,6 +235,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   );
 
   const selectedInv = inventoryItems.find((i) => i.id === Number(selId));
+  const selectedUnits = selectedInv ? recipeUnitOptions(selectedInv.unit) : [];
 
   // Clear the selection if a filter change pushes it out of the results.
   const dropStaleSelection = (nextQuery, nextCat) => {
@@ -228,10 +244,17 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
     if (inv && !matchesFilters(inv, nextQuery.trim().toLowerCase(), nextCat)) setSelId('');
   };
 
+  const selectIngredient = (inv) => {
+    setSelId(String(inv.id));
+    setUnit(inv.unit || '');
+    setAddError('');
+  };
+
   const openAdding = () => {
     setAdding(true);
     setSelId('');
     setQty('');
+    setUnit('');
     setAddError('');
     setSearchQuery('');
     setFilterCat('all');
@@ -242,6 +265,12 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   const handleAdd = () => {
     if (!selId) { setAddError('Select an ingredient.'); return; }
     const inv = inventoryItems.find((i) => i.id === Number(selId));
+    const recipeUnit = unit || inv.unit || null;
+    const factor = recipeUnit === inv.unit ? 1 : conversionFactor(recipeUnit, inv.unit);
+    if (recipeUnit !== inv.unit && factor == null) {
+      setAddError(`"${unitLabel(recipeUnit)}" can't be converted to the ingredient's stock unit (${unitLabel(inv.unit)}).`);
+      return;
+    }
     const parsedQty = qty && Number(qty) > 0 ? Number(qty) : null;
     onChange([
       ...linked,
@@ -249,10 +278,12 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
         inventory_item_id: inv.id,
         quantity_required: parsedQty,
         name: inv.name,
-        unit: inv.unit,
+        unit: recipeUnit,
+        stock_unit: inv.unit,
+        conversion_factor: factor,
       },
     ]);
-    setSelId(''); setQty(''); setAddError(''); setAdding(false);
+    setSelId(''); setQty(''); setUnit(''); setAddError(''); setAdding(false);
   };
 
   const handleRemove = (idx) => {
@@ -263,12 +294,20 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   const startEdit = (idx) => {
     setEditingIdx(idx);
     setEditQty(String(linked[idx].quantity_required));
+    setEditUnit(linked[idx].unit || linked[idx].stock_unit || '');
     setAdding(false);
   };
 
   const confirmEdit = (idx) => {
+    const l = linked[idx];
+    const stockUnit = l.stock_unit || l.unit || null;
+    const recipeUnit = editUnit || stockUnit;
+    const factor = recipeUnit === stockUnit ? 1 : conversionFactor(recipeUnit, stockUnit);
+    if (recipeUnit !== stockUnit && factor == null) return;
     const q = editQty && Number(editQty) > 0 ? Number(editQty) : null;
-    onChange(linked.map((l, i) => i === idx ? { ...l, quantity_required: q } : l));
+    onChange(linked.map((row, i) => i === idx
+      ? { ...row, quantity_required: q, unit: recipeUnit, conversion_factor: factor }
+      : row));
     setEditingIdx(null);
   };
 
@@ -305,7 +344,16 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
                       autoFocus
                       aria-label={`Quantity for ${l.name}`}
                     />
-                    <span className="mn-linker__edit-unit">{l.unit}</span>
+                    <select
+                      value={editUnit}
+                      onChange={(e) => setEditUnit(e.target.value)}
+                      className="mn-field__input mn-linker__edit-unit-select"
+                      aria-label={`Unit for ${l.name}`}
+                    >
+                      {recipeUnitOptions(l.stock_unit || l.unit).map((u) => (
+                        <option key={u.value} value={u.value}>{u.label}</option>
+                      ))}
+                    </select>
                     <button type="button" onClick={() => confirmEdit(idx)} className="mn-btn mn-btn--primary mn-btn--xs" aria-label="Save quantity">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                     </button>
@@ -318,10 +366,12 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
                     type="button"
                     className="mn-linker__item-qty-btn"
                     onClick={() => startEdit(idx)}
-                    title="Click to set quantity"
-                    aria-label={`Edit quantity for ${l.name}${l.quantity_required ? `: currently ${l.quantity_required} ${l.unit}` : ''}`}
+                    title="Click to set quantity and unit"
+                    aria-label={`Edit quantity for ${l.name}${l.quantity_required ? `: currently ${l.quantity_required} ${unitLabel(l.unit || l.stock_unit)}` : ''}`}
                   >
-                    {l.quantity_required ? `${l.quantity_required} ${l.unit} per serving` : 'No qty set — click to add'}
+                    {l.quantity_required
+                      ? `${l.quantity_required} ${unitLabel(l.unit || l.stock_unit)} per serving${_convertedHint(l)}`
+                      : 'No qty set — click to add'}
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -391,7 +441,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
                     role="option"
                     aria-selected={isSel}
                     className={`mn-linker__result${isSel ? ' mn-linker__result--selected' : ''}`}
-                    onClick={() => { setSelId(String(inv.id)); setAddError(''); }}
+                    onClick={() => selectIngredient(inv)}
                   >
                     <span className="mn-linker__result-main">
                       <span className="mn-linker__result-name">{inv.name}</span>
@@ -413,7 +463,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
           <div className="mn-linker__add-fields">
             <div className="mn-linker__add-field mn-linker__add-field--qty">
               <label className="mn-linker__add-label" htmlFor="linker-qty">
-                Qty {selectedInv ? `(${selectedInv.unit})` : ''} <span style={{ fontWeight: 400, opacity: 0.6 }}>optional</span>
+                Qty <span style={{ fontWeight: 400, opacity: 0.6 }}>optional</span>
               </label>
               <input
                 id="linker-qty"
@@ -427,6 +477,21 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
                 placeholder="e.g. 0.25"
               />
             </div>
+            {selectedInv && (
+              <div className="mn-linker__add-field mn-linker__add-field--unit">
+                <label className="mn-linker__add-label" htmlFor="linker-unit">Unit</label>
+                <select
+                  id="linker-unit"
+                  value={unit}
+                  onChange={(e) => { setUnit(e.target.value); setAddError(''); }}
+                  className="mn-field__input"
+                >
+                  {selectedUnits.map((u) => (
+                    <option key={u.value} value={u.value}>{u.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           {addError && (
             <p className="mn-linker__add-error" role="alert">
@@ -473,6 +538,97 @@ function priceDisplay(item) {
   const available = variants.filter((v) => v.is_available);
   const min = Math.min(...(available.length > 0 ? available : variants).map((v) => Number(v.price)));
   return `from ₱${min.toFixed(0)}`;
+}
+
+// ─── Rating badge ─────────────────────────────────────────────────────────────
+// Compact "★ 4.5 (12)" for the item card / table, fed by avg_rating and
+// review_count on the staff menu payload. Renders nothing when unrated.
+function RatingBadge({ item }) {
+  const count = Number(item.review_count) || 0;
+  if (count === 0) return null;
+  const avg = Number(item.avg_rating) || 0;
+  return (
+    <span className="mn-rating" title={`${count} review${count === 1 ? '' : 's'}`}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+      <span className="mn-rating__avg">{avg.toFixed(1)}</span>
+      <span className="mn-rating__count">({count})</span>
+    </span>
+  );
+}
+
+// ─── Reviews panel (read-only list inside the item modal) ─────────────────────
+// Loads GET /api/menu/items/:id/reviews on mount. Shows the average summary and
+// every comment newest-first.
+function ReviewsPanel({ itemId }) {
+  const [state, setState] = useState('loading');
+  const [reviews, setReviews] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    reviewsAPI.list(itemId)
+      .then((res) => {
+        if (!alive) return;
+        setReviews(res.data?.reviews || []);
+        setState('ready');
+      })
+      .catch(() => { if (alive) setState('error'); });
+    return () => { alive = false; };
+  }, [itemId]);
+
+  if (state === 'loading') {
+    return <p className="mn-reviews__state">Loading reviews…</p>;
+  }
+  if (state === 'error') {
+    return <p className="mn-reviews__state">Couldn’t load reviews.</p>;
+  }
+  if (reviews.length === 0) {
+    return (
+      <div className="mn-reviews__empty">
+        <p className="mn-reviews__state">No reviews yet.</p>
+        <p className="mn-field__hint">Customers can rate this item after ordering.</p>
+      </div>
+    );
+  }
+
+  const avg = reviews.reduce((s, r) => s + Number(r.rating), 0) / reviews.length;
+
+  return (
+    <div className="mn-reviews">
+      <div className="mn-reviews__summary">
+        <span className="mn-reviews__avg">{avg.toFixed(1)}</span>
+        <span className="mn-reviews__stars" aria-hidden="true">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <svg key={n} width="13" height="13" viewBox="0 0 24 24"
+              fill={avg >= n ? 'currentColor' : 'none'}
+              stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          ))}
+        </span>
+        <span className="mn-reviews__count">{reviews.length} review{reviews.length === 1 ? '' : 's'}</span>
+      </div>
+      <ul className="mn-reviews__list">
+        {reviews.map((r) => (
+          <li key={r.id} className="mn-reviews__item">
+            <div className="mn-reviews__head">
+              <span className="mn-reviews__author">{r.author_name || 'Anonymous'}</span>
+              <span className="mn-reviews__item-stars" aria-label={`${r.rating} out of 5`}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <svg key={n} width="11" height="11" viewBox="0 0 24 24" fill={Number(r.rating) >= n ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                ))}
+              </span>
+              <span className="mn-reviews__date">{new Date(r.created_at).toLocaleDateString()}</span>
+            </div>
+            {r.comment && <p className="mn-reviews__comment">{r.comment}</p>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 // ─── Add / Edit modal ─────────────────────────────────────────────────────────
@@ -666,6 +822,7 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
               { id: 'details', label: 'Details' },
               { id: 'variants', label: `Variants${pricedCount ? ` (${pricedCount})` : ''}` },
               { id: 'ingredients', label: `Ingredients${linked.length ? ` (${linked.length})` : ''}` },
+              { id: 'reviews', label: `Reviews${item.review_count ? ` (${item.review_count})` : ''}` },
             ].map(({ id, label }) => (
               <button key={id} type="button" onClick={() => goTo(id)} className={`mn-modal__tab${activeView === id ? ' mn-modal__tab--active' : ''}`}>{label}</button>
             ))}
@@ -823,6 +980,8 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
                   </div>
                 )}
               </div>
+            ) : activeView === 'reviews' ? (
+              <ReviewsPanel itemId={item.id} />
             ) : (
               <div className="mn-field">
                 <p className="mn-field__label">Linked Ingredients</p>
@@ -850,9 +1009,13 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
           )}
           <button type="button" className="mn-btn mn-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
           {isEdit ? (
-            <button type="submit" form="mn-form" className="mn-btn mn-btn--primary" disabled={loading} aria-busy={loading}>
-              {loading ? <span className="mn-spinner" aria-label="Saving…" /> : 'Save changes'}
-            </button>
+            activeView === 'reviews' ? (
+              <button type="button" className="mn-btn mn-btn--primary" onClick={onClose}>Done</button>
+            ) : (
+              <button type="submit" form="mn-form" className="mn-btn mn-btn--primary" disabled={loading} aria-busy={loading}>
+                {loading ? <span className="mn-spinner" aria-label="Saving…" /> : 'Save changes'}
+              </button>
+            )
           ) : activeView === 'details' ? (
             <button type="button" className="mn-btn mn-btn--primary" onClick={goNext}>
               Next
@@ -949,6 +1112,7 @@ function MenuItemCard({ item, onEdit, onDelete, onToggle, toggling }) {
           <h3 className="mn-card__name">{item.name}</h3>
           <span className="mn-card__price">{priceDisplay(item)}</span>
         </div>
+        <RatingBadge item={item} />
         {item.description && <p className="mn-card__desc">{item.description}</p>}
         <div className="mn-card__footer">
           {(() => {
@@ -1019,6 +1183,7 @@ function MenuItemRow({ item, onEdit, onDelete, onToggle, toggling }) {
           </div>
           <div>
             <p className="mn-table__name">{item.name}</p>
+            <RatingBadge item={item} />
             {item.description && <p className="mn-table__desc">{item.description}</p>}
           </div>
         </div>
