@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict nYU36kAuY1TigVNlhKzAGoCFlzNHKw3h71lJ75e8CzzVfR8yNAnhNYvcn5eup1Q
+\restrict OLjGaJveraYQUelOQOQtwExnGv62lOofs54ah0bZgfuaR79dDk1HmVWdejopYvc
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -36,6 +36,8 @@ ALTER TABLE IF EXISTS ONLY public.notifications DROP CONSTRAINT IF EXISTS notifi
 ALTER TABLE IF EXISTS ONLY public.menu_items DROP CONSTRAINT IF EXISTS menu_items_category_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_variants DROP CONSTRAINT IF EXISTS menu_item_variants_variant_group_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_variants DROP CONSTRAINT IF EXISTS menu_item_variants_menu_item_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.menu_item_reviews DROP CONSTRAINT IF EXISTS menu_item_reviews_menu_item_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.menu_item_reviews DROP CONSTRAINT IF EXISTS menu_item_reviews_customer_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_ingredients DROP CONSTRAINT IF EXISTS menu_item_ingredients_menu_item_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_ingredients DROP CONSTRAINT IF EXISTS menu_item_ingredients_inventory_item_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.menu_category_variant_groups DROP CONSTRAINT IF EXISTS menu_category_variant_groups_variant_group_id_fkey;
@@ -56,6 +58,8 @@ ALTER TABLE IF EXISTS ONLY public.customer_restrictions DROP CONSTRAINT IF EXIST
 ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_order_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_flagged_by_fkey;
 ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_customer_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.customer_notifications DROP CONSTRAINT IF EXISTS customer_notifications_related_order_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.customer_notifications DROP CONSTRAINT IF EXISTS customer_notifications_customer_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.chatbot_messages DROP CONSTRAINT IF EXISTS chatbot_messages_conversation_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.chatbot_conversations DROP CONSTRAINT IF EXISTS chatbot_conversations_customer_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.business_hours DROP CONSTRAINT IF EXISTS business_hours_updated_by_fkey;
@@ -63,6 +67,7 @@ ALTER TABLE IF EXISTS ONLY public.audit_log DROP CONSTRAINT IF EXISTS audit_log_
 DROP INDEX IF EXISTS public.uq_variant_groups_name;
 DROP INDEX IF EXISTS public.uq_menu_item_variants_item_name_legacy;
 DROP INDEX IF EXISTS public.uq_menu_item_variants_item_group_name;
+DROP INDEX IF EXISTS public.uq_menu_item_reviews_item_customer;
 DROP INDEX IF EXISTS public.idx_violations_customer;
 DROP INDEX IF EXISTS public.idx_violations_created;
 DROP INDEX IF EXISTS public.idx_support_chat_messages_chat;
@@ -85,6 +90,8 @@ DROP INDEX IF EXISTS public.idx_menu_items_not_deleted;
 DROP INDEX IF EXISTS public.idx_menu_items_display_order;
 DROP INDEX IF EXISTS public.idx_menu_item_variants_menu_item_id;
 DROP INDEX IF EXISTS public.idx_menu_item_variants_menu_item_group;
+DROP INDEX IF EXISTS public.idx_menu_item_reviews_menu_item_id;
+DROP INDEX IF EXISTS public.idx_menu_item_reviews_customer_id;
 DROP INDEX IF EXISTS public.idx_menu_category_variant_groups_variant_group_id;
 DROP INDEX IF EXISTS public.idx_menu_category_variant_groups_category_id;
 DROP INDEX IF EXISTS public.idx_menu_categories_display_order;
@@ -94,6 +101,7 @@ DROP INDEX IF EXISTS public.idx_inventory_item_categories_category_id;
 DROP INDEX IF EXISTS public.idx_esp32_devices_device_code_unique;
 DROP INDEX IF EXISTS public.idx_deliveries_status;
 DROP INDEX IF EXISTS public.idx_deliveries_rider;
+DROP INDEX IF EXISTS public.idx_customer_notifications_customer;
 DROP INDEX IF EXISTS public.idx_audit_log_actor;
 ALTER TABLE IF EXISTS ONLY public.variant_groups DROP CONSTRAINT IF EXISTS variant_groups_pkey;
 ALTER TABLE IF EXISTS ONLY public.system_settings DROP CONSTRAINT IF EXISTS system_settings_pkey;
@@ -116,6 +124,7 @@ ALTER TABLE IF EXISTS ONLY public.order_items DROP CONSTRAINT IF EXISTS order_it
 ALTER TABLE IF EXISTS ONLY public.notifications DROP CONSTRAINT IF EXISTS notifications_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_items DROP CONSTRAINT IF EXISTS menu_items_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_variants DROP CONSTRAINT IF EXISTS menu_item_variants_pkey;
+ALTER TABLE IF EXISTS ONLY public.menu_item_reviews DROP CONSTRAINT IF EXISTS menu_item_reviews_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_item_ingredients DROP CONSTRAINT IF EXISTS menu_item_ingredients_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_category_variant_groups DROP CONSTRAINT IF EXISTS menu_category_variant_groups_pkey;
 ALTER TABLE IF EXISTS ONLY public.menu_categories DROP CONSTRAINT IF EXISTS menu_categories_pkey;
@@ -133,6 +142,7 @@ ALTER TABLE IF EXISTS ONLY public.customers DROP CONSTRAINT IF EXISTS customers_
 ALTER TABLE IF EXISTS ONLY public.customers DROP CONSTRAINT IF EXISTS customers_email_key;
 ALTER TABLE IF EXISTS ONLY public.customer_restrictions DROP CONSTRAINT IF EXISTS customer_restrictions_pkey;
 ALTER TABLE IF EXISTS ONLY public.customer_order_violations DROP CONSTRAINT IF EXISTS customer_order_violations_pkey;
+ALTER TABLE IF EXISTS ONLY public.customer_notifications DROP CONSTRAINT IF EXISTS customer_notifications_pkey;
 ALTER TABLE IF EXISTS ONLY public.chatbot_messages DROP CONSTRAINT IF EXISTS chatbot_messages_pkey;
 ALTER TABLE IF EXISTS ONLY public.chatbot_conversations DROP CONSTRAINT IF EXISTS chatbot_conversations_pkey;
 ALTER TABLE IF EXISTS ONLY public.business_hours DROP CONSTRAINT IF EXISTS business_hours_pkey;
@@ -151,6 +161,7 @@ ALTER TABLE IF EXISTS public.order_items ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.notifications ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.menu_items ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.menu_item_variants ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.menu_item_reviews ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.menu_categories ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.kitchen_alerts ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.inventory_transactions ALTER COLUMN id DROP DEFAULT;
@@ -159,6 +170,7 @@ ALTER TABLE IF EXISTS public.esp32_devices ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.deliveries ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.customers ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.customer_order_violations ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.customer_notifications ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.chatbot_messages ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.chatbot_conversations ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.business_hours ALTER COLUMN id DROP DEFAULT;
@@ -191,6 +203,8 @@ DROP SEQUENCE IF EXISTS public.menu_items_id_seq;
 DROP TABLE IF EXISTS public.menu_items;
 DROP SEQUENCE IF EXISTS public.menu_item_variants_id_seq;
 DROP TABLE IF EXISTS public.menu_item_variants;
+DROP SEQUENCE IF EXISTS public.menu_item_reviews_id_seq;
+DROP TABLE IF EXISTS public.menu_item_reviews;
 DROP TABLE IF EXISTS public.menu_item_ingredients;
 DROP TABLE IF EXISTS public.menu_category_variant_groups;
 DROP SEQUENCE IF EXISTS public.menu_categories_id_seq;
@@ -211,6 +225,8 @@ DROP TABLE IF EXISTS public.customers;
 DROP TABLE IF EXISTS public.customer_restrictions;
 DROP SEQUENCE IF EXISTS public.customer_order_violations_id_seq;
 DROP TABLE IF EXISTS public.customer_order_violations;
+DROP SEQUENCE IF EXISTS public.customer_notifications_id_seq;
+DROP TABLE IF EXISTS public.customer_notifications;
 DROP SEQUENCE IF EXISTS public.chatbot_messages_id_seq;
 DROP TABLE IF EXISTS public.chatbot_messages;
 DROP SEQUENCE IF EXISTS public.chatbot_conversations_id_seq;
@@ -357,6 +373,41 @@ CREATE SEQUENCE public.chatbot_messages_id_seq
 --
 
 ALTER SEQUENCE public.chatbot_messages_id_seq OWNED BY public.chatbot_messages.id;
+
+
+--
+-- Name: customer_notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customer_notifications (
+    id integer NOT NULL,
+    customer_id integer NOT NULL,
+    type character varying(50) NOT NULL,
+    message text NOT NULL,
+    related_order_id integer,
+    is_read boolean DEFAULT false NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+--
+-- Name: customer_notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.customer_notifications_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: customer_notifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.customer_notifications_id_seq OWNED BY public.customer_notifications.id;
 
 
 --
@@ -689,8 +740,60 @@ CREATE TABLE public.menu_category_variant_groups (
 CREATE TABLE public.menu_item_ingredients (
     menu_item_id integer NOT NULL,
     inventory_item_id integer NOT NULL,
-    quantity_required numeric(10,2)
+    quantity_required numeric(10,2),
+    unit character varying(20),
+    conversion_factor numeric(14,6)
 );
+
+
+--
+-- Name: COLUMN menu_item_ingredients.unit; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.menu_item_ingredients.unit IS 'Unit the recipe amount is expressed in (e.g. ml). NULL = same as the inventory item stock unit.';
+
+
+--
+-- Name: COLUMN menu_item_ingredients.conversion_factor; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.menu_item_ingredients.conversion_factor IS 'Multiplier converting the recipe unit into the inventory stock unit (e.g. 1 ml = 0.001 liter). NULL = 1 (same unit).';
+
+
+--
+-- Name: menu_item_reviews; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.menu_item_reviews (
+    id integer NOT NULL,
+    menu_item_id integer NOT NULL,
+    customer_id integer,
+    author_name character varying(100) NOT NULL,
+    rating smallint NOT NULL,
+    comment text,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT menu_item_reviews_rating_check CHECK (((rating >= 1) AND (rating <= 5)))
+);
+
+
+--
+-- Name: menu_item_reviews_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.menu_item_reviews_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: menu_item_reviews_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.menu_item_reviews_id_seq OWNED BY public.menu_item_reviews.id;
 
 
 --
@@ -931,6 +1034,7 @@ CREATE TABLE public.otp_verifications (
     expires_at timestamp without time zone NOT NULL,
     verified_at timestamp without time zone,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    consumed_at timestamp without time zone,
     CONSTRAINT otp_verifications_purpose_check CHECK (((purpose)::text = ANY (ARRAY[('email_verification'::character varying)::text, ('mobile_verification'::character varying)::text, ('password_reset'::character varying)::text])))
 );
 
@@ -976,6 +1080,10 @@ CREATE TABLE public.payments (
     rejection_reason character varying(255) DEFAULT NULL::character varying,
     rejected_at timestamp without time zone,
     gcash_amount_sent numeric(10,2) DEFAULT NULL::numeric,
+    previous_receipt_image_url text,
+    resubmitted_at timestamp without time zone,
+    rejection_count integer DEFAULT 0,
+    previous_rejection_reason character varying(255) DEFAULT NULL::character varying,
     CONSTRAINT payments_method_check CHECK (((method)::text = ANY (ARRAY[('gcash'::character varying)::text, ('cash'::character varying)::text, ('cash_on_delivery'::character varying)::text]))),
     CONSTRAINT payments_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'awaiting_verification'::character varying, 'paid'::character varying, 'rejected'::character varying, 'refunded'::character varying])::text[])))
 );
@@ -986,6 +1094,34 @@ CREATE TABLE public.payments (
 --
 
 COMMENT ON COLUMN public.payments.gcash_amount_sent IS 'Amount extracted from the customer''s GCash receipt screenshot via OCR. NULL means OCR could not read it — staff must verify manually. Compare against `amount` to detect short payments.';
+
+
+--
+-- Name: COLUMN payments.previous_receipt_image_url; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payments.previous_receipt_image_url IS 'The receipt URL that was rejected. Saved when customer re-uploads so cashier can compare the original rejected receipt vs the new one side by side.';
+
+
+--
+-- Name: COLUMN payments.resubmitted_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payments.resubmitted_at IS 'Timestamp of the most recent customer re-upload after a rejection. NULL means never re-submitted.';
+
+
+--
+-- Name: COLUMN payments.rejection_count; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payments.rejection_count IS 'How many times this payment has been rejected so far. Incremented when staff rejects. Helps cashier know if this is a repeat offender.';
+
+
+--
+-- Name: COLUMN payments.previous_rejection_reason; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payments.previous_rejection_reason IS 'Why the receipt was rejected. Copied from rejection_reason when staff rejects a receipt, and kept after the customer re-uploads (the re-upload clears rejection_reason). NULL means the receipt was never rejected.';
 
 
 --
@@ -1114,6 +1250,7 @@ CREATE TABLE public.support_chat_messages (
     related_order_id integer,
     content text NOT NULL,
     sent_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    is_read boolean DEFAULT false,
     CONSTRAINT support_chat_messages_sender_type_check CHECK (((sender_type)::text = ANY (ARRAY[('customer'::character varying)::text, ('staff'::character varying)::text])))
 );
 
@@ -1246,6 +1383,13 @@ ALTER TABLE ONLY public.chatbot_messages ALTER COLUMN id SET DEFAULT nextval('pu
 
 
 --
+-- Name: customer_notifications id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_notifications ALTER COLUMN id SET DEFAULT nextval('public.customer_notifications_id_seq'::regclass);
+
+
+--
 -- Name: customer_order_violations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1299,6 +1443,13 @@ ALTER TABLE ONLY public.kitchen_alerts ALTER COLUMN id SET DEFAULT nextval('publ
 --
 
 ALTER TABLE ONLY public.menu_categories ALTER COLUMN id SET DEFAULT nextval('public.menu_categories_id_seq'::regclass);
+
+
+--
+-- Name: menu_item_reviews id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.menu_item_reviews ALTER COLUMN id SET DEFAULT nextval('public.menu_item_reviews_id_seq'::regclass);
 
 
 --
@@ -1424,8 +1575,13 @@ COPY public.audit_log (id, actor_id, action, target_type, target_id, details, cr
 25	1	activate_staff_account	staff_accounts	4	{"new_status": "active"}	2026-10-14 22:48:37.696996
 26	1	update_inventory_item	inventory_items	49	{"name": "Burger Steak Silog", "unit": "pack", "new_stock": 20, "old_stock": 99, "category_ids": [8]}	2026-10-14 22:54:19.616476
 27	1	create_rider	rider	1	{"email": "rider@bingnondo.com", "full_name": "RiderNyoko", "mobile_number": "09482785422"}	2026-10-15 14:13:11.814234
+508	1	create_variant_group	variant_groups	74	{"name": "Solo/Sharing", "max_options": 2}	2026-10-20 11:13:59.066125
+515	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 11:25:29.891435
 30	1	update_rider	rider	1	{"after": {"email": "rider@bingnondo.com", "full_name": "RiderNyoko", "plate_number": "ABC 1234", "vehicle_type": "motorcycle", "mobile_number": "09482785422"}, "before": {"email": "rider@bingnondo.com", "full_name": "RiderNyoko", "plate_number": "ABC 1234", "vehicle_type": "motorcycle", "mobile_number": "09482785422"}}	2026-10-15 15:42:29.445893
+516	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 11:25:30.379372
+517	1	create_variant_group	variant_groups	76	{"name": "adsa", "max_options": 3}	2026-10-20 11:25:47.115995
 33	1	reset_rider_password	rider	1	{"rider_name": "RiderNyoko"}	2026-10-15 16:15:58.404767
+518	1	delete_variant_group	variant_groups	76	{"name": "adsa"}	2026-10-20 11:25:49.613143
 254	1	create_variant_group	variant_groups	10	{"name": "Flavor", "options": [{"name": "flavor1"}, {"name": "flavor"}]}	2026-10-20 01:27:58.70719
 255	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 01:28:06.065135
 256	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 01:28:07.342256
@@ -1433,9 +1589,20 @@ COPY public.audit_log (id, actor_id, action, target_type, target_id, details, cr
 86	56	self_reset_password	staff_account	56	{"email": "buenaflordaniel371@gmail.com", "account_type": "staff"}	2026-10-17 12:13:46.755099
 145	1	create_menu_category	menu_categories	25	{"name": "dsf"}	2026-10-17 22:51:39.305589
 146	1	delete_menu_category	menu_categories	25	{"name": "dsf"}	2026-10-17 22:51:43.540236
+509	1	create_variant_group	variant_groups	75	{"name": "Hot/Cold", "max_options": 2}	2026-10-20 11:15:14.303465
+519	56	self_reset_password	staff_account	56	{"email": "buenaflordaniel371@gmail.com", "account_type": "staff"}	2026-10-20 11:29:16.811306
+510	1	update_variant_group	variant_groups	10	{"new_name": "Flavors", "old_name": "Flavors", "max_options": 10}	2026-10-20 11:15:46.126127
 466	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 02:33:27.355184
 467	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 02:33:28.044143
 338	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 01:38:24.439664
+559	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 14:00:06.883068
+560	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10, 74], "removed_group_ids": []}	2026-10-20 14:00:07.634981
+561	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10, 74, 75], "removed_group_ids": []}	2026-10-20 14:00:08.345913
+511	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 11:22:25.04519
+512	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 11:22:25.988611
+513	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [10], "removed_group_ids": []}	2026-10-20 11:22:26.548472
+514	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 11:22:27.316937
+643	\N	self_reset_password	rider_account	473	{"email": "__fp_test_1792598523666_4@example.test", "account_type": "rider"}	2026-10-22 00:02:03.685535
 404	1	update_category_variants	menu_categories	8	{"category": "Student Meal", "group_ids": [], "removed_group_ids": [10]}	2026-10-20 02:20:46.473014
 405	1	update_variant_group	variant_groups	10	{"new_name": "Flavors", "old_name": "Flavor", "max_options": 3}	2026-10-20 02:20:53.123194
 \.
@@ -1473,6 +1640,14 @@ COPY public.chatbot_messages (id, conversation_id, sender, content, sent_at) FRO
 
 
 --
+-- Data for Name: customer_notifications; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.customer_notifications (id, customer_id, type, message, related_order_id, is_read, created_at) FROM stdin;
+\.
+
+
+--
 -- Data for Name: customer_order_violations; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -1493,6 +1668,7 @@ COPY public.customer_restrictions (customer_id, restriction_level, reason, updat
 --
 
 COPY public.customers (id, email, password_hash, email_verified, first_name, last_name, mobile_number, mobile_verified, address, profile_completed, status, created_at, updated_at, latitude, longitude) FROM stdin;
+159	__probe@example.com	x	f	A	B	\N	f	\N	f	active	2026-10-21 21:31:17.73402	2026-10-21 21:31:17.73402	\N	\N
 \.
 
 
@@ -1608,6 +1784,9 @@ COPY public.menu_categories (id, name, display_order) FROM stdin;
 --
 
 COPY public.menu_category_variant_groups (category_id, variant_group_id) FROM stdin;
+8	10
+8	74
+8	75
 \.
 
 
@@ -1615,16 +1794,31 @@ COPY public.menu_category_variant_groups (category_id, variant_group_id) FROM st
 -- Data for Name: menu_item_ingredients; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required) FROM stdin;
-119	49	1.00
-116	46	1.00
-117	47	1.00
-120	51	1.00
-121	52	\N
-123	50	\N
-115	45	1.00
-118	48	1.00
-122	53	1.00
+COPY public.menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required, unit, conversion_factor) FROM stdin;
+119	49	1.00	\N	\N
+116	46	1.00	\N	\N
+117	47	1.00	\N	\N
+120	51	1.00	\N	\N
+121	52	\N	\N	\N
+123	50	\N	\N	\N
+115	45	1.00	\N	\N
+118	48	1.00	\N	\N
+122	53	1.00	\N	\N
+\.
+
+
+--
+-- Data for Name: menu_item_reviews; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.menu_item_reviews (id, menu_item_id, customer_id, author_name, rating, comment, created_at) FROM stdin;
+1	115	\N	Mariel S.	5	Sobrang sarap! Authentic ang lasa, parang nasa Binondo talaga. Bababalik-balikan ko ito.	2026-09-28 09:12:00
+2	115	\N	Jonas R.	4	Great value for the portion. Medyo matagal lang ang waiting time noong peak hour.	2026-09-24 14:05:00
+3	115	\N	Alyssa T.	5	Perfectly seasoned and served hot. Recommended!	2026-09-19 18:40:00
+4	115	\N	Marco D.	3	Okay naman, pero sana mas malaki ang serving para sa price.	2026-09-15 11:22:00
+5	115	\N	Katrina L.	5	Favourite ko na! Consistent ang quality every order.	2026-09-10 20:15:00
+6	115	\N	Paolo M.	4	Solid comfort food. Presentation is neat and appetising.	2026-09-04 12:30:00
+7	115	\N	Bea C.	4	Masarap at bagong luto. Ang packaging ay maayos din.	2026-08-30 16:48:00
 \.
 
 
@@ -1790,10 +1984,12 @@ COPY public.orders (id, order_type, customer_id, cashier_id, status, order_chann
 -- Data for Name: otp_verifications; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verified_at, created_at) FROM stdin;
-47	cashier@bingnondo.com	874310	password_reset	2026-10-16 22:10:48.005	\N	2026-10-16 22:00:48.008024
-53	buenaflordaniel371@gmail.com	628620	password_reset	2026-10-17 12:20:38.804	2026-10-17 12:13:46.755099	2026-10-17 12:10:38.807686
-21	cashier@bingnondo.com	535925	password_reset	2026-10-16 21:38:45.4	\N	2026-10-16 21:28:45.40364
+COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verified_at, created_at, consumed_at) FROM stdin;
+47	cashier@bingnondo.com	874310	password_reset	2026-10-16 22:10:48.005	\N	2026-10-16 22:00:48.008024	\N
+53	buenaflordaniel371@gmail.com	628620	password_reset	2026-10-17 12:20:38.804	2026-10-17 12:13:46.755099	2026-10-17 12:10:38.807686	\N
+21	cashier@bingnondo.com	535925	password_reset	2026-10-16 21:38:45.4	\N	2026-10-16 21:28:45.40364	\N
+127	buenaflordaniel371@gmail.com	171443	password_reset	2026-10-20 11:38:10.732	2026-10-20 11:29:16.811306	2026-10-20 11:28:10.733974	\N
+192	__dbg_1792598959964@example.test	807519	email_verification	2026-10-22 00:19:20.386	2026-10-22 00:09:20.413882	2026-10-22 00:09:20.392962	\N
 \.
 
 
@@ -1801,21 +1997,21 @@ COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verif
 -- Data for Name: payments; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.payments (id, order_id, method, amount, paymongo_payment_id, status, paid_at, created_at, gcash_ref_number, receipt_image_url, receipt_uploaded_at, verified_by, verified_at, rejection_reason, rejected_at, gcash_amount_sent) FROM stdin;
-666	875	cash	90.00	\N	paid	2026-10-16 18:20:49.921908	2026-10-16 18:20:49.921908	\N	\N	\N	\N	\N	\N	\N	\N
-667	876	cash	80.00	\N	paid	2026-10-16 18:40:05.849307	2026-10-16 18:40:05.849307	\N	\N	\N	\N	\N	\N	\N	\N
-668	877	cash	85.00	\N	paid	2026-10-16 19:15:22.367247	2026-10-16 19:15:22.367247	\N	\N	\N	\N	\N	\N	\N	\N
-909	1268	cash	90.00	\N	paid	2026-10-17 11:56:31.316423	2026-10-17 11:56:31.316423	\N	\N	\N	\N	\N	\N	\N	\N
-589	752	cash	80.00	\N	paid	2026-10-16 00:08:14.50445	2026-10-16 00:08:14.50445	\N	\N	\N	\N	\N	\N	\N	\N
-590	753	cash	90.00	\N	paid	2026-10-16 08:16:13.220702	2026-10-16 08:16:13.220702	\N	\N	\N	\N	\N	\N	\N	\N
-591	754	cash	80.00	\N	paid	2026-10-16 08:26:02.422425	2026-10-16 08:26:02.422425	\N	\N	\N	\N	\N	\N	\N	\N
-640	833	cash	90.00	\N	paid	2026-10-16 15:06:07.572905	2026-10-16 15:06:07.572905	\N	\N	\N	\N	\N	\N	\N	\N
-641	834	cash	80.00	\N	paid	2026-10-16 15:06:43.272603	2026-10-16 15:06:43.272603	\N	\N	\N	\N	\N	\N	\N	\N
-235	253	cash	95.00	\N	paid	2026-10-14 22:45:31.900671	2026-10-14 22:45:31.900671	\N	\N	\N	\N	\N	\N	\N	\N
-236	254	cash	265.00	\N	paid	2026-10-15 12:49:24.98439	2026-10-15 12:49:24.98439	\N	\N	\N	\N	\N	\N	\N	\N
-237	255	cash	270.00	\N	paid	2026-10-15 12:49:32.848972	2026-10-15 12:49:32.848972	\N	\N	\N	\N	\N	\N	\N	\N
-238	256	cash	270.00	\N	paid	2026-10-15 12:49:40.128487	2026-10-15 12:49:40.128487	\N	\N	\N	\N	\N	\N	\N	\N
-239	257	cash	90.00	\N	paid	2026-10-15 12:49:45.897507	2026-10-15 12:49:45.897507	\N	\N	\N	\N	\N	\N	\N	\N
+COPY public.payments (id, order_id, method, amount, paymongo_payment_id, status, paid_at, created_at, gcash_ref_number, receipt_image_url, receipt_uploaded_at, verified_by, verified_at, rejection_reason, rejected_at, gcash_amount_sent, previous_receipt_image_url, resubmitted_at, rejection_count, previous_rejection_reason) FROM stdin;
+666	875	cash	90.00	\N	paid	2026-10-16 18:20:49.921908	2026-10-16 18:20:49.921908	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+667	876	cash	80.00	\N	paid	2026-10-16 18:40:05.849307	2026-10-16 18:40:05.849307	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+668	877	cash	85.00	\N	paid	2026-10-16 19:15:22.367247	2026-10-16 19:15:22.367247	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+909	1268	cash	90.00	\N	paid	2026-10-17 11:56:31.316423	2026-10-17 11:56:31.316423	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+589	752	cash	80.00	\N	paid	2026-10-16 00:08:14.50445	2026-10-16 00:08:14.50445	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+590	753	cash	90.00	\N	paid	2026-10-16 08:16:13.220702	2026-10-16 08:16:13.220702	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+591	754	cash	80.00	\N	paid	2026-10-16 08:26:02.422425	2026-10-16 08:26:02.422425	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+640	833	cash	90.00	\N	paid	2026-10-16 15:06:07.572905	2026-10-16 15:06:07.572905	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+641	834	cash	80.00	\N	paid	2026-10-16 15:06:43.272603	2026-10-16 15:06:43.272603	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+235	253	cash	95.00	\N	paid	2026-10-14 22:45:31.900671	2026-10-14 22:45:31.900671	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+236	254	cash	265.00	\N	paid	2026-10-15 12:49:24.98439	2026-10-15 12:49:24.98439	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+237	255	cash	270.00	\N	paid	2026-10-15 12:49:32.848972	2026-10-15 12:49:32.848972	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+238	256	cash	270.00	\N	paid	2026-10-15 12:49:40.128487	2026-10-15 12:49:40.128487	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
+239	257	cash	90.00	\N	paid	2026-10-15 12:49:45.897507	2026-10-15 12:49:45.897507	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N
 \.
 
 
@@ -1832,7 +2028,7 @@ COPY public.pending_registrations (email, password_hash, expires_at, created_at)
 --
 
 COPY public.riders (id, full_name, mobile_number, plate_number, vehicle_type, notes, status, created_by, created_at, updated_at, email, password_hash, last_login) FROM stdin;
-1	RiderNyoko	09482785422	ABC 1234	motorcycle	\N	available	1	2026-10-15 14:13:11.814234	2026-10-15 19:01:56.515006	rider@bingnondo.com	$2b$12$bxYm9KwA5JYHjxXk1GIk/OU/EPev2wJ3LfULlb/0vvnXuXtxuXjKy	2026-10-15 19:37:11.329796
+1	RiderNyoko	09482785422	ABC 1234	motorcycle	\N	available	1	2026-10-15 14:13:11.814234	2026-10-20 12:21:15.693442	rider@bingnondo.com	$2b$12$bxYm9KwA5JYHjxXk1GIk/OU/EPev2wJ3LfULlb/0vvnXuXtxuXjKy	2026-10-20 11:30:38.426626
 \.
 
 
@@ -1843,8 +2039,8 @@ COPY public.riders (id, full_name, mobile_number, plate_number, vehicle_type, no
 COPY public.staff_accounts (id, full_name, email, password_hash, role, status, created_by, created_at, updated_at, notification_seen_at) FROM stdin;
 3	Cashier One	cashier@bingnondo.com	$2b$12$VHxWiJDzMyy9..udZAG.4uZMIIyw8Knb01KQZ8LICYXj2e90M2ksK	cashier	active	\N	2026-10-13 00:02:24.280064	2026-10-13 00:02:24.280064	\N
 4	Kitchen Staff	kitchen@bingnondo.com	$2b$12$1Cwh2bqIxanUIrZC8vRbfOTsZar9oba1kwkbiSnT./qFUqmw5LAXi	kitchen_staff	active	\N	2026-10-13 00:02:24.520095	2026-10-14 22:48:37.696996	\N
-56	Daniel	buenaflordaniel371@gmail.com	$2b$12$QGwmI17GXzC6HyZ2RVBEvOxnG9d49cCeO2VtnSB.L2b34TUemQ/Nm	cashier	active	1	2026-10-17 12:10:10.92647	2026-10-17 12:13:46.755099	\N
-1	Admin User	admin@bingnondo.com	$2b$12$JURyzssCxXhchWcJPHNOPOC.8Kx9w/S7CpsyIb9JnNYzosvNY3D0e	admin	active	\N	2026-10-13 00:02:23.780245	2026-10-13 00:02:23.780245	2026-10-17 21:41:34.274
+1	Admin User	admin@bingnondo.com	$2b$12$JURyzssCxXhchWcJPHNOPOC.8Kx9w/S7CpsyIb9JnNYzosvNY3D0e	admin	active	\N	2026-10-13 00:02:23.780245	2026-10-13 00:02:23.780245	2026-10-21 22:20:27.084
+56	Daniel	buenaflordaniel371@gmail.com	$2b$12$6eYkN.sAQXamnq9mpIfLouY35wiImE2eEXflvV9MHgueRFErsAp52	cashier	active	1	2026-10-17 12:10:10.92647	2026-10-20 11:29:16.811306	\N
 \.
 
 
@@ -1852,7 +2048,7 @@ COPY public.staff_accounts (id, full_name, email, password_hash, role, status, c
 -- Data for Name: support_chat_messages; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.support_chat_messages (id, chat_id, sender_type, sender_id, related_order_id, content, sent_at) FROM stdin;
+COPY public.support_chat_messages (id, chat_id, sender_type, sender_id, related_order_id, content, sent_at, is_read) FROM stdin;
 \.
 
 
@@ -1869,7 +2065,7 @@ COPY public.support_chats (id, customer_id, status, opened_at, locked_at) FROM s
 --
 
 COPY public.system_settings (key, value, updated_at) FROM stdin;
-notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "payments": true, "customers": true, "inventory": true, "deliveries": true}}	2026-10-20 02:23:54.321607
+notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "payments": true, "customers": true, "inventory": true, "deliveries": true}}	2026-10-22 19:25:59.32549
 \.
 
 
@@ -1878,7 +2074,9 @@ notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "
 --
 
 COPY public.variant_groups (id, name, created_at, updated_at, max_options) FROM stdin;
-10	Flavors	2026-10-20 01:27:58.70719	2026-10-20 02:20:53.123194	3
+74	Solo/Sharing	2026-10-20 11:13:59.066125	2026-10-20 11:13:59.066125	2
+75	Hot/Cold	2026-10-20 11:15:14.303465	2026-10-20 11:15:14.303465	2
+10	Flavors	2026-10-20 01:27:58.70719	2026-10-20 11:15:46.126127	10
 \.
 
 
@@ -1886,7 +2084,7 @@ COPY public.variant_groups (id, name, created_at, updated_at, max_options) FROM 
 -- Name: audit_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.audit_log_id_seq', 468, true);
+SELECT pg_catalog.setval('public.audit_log_id_seq', 993, true);
 
 
 --
@@ -1900,14 +2098,21 @@ SELECT pg_catalog.setval('public.business_hours_id_seq', 7, true);
 -- Name: chatbot_conversations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chatbot_conversations_id_seq', 1, false);
+SELECT pg_catalog.setval('public.chatbot_conversations_id_seq', 12, true);
 
 
 --
 -- Name: chatbot_messages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.chatbot_messages_id_seq', 1, false);
+SELECT pg_catalog.setval('public.chatbot_messages_id_seq', 24, true);
+
+
+--
+-- Name: customer_notifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.customer_notifications_id_seq', 282, true);
 
 
 --
@@ -1921,63 +2126,70 @@ SELECT pg_catalog.setval('public.customer_order_violations_id_seq', 1, false);
 -- Name: customers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.customers_id_seq', 129, true);
+SELECT pg_catalog.setval('public.customers_id_seq', 638, true);
 
 
 --
 -- Name: deliveries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.deliveries_id_seq', 441, true);
+SELECT pg_catalog.setval('public.deliveries_id_seq', 769, true);
 
 
 --
 -- Name: esp32_devices_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.esp32_devices_id_seq', 8, true);
+SELECT pg_catalog.setval('public.esp32_devices_id_seq', 12, true);
 
 
 --
 -- Name: inventory_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.inventory_items_id_seq', 582, true);
+SELECT pg_catalog.setval('public.inventory_items_id_seq', 763, true);
 
 
 --
 -- Name: inventory_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 407, true);
+SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 536, true);
 
 
 --
 -- Name: kitchen_alerts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.kitchen_alerts_id_seq', 182, true);
+SELECT pg_catalog.setval('public.kitchen_alerts_id_seq', 260, true);
 
 
 --
 -- Name: menu_categories_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_categories_id_seq', 87, true);
+SELECT pg_catalog.setval('public.menu_categories_id_seq', 191, true);
+
+
+--
+-- Name: menu_item_reviews_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.menu_item_reviews_id_seq', 113, true);
 
 
 --
 -- Name: menu_item_variants_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_item_variants_id_seq', 152, true);
+SELECT pg_catalog.setval('public.menu_item_variants_id_seq', 412, true);
 
 
 --
 -- Name: menu_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.menu_items_id_seq', 1954, true);
+SELECT pg_catalog.setval('public.menu_items_id_seq', 2695, true);
 
 
 --
@@ -1991,70 +2203,70 @@ SELECT pg_catalog.setval('public.notifications_id_seq', 1, false);
 -- Name: order_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.order_items_id_seq', 2062, true);
+SELECT pg_catalog.setval('public.order_items_id_seq', 2804, true);
 
 
 --
 -- Name: order_status_history_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.order_status_history_id_seq', 1057, true);
+SELECT pg_catalog.setval('public.order_status_history_id_seq', 1549, true);
 
 
 --
 -- Name: orders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.orders_id_seq', 2019, true);
+SELECT pg_catalog.setval('public.orders_id_seq', 2761, true);
 
 
 --
 -- Name: otp_verifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.otp_verifications_id_seq', 122, true);
+SELECT pg_catalog.setval('public.otp_verifications_id_seq', 426, true);
 
 
 --
 -- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.payments_id_seq', 1375, true);
+SELECT pg_catalog.setval('public.payments_id_seq', 1898, true);
 
 
 --
 -- Name: riders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.riders_id_seq', 427, true);
+SELECT pg_catalog.setval('public.riders_id_seq', 572, true);
 
 
 --
 -- Name: staff_accounts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.staff_accounts_id_seq', 126, true);
+SELECT pg_catalog.setval('public.staff_accounts_id_seq', 182, true);
 
 
 --
 -- Name: support_chat_messages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.support_chat_messages_id_seq', 1, false);
+SELECT pg_catalog.setval('public.support_chat_messages_id_seq', 10, true);
 
 
 --
 -- Name: support_chats_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.support_chats_id_seq', 1, false);
+SELECT pg_catalog.setval('public.support_chats_id_seq', 210, true);
 
 
 --
 -- Name: variant_groups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.variant_groups_id_seq', 64, true);
+SELECT pg_catalog.setval('public.variant_groups_id_seq', 184, true);
 
 
 --
@@ -2095,6 +2307,14 @@ ALTER TABLE ONLY public.chatbot_conversations
 
 ALTER TABLE ONLY public.chatbot_messages
     ADD CONSTRAINT chatbot_messages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: customer_notifications customer_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_notifications
+    ADD CONSTRAINT customer_notifications_pkey PRIMARY KEY (id);
 
 
 --
@@ -2231,6 +2451,14 @@ ALTER TABLE ONLY public.menu_category_variant_groups
 
 ALTER TABLE ONLY public.menu_item_ingredients
     ADD CONSTRAINT menu_item_ingredients_pkey PRIMARY KEY (menu_item_id, inventory_item_id);
+
+
+--
+-- Name: menu_item_reviews menu_item_reviews_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.menu_item_reviews
+    ADD CONSTRAINT menu_item_reviews_pkey PRIMARY KEY (id);
 
 
 --
@@ -2409,6 +2637,13 @@ CREATE INDEX idx_audit_log_actor ON public.audit_log USING btree (actor_id);
 
 
 --
+-- Name: idx_customer_notifications_customer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customer_notifications_customer ON public.customer_notifications USING btree (customer_id, created_at DESC);
+
+
+--
 -- Name: idx_deliveries_rider; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2469,6 +2704,20 @@ CREATE INDEX idx_menu_category_variant_groups_category_id ON public.menu_categor
 --
 
 CREATE INDEX idx_menu_category_variant_groups_variant_group_id ON public.menu_category_variant_groups USING btree (variant_group_id);
+
+
+--
+-- Name: idx_menu_item_reviews_customer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_menu_item_reviews_customer_id ON public.menu_item_reviews USING btree (customer_id);
+
+
+--
+-- Name: idx_menu_item_reviews_menu_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_menu_item_reviews_menu_item_id ON public.menu_item_reviews USING btree (menu_item_id);
 
 
 --
@@ -2626,6 +2875,13 @@ CREATE INDEX idx_violations_customer ON public.customer_order_violations USING b
 
 
 --
+-- Name: uq_menu_item_reviews_item_customer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_menu_item_reviews_item_customer ON public.menu_item_reviews USING btree (menu_item_id, customer_id) WHERE (customer_id IS NOT NULL);
+
+
+--
 -- Name: uq_menu_item_variants_item_group_name; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2676,6 +2932,22 @@ ALTER TABLE ONLY public.chatbot_conversations
 
 ALTER TABLE ONLY public.chatbot_messages
     ADD CONSTRAINT chatbot_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.chatbot_conversations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: customer_notifications customer_notifications_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_notifications
+    ADD CONSTRAINT customer_notifications_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: customer_notifications customer_notifications_related_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_notifications
+    ADD CONSTRAINT customer_notifications_related_order_id_fkey FOREIGN KEY (related_order_id) REFERENCES public.orders(id) ON DELETE SET NULL;
 
 
 --
@@ -2839,6 +3111,22 @@ ALTER TABLE ONLY public.menu_item_ingredients
 
 
 --
+-- Name: menu_item_reviews menu_item_reviews_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.menu_item_reviews
+    ADD CONSTRAINT menu_item_reviews_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: menu_item_reviews menu_item_reviews_menu_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.menu_item_reviews
+    ADD CONSTRAINT menu_item_reviews_menu_item_id_fkey FOREIGN KEY (menu_item_id) REFERENCES public.menu_items(id) ON DELETE CASCADE;
+
+
+--
 -- Name: menu_item_variants menu_item_variants_menu_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2986,5 +3274,5 @@ ALTER TABLE ONLY public.support_chats
 -- PostgreSQL database dump complete
 --
 
-\unrestrict nYU36kAuY1TigVNlhKzAGoCFlzNHKw3h71lJ75e8CzzVfR8yNAnhNYvcn5eup1Q
+\unrestrict OLjGaJveraYQUelOQOQtwExnGv62lOofs54ah0bZgfuaR79dDk1HmVWdejopYvc
 

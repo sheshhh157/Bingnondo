@@ -1357,37 +1357,125 @@
   gap: 6px;
 }
 .ap-cat-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ap-cat-variants { display: flex; flex-wrap: wrap; gap: 6px; }
 
-/* Variant chips: dashed outline = available to add; filled gold = offered. */
-.ap-cat-variant-chip {
-  display: inline-flex;
+/* Category variant dropdown: collapses to a summary line, expands inline to a
+   toggle checklist so a category row stays short with many variant groups. */
+.sys-var-select { margin-top: 8px; }
+.sys-var-select__trigger {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 10px 3px 8px;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: 999px;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-surface, transparent);
+  color: var(--color-foreground);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.sys-var-select__trigger:hover:not(:disabled) {
+  border-color: var(--color-gold);
+}
+.sys-var-select__trigger:disabled { opacity: 0.55; cursor: default; }
+.sys-var-select__label {
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+}
+.sys-var-select__summary {
+  flex: 1;
+  text-align: left;
+  color: var(--color-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sys-var-select__chevron {
+  display: flex;
+  color: var(--color-muted-foreground);
+  transition: transform 0.2s ease;
+}
+.sys-var-select.is-open .sys-var-select__chevron { transform: rotate(180deg); }
+
+.sys-var-select__panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.22s ease, opacity 0.22s ease;
+}
+.sys-var-select.is-open .sys-var-select__panel {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.sys-var-select__panel-inner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+}
+.sys-var-select.is-open .sys-var-select__panel-inner {
+  padding: 8px 0 2px;
+}
+.sys-var-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+  padding: 5px 10px 5px 6px;
+  border: none;
+  border-radius: 6px;
   background: transparent;
   color: var(--color-muted-foreground);
-  font-size: 0.6875rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.ap-cat-variant-chip:hover:not(:disabled) {
-  border-style: solid;
-  border-color: var(--color-gold);
-  color: var(--color-foreground);
+.sys-var-opt:hover:not(:disabled) { background: color-mix(in srgb, var(--color-gold) 10%, transparent); color: var(--color-foreground); }
+.sys-var-opt:disabled { opacity: 0.55; cursor: default; }
+.sys-var-opt__box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  color: var(--color-gold);
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
-.ap-cat-variant-chip.is-on {
-  border-style: solid;
+.sys-var-opt.is-on { color: var(--color-foreground); }
+.sys-var-opt.is-on .sys-var-opt__box {
   border-color: var(--color-gold);
   background: color-mix(in srgb, var(--color-gold) 16%, transparent);
-  color: var(--color-foreground);
 }
-.ap-cat-variant-chip:disabled { opacity: 0.55; cursor: default; }
-.ap-cat-variant-chip__icon { display: flex; opacity: 0.7; }
-.ap-cat-variant-chip.is-on .ap-cat-variant-chip__icon { opacity: 1; color: var(--color-gold); }
+.sys-var-opt__name { flex: 1; }
+.sys-var-opt__meta { font-size: 0.6875rem; color: var(--color-muted-foreground); }
+
+/* Brief gold flash so newly added/updated variant groups are easy to spot. */
+.ap-list-row--group.is-flash {
+  animation: sys-flash 1.2s ease-out;
+}
+@keyframes sys-flash {
+  0% { background: color-mix(in srgb, var(--color-gold) 26%, transparent); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sys-var-select__panel,
+  .sys-var-select__chevron,
+  .ap-list-row--group.is-flash { transition: none; animation: none; }
+}
+
+@media (max-width: 899px) {
+  .sys-var-select__trigger,
+  .sys-var-opt { max-width: none; }
+}
 
 @media (max-width: 899px) {
   .sys-mv-grid { grid-template-columns: 1fr; gap: 0; }

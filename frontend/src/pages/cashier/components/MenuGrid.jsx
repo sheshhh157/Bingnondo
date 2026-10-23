@@ -95,6 +95,15 @@ function MenuCard({ item, onAdd, draft }) {
       {/* Info */}
       <div className="cdm-card__body">
         <p className="cdm-card__name">{item.name}</p>
+        {Number(item.review_count) > 0 && (
+          <span className="cdm-card__rating" title={`${item.review_count} review${Number(item.review_count) === 1 ? '' : 's'}`}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            {Number(item.avg_rating).toFixed(1)}
+            <span className="cdm-card__rating-count">({item.review_count})</span>
+          </span>
+        )}
         <div className="cdm-card__footer">
           <span className="cdm-card__price">
             {hasVariants ? `from ${currency(fromPrice)}` : currency(item.price)}

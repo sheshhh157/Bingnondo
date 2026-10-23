@@ -214,6 +214,17 @@
   background: color-mix(in srgb, var(--color-primary) 12%, white);
 }
 .dash-top__name { flex: 1; font-weight: 500; font-size: 0.875rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-top__rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #B45309;
+}
+.dash-top__rating svg { color: #F59E0B; }
+.dash-top__rating-count { font-weight: 500; color: var(--color-muted-foreground); }
 .dash-top__qty { color: var(--color-muted-foreground); font-size: 0.82rem; }
 
 @media (max-width: 960px) {

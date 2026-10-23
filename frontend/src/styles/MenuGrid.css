@@ -138,6 +138,21 @@
   padding-top: 0.4rem;
 }
 
+.cdm-card__rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-muted-foreground);
+}
+
+.cdm-card__rating svg { color: var(--color-accent, #c8a24a); flex-shrink: 0; }
+.cdm-card__rating-count { font-weight: 500; opacity: 0.75; }
+
 .cdm-card__price {
   font-family: var(--font-heading);
   font-size: 0.9375rem;

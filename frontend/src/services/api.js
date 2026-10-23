@@ -126,6 +126,12 @@ export const staffMenuAPI = {
   remove: (id) => apiRequest(`/menu/${id}`, { method: 'DELETE' }),
 };
 
+// ─── MENU ITEM REVIEWS ────────────────────────────────────────────────────────
+export const reviewsAPI = {
+  /** GET /api/menu/items/:id/reviews — newest-first list */
+  list: (itemId) => apiRequest(`/menu/items/${itemId}/reviews`),
+};
+
 // ─── CATEGORIES (§4.2) ────────────────────────────────────────────────────────
 export const categoriesAPI = {
   /** GET /api/menu/categories */

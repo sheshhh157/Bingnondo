@@ -11,6 +11,101 @@ Migrations 012–020 below are not on `main` yet.
 
 ---
 
+## 024 — Keep the reason a receipt was rejected
+- **Date:** 2026-10-22
+- **Type:** Schema
+- **Files:** `backend/migrations/023_payments_previous_rejection_reason.sql`
+- **Why:** The customer re-upload clears `payments.rejection_reason` — the
+  payment goes back into the verification queue, so it no longer carries a
+  rejection. That meant the cashier's online-orders console lost the reason
+  the customer had to re-upload: it survived only in the browser, until a
+  reload. The cashier's console already renders a "Was rejected for" row from
+  `previous_rejection_reason`; the backend now supplies it.
+- **Applied:**
+  - Added `payments.previous_rejection_reason` (`varchar(255)`, nullable) —
+    why the receipt was rejected, copied from `rejection_reason` when staff
+    rejects a receipt and kept after the customer re-uploads.
+  - Backfill: `previous_rejection_reason = rejection_reason` for rows that
+    already carried a rejection.
+  - Backward compatible: new column only. No existing data was rewritten apart
+    from the backfill above, and no existing query changes shape — the column
+    is only added to the `payments` read path.
+
+---
+
+## 023 — GCash receipt re-submission columns
+- **Date:** 2026-10-21
+- **Type:** Schema
+- **Files:** `backend/migrations/add_previous_receipt.sql`,
+  `backend/migrations/add_resubmit_columns.sql`
+- **Why:** The cashier's online-orders console can now compare a rejected
+  GCash receipt against the customer's replacement side by side. That needs the
+  rejected receipt to survive the replacement, plus a record of how many times
+  a payment has been rejected and when it was last re-uploaded.
+- **Applied:**
+  - Added `payments.previous_receipt_image_url` (`text`, nullable) — the URL of
+    the receipt that was rejected, archived when the customer uploads a
+    replacement.
+  - Added `payments.resubmitted_at` (`timestamp`, nullable) — when the customer
+    last re-uploaded after a rejection.
+  - Added `payments.rejection_count` (`integer`, default `0`) — incremented
+    every time staff rejects the payment.
+  - Backfill: `rejection_count = 1` for rows that already had `rejected_at`
+    set (best estimate for pre-existing data).
+  - Backward compatible: new columns only; the defaults keep existing rows
+    valid and no existing data was rewritten apart from the backfill above.
+
+---
+
+## 022 — Menu item ratings & reviews
+- **Date:** 2026-10-21
+- **Type:** Schema
+- **File:** `backend/migrations/022_menu_item_reviews.sql`
+- **Why:** The customer app shows a "Ratings & Reviews" section on each menu
+  item, but the endpoint behind it was never built. This table backs
+  `GET /api/menu/items/:id/reviews` and also feeds the `avg_rating` /
+  `review_count` shown on the manager dashboard's menu cards.
+- **Applied:**
+  - Added table `menu_item_reviews` (`id`, `menu_item_id`, `customer_id`,
+    `author_name`, `rating`, `comment`, `created_at`).
+  - `menu_item_id → menu_items(id)` **ON DELETE CASCADE** — removing an item
+    removes its reviews.
+  - `customer_id → customers(id)` **ON DELETE SET NULL**, nullable — the
+    reviewing account is optional; `author_name` is a display snapshot so it
+    survives account deletion or renaming.
+  - `CHECK (rating BETWEEN 1 AND 5)`.
+  - Indexes on `(menu_item_id)` and `(customer_id)`.
+  - Partial unique index `uq_menu_item_reviews_item_customer` on
+    `(menu_item_id, customer_id)` **WHERE `customer_id IS NOT NULL`** — one
+    review per customer per item (re-submitting updates); anonymous/seed rows
+    are exempt.
+  - Backward compatible: new table only; no existing data touched. Sample rows
+    are seeded separately via `npm --prefix backend run seed:reviews` (data, not
+    schema — not logged here).
+
+---
+
+## 021 — Recipe units for menu item ingredients
+- **Date:** 2026-10-20
+- **Type:** Schema
+- **File:** `backend/migrations/021_recipe_units.sql`
+- **Why:** An inventory item's stock is tracked in one unit (e.g. Milk in
+  liters), but recipes commonly use a smaller unit (e.g. 150 ml per serving).
+  Each ingredient link can now carry the unit the recipe is written in plus the
+  factor that converts it into the ingredient's stock unit, so stock deduction
+  stays correct without admins doing the math by hand.
+- **Applied:**
+  - Added `menu_item_ingredients.unit` (`varchar(20)`, nullable — the recipe
+    unit; `NULL` means "same as the inventory stock unit").
+  - Added `menu_item_ingredients.conversion_factor` (`numeric(14,6)`, nullable —
+    multiplier recipe unit → stock unit, e.g. `1 ml = 0.001 liter`; `NULL`
+    means factor `1`).
+  - Backward compatible: existing links keep `unit = NULL` /
+    `conversion_factor = NULL`, which deduction treats as same-unit (no change
+    to current behaviour).
+
+---
+
 ## 020 — Variant groups: name + max options only
 - **Date:** 2026-10-20
 - **Type:** Schema

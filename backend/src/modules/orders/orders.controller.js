@@ -3,6 +3,8 @@ const socketHub = require('../../sockets');
 const { createKitchenAlert, announceKitchenAlert } = require('../kitchen/kitchen-alert');
 const { ALL_STATUSES, isKnownStatus, canTransition } = require('./status-transitions');
 const { applyOrderIngredientUsage, emitIngredientUsage } = require('../inventory/deduction');
+const { notifyOrderStatus } = require('../customer/customer-notifications');
+const { maybeLockThreadForCustomer } = require('../support-chat/support-chat.controller');
 
 // ─── Helper: format order number ─────────────────────────────────────────────
 function orderNumber(id) {
@@ -14,7 +16,11 @@ function orderNumber(id) {
 // cannot be ordered bare — the caller must pick one, and the variant's
 // absolute price wins over the base price. The chosen variant is snapshotted
 // onto the line (variant_name) so history survives a variant delete/rename.
-async function _resolveOrderItems(queryable, items) {
+//
+// `options.defaultVariant` relaxes that rule for the customer app, which has
+// no variant picker: the first available variant is chosen instead of the
+// order being rejected. The staff/POS path keeps the strict behaviour.
+async function _resolveOrderItems(queryable, items, options = {}) {
   const menuIds = items.map((i) => Number(i.menu_item_id));
   const [menuRes, variantRes] = await Promise.all([
     queryable.query(
@@ -55,7 +61,15 @@ async function _resolveOrderItems(queryable, items) {
         return { error: `Variant "${variant.name}" of "${mi.name}" is currently unavailable.` };
       }
     } else if (itemVariants.length > 0) {
-      return { error: `"${mi.name}" has variants — pick one before adding it to the order.` };
+      if (!options.defaultVariant) {
+        return { error: `"${mi.name}" has variants — pick one before adding it to the order.` };
+      }
+      // Customer app path: no variant picker exists, so take the first
+      // available variant rather than rejecting the whole order.
+      variant = itemVariants.find((v) => v.is_available) || null;
+      if (!variant) {
+        return { error: `"${mi.name}" is currently unavailable.` };
+      }
     }
 
     const unitPrice = variant ? parseFloat(variant.price) : parseFloat(mi.price);
@@ -240,7 +254,8 @@ const LATEST_PAYMENT_JOIN = `
     SELECT status, method, paid_at,
            gcash_ref_number, receipt_image_url, receipt_uploaded_at,
            rejection_reason, verified_by, verified_at, gcash_amount_sent,
-           resubmitted_at, rejection_count, previous_receipt_image_url
+           resubmitted_at, rejection_count, previous_receipt_image_url,
+           previous_rejection_reason
     FROM payments
     WHERE order_id = o.id
     ORDER BY paid_at DESC NULLS LAST, id DESC
@@ -646,6 +661,7 @@ async function getOnlineOrders(req, res, next) {
          p.resubmitted_at,
          p.rejection_count,
          p.previous_receipt_image_url,
+         p.previous_rejection_reason,
 
          d.delivery_preference,
          d.status        AS delivery_status,
@@ -678,6 +694,7 @@ async function getOnlineOrders(req, res, next) {
        GROUP BY o.id, c.id, p.method, p.status, p.paid_at, p.gcash_ref_number,
                 p.receipt_image_url, p.receipt_uploaded_at, p.rejection_reason, p.gcash_amount_sent,
                 p.resubmitted_at, p.rejection_count, p.previous_receipt_image_url,
+                p.previous_rejection_reason,
                 d.delivery_preference, d.status, d.rider_name, d.rider_contact,
                 d.assigned_at, d.delivered_at
        ORDER BY o.created_at DESC
@@ -808,6 +825,27 @@ async function updateOrderStatus(req, res, next) {
       socketHub.emitOrderReady({ orderId: order.id, orderNumber: order.order_number });
     }
 
+    // Bridge to the customer app: live tracking update + notification.
+    // Skipped for counter orders (no customer_id).
+    if (order.customer_id) {
+      socketHub.emitCustomerOrderStatus({
+        orderId: order.id,
+        status,
+        customerId: order.customer_id,
+      });
+
+      notifyOrderStatus({ orderId: order.id, customerId: order.customer_id, status }).catch((err) =>
+        console.error('[orders] customer notification failed:', err.message)
+      );
+
+      // The support thread locks once the customer has no active order left.
+      if (status === 'completed' || status === 'cancelled') {
+        maybeLockThreadForCustomer(order.customer_id).catch((err) =>
+          console.error('[orders] support thread lock failed:', err.message)
+        );
+      }
+    }
+
     // Bridge to customer app: push notification + badge
     try {
       const bridge = require('../../utils/internalBridge');
@@ -842,7 +880,7 @@ async function cancelOrder(req, res, next) {
     // agree on which row is "the" payment. A unique index on
     // payments(order_id) now guarantees there is only ever one.
     const { rows } = await client.query(
-      `SELECT o.id, o.status,
+      `SELECT o.id, o.status, o.customer_id,
               (SELECT p.status FROM payments p
                 WHERE p.order_id = o.id
                 ORDER BY p.paid_at DESC NULLS LAST, p.id DESC
@@ -887,11 +925,27 @@ async function cancelOrder(req, res, next) {
 
     socketHub.emitOrderStatus({ orderId: rows[0].id, orderNumber: orderNumber(rows[0].id), status: 'cancelled' });
 
-    // Bridge to customer app
+    // Bridge to the customer app
     try {
       const bridge = require('../../utils/internalBridge');
       bridge.notifyOrderStatus(rows[0].id, 'cancelled');
     } catch (_) {}
+
+    if (rows[0].customer_id) {
+      socketHub.emitCustomerOrderStatus({
+        orderId: rows[0].id,
+        status: 'cancelled',
+        customerId: rows[0].customer_id,
+      });
+      notifyOrderStatus({
+        orderId: rows[0].id,
+        customerId: rows[0].customer_id,
+        status: 'cancelled',
+      }).catch((err) => console.error('[orders] customer notification failed:', err.message));
+      maybeLockThreadForCustomer(rows[0].customer_id).catch((err) =>
+        console.error('[orders] support thread lock failed:', err.message)
+      );
+    }
 
     res.json({ message: 'Order cancelled.' });
   } catch (err) {
@@ -982,127 +1036,9 @@ async function updateOrderItems(req, res, next) {
   }
 }
 
-// ─── POST /api/orders/:id/reupload-receipt (customer-facing, cashier backend) ──
-// Called by the Flutter app when a customer re-uploads after rejection.
-// Saves the new receipt, re-runs OCR, resets payment to awaiting_verification,
-// increments rejection_count, and fires payment:resubmitted to staff via socket.
-async function reuploadReceipt(req, res, next) {
-  const Tesseract = require('tesseract.js');
-  const customerId = req.customerId;  // set by requireCustomer middleware
-  const orderId    = parseInt(req.params.id, 10);
-
-  if (!req.file) {
-    return res.status(422).json({ message: 'No receipt image uploaded.' });
-  }
-
-  const client = await pool.connect();
-  try {
-    // ── Verify order belongs to this customer and is in rejected state ───
-    const { rows } = await client.query(
-      `SELECT o.id, o.customer_id,
-              p.id            AS payment_id,
-              p.status        AS payment_status,
-              p.rejection_count
-         FROM orders o
-         JOIN payments p ON p.order_id = o.id
-        WHERE o.id = $1 AND o.customer_id = $2
-        LIMIT 1`,
-      [orderId, customerId]
-    );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: 'Order not found.' });
-    }
-    const payment = rows[0];
-    if (payment.payment_status !== 'rejected') {
-      return res.status(409).json({
-        message: 'Receipt can only be re-uploaded when payment is rejected.',
-      });
-    }
-
-    const tempUrl       = req.file.path;
-    const rejectionCount = (payment.rejection_count || 0); // keep existing count (not incrementing yet — already counted when rejected)
-
-    // ── OCR ───────────────────────────────────────────────────────────────
-    let gcashRef      = null;
-    let gcashAmount   = null;
-    let ocrConfidence = 0;
-
-    try {
-      const { data } = await Tesseract.recognize(tempUrl, 'eng', { logger: () => {} });
-      const text     = data.text ?? '';
-      ocrConfidence  = Math.round(data.confidence ?? 0);
-
-      // Inline extractors (same patterns as payments.controller)
-      // ── ref ──
-      const cleaned = text.replace(/\s+/g, ' ').trim();
-      const refLabel = cleaned.match(/reference\s+number[:\s#]*([0-9][0-9 ]{7,20}[0-9])/i);
-      if (refLabel) {
-        gcashRef = refLabel[1].replace(/\s/g, '');
-      } else {
-        const noSpace = cleaned.replace(/([0-9]) ([0-9])/g, '$1$2').replace(/([0-9]) ([0-9])/g, '$1$2');
-        const m13 = noSpace.match(/\b([0-9]{13})\b/);
-        gcashRef = m13 ? m13[1] : (noSpace.match(/\b([0-9]{10,16})\b/) || [])[1] || null;
-      }
-      // ── amount ──
-      const amtLabel = cleaned.match(/\bamount\b[:\s]*[+\-]?\s*([0-9]{1,6}(?:[.,][0-9]{2})?)/i);
-      if (amtLabel) {
-        gcashAmount = parseFloat(amtLabel[1].replace(',', '.'));
-      } else {
-        const plusAmt = cleaned.match(/\+\s*([0-9]{1,6}\.[0-9]{2})\b/);
-        gcashAmount = plusAmt ? parseFloat(plusAmt[1]) : null;
-      }
-    } catch (ocrErr) {
-      console.error('[OCR] reupload-receipt OCR failed:', ocrErr.message);
-    }
-
-    // ── Update payment row ────────────────────────────────────────────────
-    await client.query(
-      `UPDATE payments
-          SET receipt_image_url   = $1,
-              gcash_ref_number    = $2,
-              gcash_amount_sent   = $3,
-              status              = 'awaiting_verification',
-              rejection_reason    = NULL,
-              rejected_at         = NULL,
-              resubmitted_at      = NOW(),
-              receipt_uploaded_at = NOW(),
-              verified_by         = NULL,
-              verified_at         = NULL
-        WHERE id = $4`,
-      [tempUrl, gcashRef, gcashAmount, payment.payment_id]
-    );
-
-    // ── Notify staff via socket ───────────────────────────────────────────
-    try {
-      socketHub.emitPaymentResubmitted({
-        orderId,
-        customerId,
-        gcashRefNumber:  gcashRef,
-        gcashAmountSent: gcashAmount,
-        rejectionCount,
-        resubmittedAt:   new Date().toISOString(),
-      });
-    } catch (_) { /* non-fatal */ }
-
-    return res.json({
-      temp_url:         tempUrl,
-      gcash_ref_number: gcashRef,
-      gcash_amount:     gcashAmount,
-      ocr_confidence:   ocrConfidence,
-      ref_found:        gcashRef    !== null,
-      amount_found:     gcashAmount !== null,
-    });
-  } catch (err) {
-    next(err);
-  } finally {
-    client.release();
-  }
-}
-
-module.exports = { createOrder, getOrders, getOnlineOrders, getOrderTotals, getOrderReport, getOrderById, updateOrderStatus, cancelOrder, updateOrderItems, reuploadReceipt };
+module.exports = { createOrder, getOrders, getOnlineOrders, getOrderTotals, getOrderReport, getOrderById, updateOrderStatus, cancelOrder, updateOrderItems };
 
 // Internal helpers, exposed for tests. They hold the rules that decide which
 // orders count as revenue, so they are worth asserting directly — testing them
 // through HTTP would only prove the numbers moved.
-module.exports.__internal = { buildOrderFilters, escapeLike, isValidTimeZone, isIsoDateTime, LATEST_PAYMENT_JOIN, DEFAULT_REPORT_TZ };
+module.exports.__internal = { buildOrderFilters, escapeLike, isValidTimeZone, isIsoDateTime, LATEST_PAYMENT_JOIN, DEFAULT_REPORT_TZ, _resolveOrderItems };

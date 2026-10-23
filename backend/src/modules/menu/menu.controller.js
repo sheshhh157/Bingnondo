@@ -33,6 +33,17 @@ function _groupVariants(rows) {
   return map;
 }
 
+// Normalize the stored conversion factor for an ingredient link: null when the
+// recipe uses the stock unit (or no unit), otherwise a positive finite number.
+function _normalizeConversionFactor(ing) {
+  const unit = typeof ing?.unit === 'string' ? ing.unit.trim() : '';
+  const factor = ing?.conversion_factor;
+  if (!unit || factor == null) return null;
+  const n = Number(factor);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
 // Returns an error message, or null when the variant payload is valid.
 function _validateVariants(variants) {
   if (!Array.isArray(variants)) return 'variants must be an array.';
@@ -141,8 +152,10 @@ async function _getEnrichedItem(id) {
       `SELECT
          mii.inventory_item_id,
          mii.quantity_required,
+         mii.unit           AS recipe_unit,
+         mii.conversion_factor,
          inv.name,
-         inv.unit,
+         inv.unit           AS stock_unit,
          inv.current_stock
        FROM menu_item_ingredients mii
        JOIN inventory_items inv ON inv.id = mii.inventory_item_id
@@ -173,7 +186,9 @@ async function _getEnrichedItem(id) {
       inventory_item_id: r.inventory_item_id,
       quantity_required: r.quantity_required != null ? parseFloat(r.quantity_required) : null,
       name: r.name,
-      unit: r.unit,
+      unit: r.recipe_unit ?? r.stock_unit,
+      stock_unit: r.stock_unit,
+      conversion_factor: r.conversion_factor != null ? parseFloat(r.conversion_factor) : null,
       current_stock: parseFloat(r.current_stock),
     })),
   };
@@ -194,9 +209,17 @@ async function getPublicMenu(req, res, next) {
           mi.description,
           mi.price,
           mi.image_url,
-          mi.is_available
+          mi.is_available,
+          COALESCE(rv.avg_rating, 0)   AS avg_rating,
+          COALESCE(rv.review_count, 0) AS review_count
         FROM menu_items mi
         JOIN menu_categories mc ON mc.id = mi.category_id
+        LEFT JOIN LATERAL (
+          SELECT AVG(r.rating)::numeric(3,2) AS avg_rating,
+                 COUNT(*)                     AS review_count
+            FROM menu_item_reviews r
+           WHERE r.menu_item_id = mi.id
+        ) rv ON TRUE
         WHERE mi.is_deleted = FALSE
         ORDER BY mc.name ASC, mi.name ASC
       `),
@@ -217,6 +240,8 @@ async function getPublicMenu(req, res, next) {
       items: itemRes.rows.map((r) => ({
         ...r,
         price: parseFloat(r.price),
+        avg_rating: parseFloat(r.avg_rating),
+        review_count: Number(r.review_count),
         variants: variantMap[r.id] || [],
       })),
     });
@@ -253,9 +278,17 @@ async function getStaffMenu(req, res, next) {
           mi.image_public_id,
           mi.is_available,
           mi.created_at,
-          mi.updated_at
+          mi.updated_at,
+          COALESCE(rv.avg_rating, 0)   AS avg_rating,
+          COALESCE(rv.review_count, 0) AS review_count
         FROM menu_items mi
         JOIN menu_categories mc ON mc.id = mi.category_id
+        LEFT JOIN LATERAL (
+          SELECT AVG(r.rating)::numeric(3,2) AS avg_rating,
+                 COUNT(*)                     AS review_count
+            FROM menu_item_reviews r
+           WHERE r.menu_item_id = mi.id
+        ) rv ON TRUE
         WHERE mi.is_deleted = FALSE
         ORDER BY mc.name ASC, mi.name ASC
       `),
@@ -264,8 +297,10 @@ async function getStaffMenu(req, res, next) {
           mii.menu_item_id,
           mii.inventory_item_id,
           mii.quantity_required,
+          mii.unit           AS recipe_unit,
+          mii.conversion_factor,
           inv.name,
-          inv.unit,
+          inv.unit           AS stock_unit,
           inv.current_stock
         FROM menu_item_ingredients mii
         JOIN inventory_items inv ON inv.id = mii.inventory_item_id
@@ -289,7 +324,9 @@ async function getStaffMenu(req, res, next) {
         inventory_item_id: row.inventory_item_id,
         quantity_required: row.quantity_required != null ? parseFloat(row.quantity_required) : null,
         name: row.name,
-        unit: row.unit,
+        unit: row.recipe_unit ?? row.stock_unit,
+        stock_unit: row.stock_unit,
+        conversion_factor: row.conversion_factor != null ? parseFloat(row.conversion_factor) : null,
         current_stock: parseFloat(row.current_stock),
       });
     }
@@ -301,6 +338,8 @@ async function getStaffMenu(req, res, next) {
       items: itemRes.rows.map((item) => ({
         ...item,
         price: parseFloat(item.price),
+        avg_rating: parseFloat(item.avg_rating),
+        review_count: Number(item.review_count),
         variants: variantMap[item.id] || [],
         ingredients: ingMap[item.id] || [],
       })),
@@ -367,14 +406,16 @@ async function createMenuItem(req, res, next) {
     const newId = itemRes.rows[0].id;
 
     if (ingredients.length > 0) {
-      const values = ingredients.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(', ');
+      const values = ingredients.map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`).join(', ');
       const params = ingredients.flatMap((ing) => [
         newId,
         ing.inventory_item_id,
         ing.quantity_required != null && Number(ing.quantity_required) > 0 ? Number(ing.quantity_required) : null,
+        ing.unit || null,
+        _normalizeConversionFactor(ing),
       ]);
       await client.query(
-        `INSERT INTO menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required) VALUES ${values}`,
+        `INSERT INTO menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required, unit, conversion_factor) VALUES ${values}`,
         params
       );
     }
@@ -496,14 +537,16 @@ async function updateMenuItem(req, res, next) {
     if (ingredients !== undefined) {
       await client.query('DELETE FROM menu_item_ingredients WHERE menu_item_id = $1', [id]);
       if (ingredients.length > 0) {
-        const values = ingredients.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(', ');
+        const values = ingredients.map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`).join(', ');
         const params2 = ingredients.flatMap((ing) => [
           id,
           ing.inventory_item_id,
           ing.quantity_required != null && Number(ing.quantity_required) > 0 ? Number(ing.quantity_required) : null,
+          ing.unit || null,
+          _normalizeConversionFactor(ing),
         ]);
         await client.query(
-          `INSERT INTO menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required) VALUES ${values}`,
+          `INSERT INTO menu_item_ingredients (menu_item_id, inventory_item_id, quantity_required, unit, conversion_factor) VALUES ${values}`,
           params2
         );
       }
@@ -696,9 +739,53 @@ async function deleteCategory(req, res, next) {
   }
 }
 
+// ─── POST /api/menu/availability-check ────────────────────────────────────────
+// The app re-checks the cart right before checkout: an item may have sold out
+// since it was added. Body: { item_ids: [int, ...] }
+// Response: { items: [{ id, name, is_available }] }
+async function checkAvailability(req, res, next) {
+  try {
+    const { item_ids } = req.body || {};
+
+    if (!Array.isArray(item_ids) || item_ids.length === 0) {
+      return res.status(400).json({ message: 'item_ids is required.' });
+    }
+
+    const ids = item_ids.map((id) => Number(id)).filter((id) => Number.isInteger(id));
+    if (ids.length === 0) {
+      return res.status(400).json({ message: 'item_ids must contain numeric ids.' });
+    }
+
+    const { rows } = await db.query(
+      `SELECT id, name, is_available
+         FROM menu_items
+        WHERE id = ANY($1)
+          AND is_deleted = FALSE`,
+      [ids]
+    );
+
+    // Items that no longer exist are reported as unavailable rather than
+    // silently missing, so the app can tell the customer which one to drop.
+    const found = new Map(rows.map((row) => [row.id, row]));
+    const items = ids.map((id) => {
+      const row = found.get(id);
+      return {
+        id,
+        name: row?.name ?? null,
+        is_available: Boolean(row?.is_available),
+      };
+    });
+
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   setIO,
   getPublicMenu,
+  checkAvailability,
   getStaffMenu,
   getMenuItemById,
   createMenuItem,

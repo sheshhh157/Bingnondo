@@ -1,12 +1,31 @@
 const express = require('express');
 const router  = express.Router();
-const { authenticateToken, requireRoles, requireStaff } = require('../../middleware/auth.middleware');
+const { authenticateToken, requireRoles, requireStaff, requireCustomer } = require('../../middleware/auth.middleware');
 const ctrl = require('./payments.controller');
+const receiptCtrl = require('./receipt.controller');
+const { receiptUpload, handleReceiptUploadError } = require('../../config/receiptUpload');
 
 // ── Shared middleware sets ────────────────────────────────────────────────────
 const cashierAccess = [authenticateToken, requireStaff, requireRoles('cashier', 'admin')];
 // cashier + admin can access payment verification
 const staffAccess   = [authenticateToken, requireStaff, requireRoles('cashier', 'admin')];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Customer receipt upload
+// ─────────────────────────────────────────────────────────────────────────────
+
+// POST /api/payments/extract-receipt
+// Multipart form: field 'receipt' (image). Returns the uploaded image URL plus
+// whatever could be read off the receipt (the app falls back to manual entry
+// when nothing could be extracted).
+router.post(
+  '/extract-receipt',
+  authenticateToken,
+  requireCustomer,
+  receiptUpload.single('receipt'),
+  handleReceiptUploadError,
+  receiptCtrl.extractReceipt
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Counter / POS payments

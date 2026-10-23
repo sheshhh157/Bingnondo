@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { adminAPI, adminRidersAPI } from '../../services/api';
+import { adminAPI, adminRidersAPI, staffMenuAPI } from '../../services/api';
 import { ordersAPI, kitchenAPI, inventoryAPI, MANAGER_ORDER_LIMITS } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
 import { currency, stockStatus, stockBadgeVariant, stockStatusText, dayKey, lastDaysBounds, itemLabel } from '../../utils/format';
@@ -59,12 +59,12 @@ function hourRange(row) {
 
 const FETCH_LABELS = [
   'staff accounts', 'user accounts', 'business hours', 'menu categories',
-  'riders', 'kitchen queue', 'inventory', 'orders', 'order totals',
+  'riders', 'kitchen queue', 'inventory', 'orders', 'order totals', 'menu items',
 ];
 
 const INITIAL = {
   staff: [], restrictions: [], hours: [], categories: [], riders: [],
-  kitchen: [], stock: [], orders: [], total: 0, totals: {}, failed: [],
+  kitchen: [], stock: [], orders: [], total: 0, totals: {}, menu: [], failed: [],
 };
 
 export default function AdminOverview() {
@@ -83,8 +83,9 @@ export default function AdminOverview() {
         inventoryAPI.getAll(),
         ordersAPI.getRange({ ...lastDaysBounds(WINDOW_DAYS), limit: MANAGER_ORDER_LIMITS.window }),
         ordersAPI.getTotals(),
+        staffMenuAPI.getAll(),
       ]);
-      const [staffR, restrR, hoursR, catsR, ridersR, kitR, invR, ordersR, totalsR] = settled;
+      const [staffR, restrR, hoursR, catsR, ridersR, kitR, invR, ordersR, totalsR, menuR] = settled;
       const failed = [];
       settled.forEach((r, i) => { if (r.status === 'rejected') failed.push(FETCH_LABELS[i]); });
       if (failed.length === settled.length) throw new Error('Overview data unavailable');
@@ -101,6 +102,7 @@ export default function AdminOverview() {
         orders: ordersR.status === 'fulfilled' ? (ordersR.value.data || []) : [],
         total: ordersR.status === 'fulfilled' ? (ordersR.value.total || 0) : 0,
         totals: totalsR.status === 'fulfilled' ? (totalsR.value.data || {}) : {},
+        menu: menuR.status === 'fulfilled' ? (menuR.value.data?.items || []) : [],
         failed,
       };
     },
@@ -117,7 +119,7 @@ export default function AdminOverview() {
 
   const {
     staff, restrictions, hours, categories, riders,
-    kitchen, stock, orders: windowOrders, total: windowTotal, totals,
+    kitchen, stock, orders: windowOrders, total: windowTotal, totals, menu,
   } = data;
   const failed = data.failed || [];
 
@@ -154,19 +156,32 @@ export default function AdminOverview() {
   );
 
   const topItems = useMemo(() => {
+    // Tally by menu_item_id so ratings can be joined in later; keying by the
+    // display string would collapse distinct items that share a name.
     const tally = {};
     for (const o of revenueOrders) {
       for (const it of o.items || o.order_items || []) {
         const name = itemLabel(it);
         if (!name) continue;
-        tally[name] = (tally[name] || 0) + (Number(it.quantity) || 1);
+        const key = it.menu_item_id != null ? `id:${it.menu_item_id}` : `name:${name}`;
+        const row = tally[key] || (tally[key] = { menu_item_id: it.menu_item_id ?? null, name, qty: 0 });
+        row.qty += Number(it.quantity) || 1;
       }
     }
-    return Object.entries(tally)
-      .map(([name, qty]) => ({ name, qty }))
+    return Object.values(tally)
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
   }, [revenueOrders]);
+
+  // menu_item_id → { avg_rating, review_count } for items that have reviews.
+  const ratingsById = useMemo(() => {
+    const map = new Map();
+    for (const m of menu) {
+      const count = Number(m.review_count) || 0;
+      if (count > 0) map.set(m.id, { avg_rating: Number(m.avg_rating) || 0, review_count: count });
+    }
+    return map;
+  }, [menu]);
 
   const daily = useMemo(() => {
     const days = [];
@@ -458,13 +473,25 @@ export default function AdminOverview() {
                 <span className="dash-top-sub">by quantity · paid orders · {windowLabel}</span>
               </div>
               <div className="dash-top">
-                {topItems.map((t, i) => (
-                  <div key={t.name} className="dash-top__row">
-                    <span className="dash-top__rank">{i + 1}</span>
-                    <span className="dash-top__name">{t.name}</span>
-                    <span className="dash-top__qty">{t.qty} sold</span>
-                  </div>
-                ))}
+                {topItems.map((t, i) => {
+                  const rating = t.menu_item_id != null ? ratingsById.get(t.menu_item_id) : null;
+                  return (
+                    <div key={t.menu_item_id != null ? `id:${t.menu_item_id}` : `name:${t.name}`} className="dash-top__row">
+                      <span className="dash-top__rank">{i + 1}</span>
+                      <span className="dash-top__name">{t.name}</span>
+                      {rating && (
+                        <span className="dash-top__rating" title={`${rating.review_count} review${rating.review_count === 1 ? '' : 's'}`}>
+                          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                            <path d="M12 2.5l2.9 6.06 6.6.83-4.86 4.5 1.25 6.56L12 17.9l-5.89 2.55 1.25-6.56L2.5 9.39l6.6-.83z" />
+                          </svg>
+                          {rating.avg_rating.toFixed(1)}
+                          <span className="dash-top__rating-count">({rating.review_count})</span>
+                        </span>
+                      )}
+                      <span className="dash-top__qty">{t.qty} sold</span>
+                    </div>
+                  );
+                })}
               </div>
             </CardPanel>
           )}
