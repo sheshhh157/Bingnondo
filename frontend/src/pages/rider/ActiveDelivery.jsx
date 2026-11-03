@@ -1,8 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { getCurrentDelivery, updateDeliveryStatus } from '../../services/riderApi';
 import { useSocketEventContext } from '../../context/SocketContext';
 import { itemLabel } from '../../utils/format';
 import '../../styles/ActiveDelivery.css';
+import '../../styles/DeliveryMap.css';
+
+// Lazy-load DeliveryMap — Leaflet is heavyweight; only load when a delivery is active
+const DeliveryMap = lazy(() => import('./DeliveryMap'));
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
 function IconPin() {
@@ -252,6 +256,21 @@ export default function ActiveDelivery() {
                 <span className="ad-info-row__value">{delivery.delivery_address}</span>
               </div>
             </div>
+          </div>
+
+          {/* ── Navigation Map ── */}
+          <div className="ad-card__section">
+            <Suspense fallback={
+              <div className="ad-loading" style={{ minHeight: 120 }}>
+                <span className="ad-spinner" aria-label="Loading map" />
+                <p style={{ fontSize: '0.8rem' }}>Loading map…</p>
+              </div>
+            }>
+              <DeliveryMap
+                delivery={delivery}
+                isActive={delivery.status === 'out_for_delivery'}
+              />
+            </Suspense>
           </div>
 
           {/* ── Items ── */}

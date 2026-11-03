@@ -47,13 +47,27 @@ const STATEMENTS = [
   // The app reads the newest notifications first.
   `CREATE INDEX IF NOT EXISTS idx_customer_notifications_customer
      ON customer_notifications (customer_id, created_at DESC)`,
+
+  // ── Rider live-location tracking ──────────────────────────────────────────
+  // Stores the most recent GPS fix for each rider during an active delivery.
+  // One row per rider (upsert pattern). Cleared / ignored when no delivery is active.
+  `CREATE TABLE IF NOT EXISTS rider_locations (
+     rider_id    INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+     latitude    NUMERIC(10,7) NOT NULL,
+     longitude   NUMERIC(10,7) NOT NULL,
+     accuracy    REAL,
+     updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_rider_locations_updated
+     ON rider_locations (updated_at DESC)`,
 ];
 
 async function ensureSchema() {
   for (const sql of STATEMENTS) {
     await db.query(sql);
   }
-  console.log('[schema] ensured: address pin columns, customer_notifications, support_chat_messages.is_read');
+  console.log('[schema] ensured: address pin columns, customer_notifications, support_chat_messages.is_read, rider_locations');
 }
 
 module.exports = ensureSchema;

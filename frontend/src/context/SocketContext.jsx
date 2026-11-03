@@ -205,6 +205,7 @@ export function SocketProvider({ children }) {
       socket.on('payment:pending', capture('payment:pending'));
       socket.on('payment:verified', capture('payment:verified'));
       socket.on('payment:rejected', capture('payment:rejected'));
+      socket.on('rider:location', capture('rider:location'));
 
       return socket;
     })();

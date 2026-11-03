@@ -35,9 +35,13 @@ exports.getCurrentDelivery = async (req, res) => {
           o.total_amount,
           o.special_request,
           o.created_at        AS order_placed_at,
+          o.delivery_latitude,
+          o.delivery_longitude,
           c.first_name,
           c.last_name,
           c.mobile_number     AS customer_mobile,
+          c.latitude          AS customer_latitude,
+          c.longitude         AS customer_longitude,
           COALESCE(o.delivery_address, c.address) AS delivery_address
        FROM deliveries d
        JOIN orders     o ON o.id = d.order_id
@@ -64,6 +68,16 @@ exports.getCurrentDelivery = async (req, res) => {
       [row.order_id]
     );
 
+    // Resolve destination coordinates:
+    // Prefer the order's pinned delivery coords; fall back to the customer's
+    // saved home coordinates. Both can be null for older orders.
+    const destLat = row.delivery_latitude != null
+      ? parseFloat(row.delivery_latitude)
+      : (row.customer_latitude != null ? parseFloat(row.customer_latitude) : null);
+    const destLng = row.delivery_longitude != null
+      ? parseFloat(row.delivery_longitude)
+      : (row.customer_longitude != null ? parseFloat(row.customer_longitude) : null);
+
     // Flatten to the shape ActiveDelivery.jsx reads
     return res.status(200).json({
       delivery: {
@@ -77,6 +91,9 @@ exports.getCurrentDelivery = async (req, res) => {
         delivery_address: row.delivery_address ?? '—',
         total_amount:     parseFloat(row.total_amount),
         special_request:  row.special_request ?? null,
+        // Navigation coordinates
+        destination_latitude:  destLat,
+        destination_longitude: destLng,
         items: itemsRes.rows.map((i) => ({
           name:         i.name,
           variant_name: i.variant_name ?? null,
@@ -243,9 +260,13 @@ exports.updateDeliveryStatus = async (req, res) => {
             o.total_amount,
             o.special_request,
             o.created_at    AS order_placed_at,
+            o.delivery_latitude,
+            o.delivery_longitude,
             c.first_name,
             c.last_name,
             c.mobile_number AS customer_mobile,
+            c.latitude      AS customer_latitude,
+            c.longitude     AS customer_longitude,
             COALESCE(o.delivery_address, c.address) AS delivery_address
            FROM deliveries d
            JOIN orders     o ON o.id = d.order_id
@@ -263,6 +284,14 @@ exports.updateDeliveryStatus = async (req, res) => {
             WHERE oi.order_id = $1`,
           [r.order_id]
         );
+
+        const dLat = r.delivery_latitude != null
+          ? parseFloat(r.delivery_latitude)
+          : (r.customer_latitude != null ? parseFloat(r.customer_latitude) : null);
+        const dLng = r.delivery_longitude != null
+          ? parseFloat(r.delivery_longitude)
+          : (r.customer_longitude != null ? parseFloat(r.customer_longitude) : null);
+
         updatedDelivery = {
           id:               r.id,
           order_id:         r.order_id,
@@ -274,6 +303,8 @@ exports.updateDeliveryStatus = async (req, res) => {
           delivery_address: r.delivery_address ?? '—',
           total_amount:     parseFloat(r.total_amount),
           special_request:  r.special_request ?? null,
+          destination_latitude:  dLat,
+          destination_longitude: dLng,
           items: itemsRes.rows.map((i) => ({
             name:         i.name,
             variant_name: i.variant_name ?? null,
@@ -489,6 +520,110 @@ exports.updateProfile = async (req, res) => {
       return res.status(409).json({ message: 'That mobile number is already in use.' });
     }
     console.error('[rider.updateProfile]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/rider/location
+//
+// Accepts the rider's current GPS fix and upserts it into rider_locations.
+// Also broadcasts via Socket.io so the admin dashboard and customer tracking
+// can update in real time without polling.
+//
+// payload: { latitude, longitude, accuracy? }
+// ─────────────────────────────────────────────────────────────────────────────
+const { emitRiderLocation } = require('../../sockets');
+
+exports.updateLocation = async (req, res) => {
+  try {
+    const riderId  = req.user.sub;
+    const { latitude, longitude, accuracy } = req.body;
+
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+
+    if (!Number.isFinite(lat) || lat < -90  || lat > 90 ||
+        !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({ message: 'Invalid latitude or longitude.' });
+    }
+
+    // Only update when the rider has an active delivery
+    const { rows: deliveryRows } = await db.query(
+      `SELECT id, order_id FROM deliveries
+        WHERE rider_id = $1
+          AND status NOT IN ('delivered', 'cancelled')
+        ORDER BY assigned_at DESC LIMIT 1`,
+      [riderId]
+    );
+
+    if (deliveryRows.length === 0) {
+      // No active delivery — silently discard the update
+      return res.status(200).json({ message: 'No active delivery; location not stored.' });
+    }
+
+    const { order_id: orderId } = deliveryRows[0];
+
+    // Upsert: one row per rider, overwrite on conflict
+    await db.query(
+      `INSERT INTO rider_locations (rider_id, latitude, longitude, accuracy, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (rider_id)
+       DO UPDATE SET latitude   = EXCLUDED.latitude,
+                     longitude  = EXCLUDED.longitude,
+                     accuracy   = EXCLUDED.accuracy,
+                     updated_at = NOW()`,
+      [riderId, lat, lng, accuracy != null ? parseFloat(accuracy) : null]
+    );
+
+    // Broadcast to staff/manager and the order's tracking room
+    emitRiderLocation({ riderId, orderId, latitude: lat, longitude: lng, accuracy: accuracy ?? null });
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[rider.updateLocation]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/rider/location/:riderId
+//
+// Returns the last known location for the given rider.
+// Only staff / admin / rider themselves may call this.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.getRiderLocation = async (req, res) => {
+  try {
+    const requesterId = req.user.sub;
+    const riderIdParam = parseInt(req.params.riderId, 10);
+
+    // Riders may only read their own location
+    if (req.user.type === 'rider' && requesterId !== riderIdParam) {
+      return res.status(403).json({ message: "You don't have permission to access this." });
+    }
+
+    const { rows } = await db.query(
+      `SELECT rider_id, latitude, longitude, accuracy, updated_at
+         FROM rider_locations
+        WHERE rider_id = $1`,
+      [riderIdParam]
+    );
+
+    if (rows.length === 0) {
+      return res.status(200).json({ location: null });
+    }
+
+    const loc = rows[0];
+    return res.status(200).json({
+      location: {
+        rider_id:  loc.rider_id,
+        latitude:  parseFloat(loc.latitude),
+        longitude: parseFloat(loc.longitude),
+        accuracy:  loc.accuracy != null ? parseFloat(loc.accuracy) : null,
+        updated_at: loc.updated_at,
+      },
+    });
+  } catch (err) {
+    console.error('[rider.getRiderLocation]', err);
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 };

@@ -14,7 +14,7 @@
  *   POST   /api/auth/login                   → shared login (staff + rider)
  */
 
-import { get, patch } from './apiClient';
+import { get, patch, post } from './apiClient';
 
 // ── Active Delivery ────────────────────────────────────────────────────────────
 
@@ -106,10 +106,29 @@ export const getRiderProfile = () => get('/api/rider/profile');
  */
 export const updateRiderProfile = (payload) => patch('/api/rider/profile', payload);
 
+// ── Live Location ──────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/rider/location
+ * Sends the rider's current GPS coordinates to the backend.
+ * The backend upserts to rider_locations and broadcasts via Socket.io.
+ *
+ * payload: { latitude, longitude, accuracy? }
+ */
+export const updateRiderLocation = (payload) => post('/api/rider/location', payload);
+
+/**
+ * GET /api/rider/location/:riderId
+ * Returns the last known location for a specific rider.
+ */
+export const getRiderLocation = (riderId) => get(`/api/rider/location/${riderId}`);
+
 export default {
   getCurrentDelivery,
   updateDeliveryStatus,
   getDeliveryHistory,
   getRiderProfile,
   updateRiderProfile,
+  updateRiderLocation,
+  getRiderLocation,
 };

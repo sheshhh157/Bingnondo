@@ -272,6 +272,47 @@ function setIO(io) {
       console.log(`[socket] ${socket.id} joined room: order:${id}`);
     });
 
+    // Rider sends their GPS fix directly over the socket (complement to the
+    // REST POST /api/rider/location endpoint). The server re-broadcasts to
+    // staff/manager and the order's tracking room. Only authenticated riders
+    // may emit this event — anonymous sockets are silently ignored.
+    socket.on('rider:location_update', async ({ latitude, longitude, accuracy } = {}) => {
+      if (!isRider(socket.data.user)) return;
+
+      const riderId = socket.data.user.sub;
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+
+      if (!Number.isFinite(lat) || lat < -90  || lat > 90 ||
+          !Number.isFinite(lng) || lng < -180 || lng > 180) return;
+
+      try {
+        // Upsert location
+        await db.query(
+          `INSERT INTO rider_locations (rider_id, latitude, longitude, accuracy, updated_at)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT (rider_id)
+           DO UPDATE SET latitude   = EXCLUDED.latitude,
+                         longitude  = EXCLUDED.longitude,
+                         accuracy   = EXCLUDED.accuracy,
+                         updated_at = NOW()`,
+          [riderId, lat, lng, accuracy != null ? parseFloat(accuracy) : null]
+        );
+
+        // Find active delivery to populate order_id in broadcast
+        const { rows } = await db.query(
+          `SELECT order_id FROM deliveries
+            WHERE rider_id = $1 AND status NOT IN ('delivered','cancelled')
+            ORDER BY assigned_at DESC LIMIT 1`,
+          [riderId]
+        );
+        const orderId = rows[0]?.order_id ?? null;
+        emitRiderLocation({ riderId, orderId, latitude: lat, longitude: lng, accuracy: accuracy ?? null });
+      } catch (err) {
+        console.error('[socket] rider:location_update error:', err.message);
+      }
+    });
+
     // Leaving the tracking room when the app closes the tracking screen.
     socket.on('leave_order', ({ order_id } = {}) => {
       const id = Number(order_id);
@@ -546,6 +587,24 @@ function _emitSupportChatMessage({ chatId, customerId, messageId, senderType, co
 }
 
 /**
+ * emitRiderLocation
+ * Rider GPS update → broadcast to staff/manager and the order's tracking room.
+ *
+ * Payload: { riderId, orderId, latitude, longitude, accuracy }
+ * Event name: `rider:location`
+ *
+ * Receivers:
+ *   - `staff` / `manager`  — admin delivery tracking panel
+ *   - `order:<orderId>`    — customer live-tracking screen
+ */
+function emitRiderLocation({ riderId, orderId, latitude, longitude, accuracy }) {
+  if (!_io) return;
+  const payload = { rider_id: riderId, order_id: orderId, latitude, longitude, accuracy, timestamp: Date.now() };
+  _io.to('staff').to('manager').emit('rider:location', payload);
+  if (orderId) _io.to(orderRoom(orderId)).emit('rider:location', payload);
+}
+
+/**
  * emitPaymentResubmitted
  * Customer re-uploaded a receipt after rejection → staff notified in real time.
  * Carries the new ref/amount so the cashier's row updates without a page reload.
@@ -578,4 +637,5 @@ module.exports = {
   emitCustomerNotification,
   _emitSupportChatMessage,
   emitPaymentResubmitted,
+  emitRiderLocation,
 };
