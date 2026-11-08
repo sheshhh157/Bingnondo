@@ -106,6 +106,15 @@ export const getRiderProfile = () => get('/api/rider/profile');
  */
 export const updateRiderProfile = (payload) => patch('/api/rider/profile', payload);
 
+// ── Batch ──────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/rider/batch/current
+ * Returns the rider's active batch (waiting or in_progress) with all stops,
+ * timer remaining, and per-stop delivery info including destination coordinates.
+ */
+export const getCurrentBatch = () => get('/api/rider/batch/current');
+
 // ── Live Location ──────────────────────────────────────────────────────────────
 
 /**
@@ -131,4 +140,5 @@ export default {
   updateRiderProfile,
   updateRiderLocation,
   getRiderLocation,
+  getCurrentBatch,
 };

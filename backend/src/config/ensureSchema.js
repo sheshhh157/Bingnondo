@@ -61,13 +61,35 @@ const STATEMENTS = [
 
   `CREATE INDEX IF NOT EXISTS idx_rider_locations_updated
      ON rider_locations (updated_at DESC)`,
+
+  // ── Delivery batching ─────────────────────────────────────────────────────
+  // A batch groups up to 5 delivery orders for a single rider trip.
+  // Timer starts when the first order is added (batch_started_at).
+  // Batch dispatches when: 5 orders collected OR 20-min timer expires.
+  // After dispatch, OSRM computes nearest-first route and sets stop_sequence.
+  `CREATE TABLE IF NOT EXISTS delivery_batches (
+     id              SERIAL PRIMARY KEY,
+     rider_id        INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+     status          VARCHAR(20) NOT NULL DEFAULT 'waiting'
+                       CHECK (status IN ('waiting','in_progress','completed')),
+     batch_started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     dispatched_at   TIMESTAMP,
+     completed_at    TIMESTAMP
+   )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_delivery_batches_rider_status
+     ON delivery_batches (rider_id, status)`,
+
+  // Each delivery row gets a FK to its batch and an ordered stop position.
+  `ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS batch_id       INTEGER REFERENCES delivery_batches(id) ON DELETE SET NULL`,
+  `ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS stop_sequence  SMALLINT`,
 ];
 
 async function ensureSchema() {
   for (const sql of STATEMENTS) {
     await db.query(sql);
   }
-  console.log('[schema] ensured: address pin columns, customer_notifications, support_chat_messages.is_read, rider_locations');
+  console.log('[schema] ensured: address pin columns, customer_notifications, support_chat_messages.is_read, rider_locations, delivery_batches');
 }
 
 module.exports = ensureSchema;

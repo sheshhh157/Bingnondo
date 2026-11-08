@@ -145,7 +145,10 @@ const PORT = process.env.PORT || 5000;
 // Idempotent schema top-ups (address pin columns, customer_notifications,
 // support_chat_messages.is_read). Runs BEFORE the server starts accepting
 // requests so a freshly provisioned database is ready on the first call.
+const { restoreBatchTimers } = require('./src/modules/rider/batch');
+
 ensureSchema()
+  .then(() => restoreBatchTimers())
   .catch((err) => console.error('[schema] ensureSchema failed:', err.message))
   .finally(() => {
     server.listen(PORT, () => {

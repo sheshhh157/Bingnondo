@@ -2,6 +2,7 @@ const db = require('../../config/db');
 const { emitOrderStatus, emitDeliveryUpdate } = require('../../sockets');
 const { canTransition } = require('../orders/status-transitions');
 const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('./assignment');
+const { getRiderActiveBatch, completeBatchStop } = require('./batch');
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 function orderNumber(id) {
@@ -110,6 +111,24 @@ exports.getCurrentDelivery = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/rider/batch/current
+//
+// Returns the rider's active batch (waiting or in_progress) with all stops.
+// Frontend (ActiveDelivery.jsx) uses this as the primary data source.
+// Falls back to single-delivery shape for backwards compatibility.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.getCurrentBatch = async (req, res) => {
+  try {
+    const riderId = req.user.sub;
+    const batch = await getRiderActiveBatch(riderId);
+    return res.status(200).json({ batch: batch || null });
+  } catch (err) {
+    console.error('[rider.getCurrentBatch]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 7.2 — PATCH /api/rider/delivery/:id/status
 //
 // payload: { status: 'out_for_delivery' | 'delivered' }
@@ -211,16 +230,21 @@ exports.updateDeliveryStatus = async (req, res) => {
       // a. Complete the linked order
       await syncOrderStatus('completed');
 
-      // b. Free the rider
-      await client.query(
-        `UPDATE riders
-            SET status = 'available', updated_at = NOW()
-          WHERE id = $1`,
-        [riderId]
-      );
+      // b. Check if entire batch is complete
+      const { batchComplete } = await completeBatchStop(client, deliveryId);
 
-      // c. Hand the oldest waiting delivery to this now-free rider.
-      assigned = await autoAssignPendingDeliveries(client);
+      if (batchComplete) {
+        // All stops delivered — free the rider and pick up new work
+        await client.query(
+          `UPDATE riders
+              SET status = 'available', updated_at = NOW()
+            WHERE id = $1`,
+          [riderId]
+        );
+        // c. Hand the oldest waiting delivery to this now-free rider.
+        assigned = await autoAssignPendingDeliveries(client);
+      }
+      // If batch not complete, rider stays 'on_delivery' for the next stop
     }
 
     await client.query('COMMIT');

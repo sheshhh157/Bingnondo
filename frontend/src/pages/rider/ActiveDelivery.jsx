@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { getCurrentDelivery, updateDeliveryStatus } from '../../services/riderApi';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { getCurrentBatch, getCurrentDelivery, updateDeliveryStatus } from '../../services/riderApi';
 import { useSocketEventContext } from '../../context/SocketContext';
 import { itemLabel } from '../../utils/format';
 import '../../styles/ActiveDelivery.css';
 import '../../styles/DeliveryMap.css';
 
-// Lazy-load DeliveryMap — Leaflet is heavyweight; only load when a delivery is active
 const DeliveryMap = lazy(() => import('./DeliveryMap'));
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
@@ -45,19 +44,45 @@ function IconCheck() {
     </svg>
   );
 }
+function IconClock() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </svg>
+  );
+}
 
-// ── Status badge ───────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 const STATUS_LABEL = {
   assigned:         'Assigned',
   out_for_delivery: 'Out for Delivery',
   delivered:        'Delivered',
 };
+
 function StatusBadge({ status }) {
   return (
     <span className={`ad-badge ad-badge--${status}`} role="status">
       {STATUS_LABEL[status] || status}
     </span>
   );
+}
+
+function formatCurrency(n) {
+  return `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+}
+
+function formatTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+function formatCountdown(ms) {
+  if (ms == null || ms <= 0) return '0:00';
+  const totalSec = Math.floor(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
 }
 
 // ── Confirm modal ──────────────────────────────────────────────────────────────
@@ -67,14 +92,465 @@ function ConfirmModal({ message, onConfirm, onCancel, loading }) {
       <div className="ad-modal">
         <p className="ad-modal__message">{message}</p>
         <div className="ad-modal__actions">
-          <button className="ad-btn ad-btn--ghost" onClick={onCancel} disabled={loading}>
-            Cancel
-          </button>
+          <button className="ad-btn ad-btn--ghost" onClick={onCancel} disabled={loading}>Cancel</button>
           <button className="ad-btn ad-btn--primary" onClick={onConfirm} disabled={loading} aria-busy={loading}>
             {loading ? <span className="ad-spinner" aria-label="Processing" /> : 'Confirm'}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Batch waiting screen ───────────────────────────────────────────────────────
+function BatchWaitingScreen({ batch, onRefresh }) {
+  const [countdown, setCountdown] = useState(batch.timer_remaining_ms ?? 0);
+
+  useEffect(() => {
+    if (!batch.timer_remaining_ms) return;
+    const interval = setInterval(() => {
+      setCountdown((c) => Math.max(0, c - 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [batch.timer_remaining_ms]);
+
+  const stopCount  = batch.stops?.length ?? 0;
+  const maxStops   = 5;
+
+  return (
+    <div className="ad-waiting-screen">
+      <div className="ad-waiting-screen__icon" aria-hidden="true">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+      </div>
+
+      <h2 className="ad-waiting-screen__title">Collecting Orders</h2>
+      <p className="ad-waiting-screen__sub">
+        Waiting for more orders before dispatching your batch.
+        You will depart once {maxStops} orders are ready or the timer runs out.
+      </p>
+
+      {/* Timer ring */}
+      <div className="ad-batch-timer" role="timer" aria-live="polite" aria-label={`Time remaining: ${formatCountdown(countdown)}`}>
+        <div className="ad-batch-timer__ring">
+          <svg viewBox="0 0 44 44" width="88" height="88" aria-hidden="true">
+            <circle cx="22" cy="22" r="18" fill="none" stroke="var(--rl-border)" strokeWidth="3"/>
+            <circle
+              cx="22" cy="22" r="18" fill="none"
+              stroke="var(--rl-primary, #EA580C)" strokeWidth="3"
+              strokeDasharray={`${2 * Math.PI * 18}`}
+              strokeDashoffset={`${2 * Math.PI * 18 * (1 - countdown / (20 * 60 * 1000))}`}
+              strokeLinecap="round"
+              transform="rotate(-90 22 22)"
+              style={{ transition: 'stroke-dashoffset 1s linear' }}
+            />
+          </svg>
+          <span className="ad-batch-timer__label">{formatCountdown(countdown)}</span>
+        </div>
+        <p className="ad-batch-timer__hint">Time until auto-dispatch</p>
+      </div>
+
+      {/* Order slots */}
+      <div className="ad-batch-slots">
+        {Array.from({ length: maxStops }).map((_, i) => {
+          const stop = batch.stops?.[i];
+          return (
+            <div key={i} className={`ad-batch-slot${stop ? ' ad-batch-slot--filled' : ''}`}>
+              {stop ? (
+                <>
+                  <span className="ad-batch-slot__num">{i + 1}</span>
+                  <span className="ad-batch-slot__name">{stop.customer_name}</span>
+                  <span className="ad-batch-slot__order">{stop.order_number}</span>
+                </>
+              ) : (
+                <>
+                  <span className="ad-batch-slot__num ad-batch-slot__num--empty">{i + 1}</span>
+                  <span className="ad-batch-slot__empty">Waiting…</span>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="ad-waiting-screen__count">
+        <strong>{stopCount}</strong> of {maxStops} orders collected
+      </p>
+    </div>
+  );
+}
+
+// ── Slide-to-deliver button ────────────────────────────────────────────────────
+function SlideToDeliver({ onConfirm, loading }) {
+  const trackRef   = useRef(null);
+  const thumbRef   = useRef(null);
+  const dragRef    = useRef({ dragging: false, startX: 0, currentX: 0 });
+  const [pct, setPct]         = useState(0);   // 0–100 progress
+  const [fired, setFired]     = useState(false);
+  const THRESHOLD = 85; // % to trigger
+
+  const getTrackWidth = () =>
+    (trackRef.current?.clientWidth ?? 260) - (thumbRef.current?.clientWidth ?? 52);
+
+  const startDrag = (clientX) => {
+    if (fired || loading) return;
+    dragRef.current = { dragging: true, startX: clientX, currentX: clientX };
+  };
+
+  const moveDrag = (clientX) => {
+    if (!dragRef.current.dragging) return;
+    dragRef.current.currentX = clientX;
+    const dx  = clientX - dragRef.current.startX;
+    const max = getTrackWidth();
+    const p   = Math.max(0, Math.min(100, (dx / max) * 100));
+    setPct(p);
+    if (p >= THRESHOLD) {
+      dragRef.current.dragging = false;
+      setFired(true);
+      setPct(100);
+      onConfirm();
+    }
+  };
+
+  const endDrag = () => {
+    if (!dragRef.current.dragging) return;
+    dragRef.current.dragging = false;
+    if (pct < THRESHOLD) setPct(0); // snap back
+  };
+
+  // Touch handlers
+  const onTouchStart = (e) => startDrag(e.touches[0].clientX);
+  const onTouchMove  = (e) => { e.preventDefault(); moveDrag(e.touches[0].clientX); };
+  const onTouchEnd   = () => endDrag();
+
+  // Mouse handlers (desktop testing)
+  const onMouseDown = (e) => { e.preventDefault(); startDrag(e.clientX); };
+  const onMouseMove = (e) => { if (dragRef.current.dragging) moveDrag(e.clientX); };
+  const onMouseUp   = () => endDrag();
+
+  useEffect(() => {
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup',  onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup',  onMouseUp);
+    };
+  });
+
+  const thumbX = `calc(${pct}% * (1 - 52px / (100%)))`;
+
+  return (
+    <div
+      ref={trackRef}
+      className={`ad-slide-track${fired || loading ? ' ad-slide-track--done' : ''}`}
+      aria-label="Slide to mark as delivered"
+      role="button"
+      tabIndex={0}
+    >
+      {/* Background fill */}
+      <div className="ad-slide-fill" style={{ width: `${pct}%` }} />
+
+      {/* Label */}
+      <span className="ad-slide-label" style={{ opacity: fired || loading ? 0 : 1 - pct / 60 }}>
+        {loading ? 'Marking…' : 'Slide to Mark as Delivered →'}
+      </span>
+
+      {/* Thumb */}
+      <div
+        ref={thumbRef}
+        className="ad-slide-thumb"
+        style={{ transform: `translateX(calc(${pct / 100} * (100cqw - 100%)))` }}
+        onMouseDown={onMouseDown}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        {fired || loading
+          ? <span className="ad-spinner ad-spinner--sm" />
+          : (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          )
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Full-view modal ────────────────────────────────────────────────────────────
+// MAP = buong screen.
+// Floating overlays on top of the map:
+//   TOP BAR   — back button + address + mobile number
+//   BOTTOM    — items summary pill (tap to expand) + action button
+//   ITEMS MODAL — semi-transparent sheet when items pill is tapped
+function StopFullView({ stop, onClose, onStatusClick, actionLoading }) {
+  const [showItems, setShowItems] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  const isDelivered      = stop.delivery_status === 'delivered';
+  const isOutForDelivery = stop.delivery_status === 'out_for_delivery';
+  const itemCount        = stop.items?.length ?? 0;
+
+  return (
+    <div className="ad-fullview-overlay" role="dialog" aria-modal="true" aria-label="Stop details">
+
+      {/* ── MAP — buong screen ── */}
+      <div className="ad-fullview-map-bg">
+        <Suspense fallback={
+          <div className="ad-loading" style={{ height: '100%' }}>
+            <span className="ad-spinner" /><p style={{ fontSize: '0.8rem' }}>Loading map…</p>
+          </div>
+        }>
+          <DeliveryMap
+            delivery={{
+              destination_latitude:  stop.destination_latitude,
+              destination_longitude: stop.destination_longitude,
+            }}
+            isActive={isOutForDelivery}
+            fullView
+          />
+        </Suspense>
+      </div>
+
+      {/* ── TOP BAR — back + address + mobile ── */}
+      <div className="ad-fv-topbar">
+        <button className="ad-fv-topbar__back" onClick={onClose} aria-label="Close full view">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div className="ad-fv-topbar__info">
+          <div className="ad-fv-topbar__name">
+            {stop.customer_name}
+            <span className="ad-fv-topbar__order-num">{stop.order_number}</span>
+          </div>
+          <div className="ad-fv-topbar__address">
+            <IconPin /> {stop.delivery_address}
+          </div>
+          {stop.customer_contact && (
+            <a href={`tel:${stop.customer_contact}`} className="ad-fv-topbar__phone">
+              <IconPhone /> {stop.customer_contact}
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* ── BOTTOM OVERLAY — items pill + action ── */}
+      <div className="ad-fv-bottom">
+        {/* Items summary pill */}
+        <button
+          className="ad-fv-items-pill"
+          onClick={() => setShowItems(true)}
+          aria-label="View order items"
+        >
+          <IconPackage />
+          <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+          <span className="ad-fv-items-pill__dot" />
+          <span className="ad-fv-items-pill__total">{formatCurrency(stop.total_amount)}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+
+        {/* Action */}
+        <div className="ad-fv-action">
+          {isDelivered ? (
+            <div className="ad-delivered-note">
+              <IconCheck /> Delivered at {formatTime(stop.delivered_at)}
+            </div>
+          ) : isOutForDelivery ? (
+            <SlideToDeliver
+              onConfirm={() => onStatusClick(stop.delivery_id, 'delivered')}
+              loading={actionLoading}
+            />
+          ) : (
+            <button
+              className="ad-btn ad-btn--primary ad-btn--full"
+              onClick={() => onStatusClick(stop.delivery_id, 'out_for_delivery')}
+              disabled={actionLoading}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 8 16 12 12 16"/>
+                <line x1="8" y1="12" x2="16" y2="12"/>
+              </svg>
+              Pick Up — Start Delivery
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── ITEMS MODAL — appears on top when pill tapped ── */}
+      {showItems && (
+        <div className="ad-fv-items-modal" role="dialog" aria-label="Order items">
+          <div className="ad-fv-items-modal__card">
+            <div className="ad-fv-items-modal__header">
+              <span className="ad-fv-items-modal__title">
+                <IconPackage /> Order Items
+              </span>
+              <button
+                className="ad-fv-items-modal__close"
+                onClick={() => setShowItems(false)}
+                aria-label="Close items"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            <ul className="ad-items ad-items--fv">
+              {(stop.items || []).map((item, i) => (
+                <li key={i} className="ad-item">
+                  <span className="ad-item__qty">{item.quantity}×</span>
+                  <span className="ad-item__name">{itemLabel(item)}</span>
+                  <span className="ad-item__price">{formatCurrency(item.unit_price * item.quantity)}</span>
+                </li>
+              ))}
+            </ul>
+
+            {stop.special_request && (
+              <div className="ad-special-note" style={{ marginTop: 8 }}>
+                <span className="ad-special-note__label">Note:</span>
+                {stop.special_request}
+              </div>
+            )}
+
+            <div className="ad-total ad-total--fv">
+              <span>Total</span>
+              <span className="ad-total__amount">{formatCurrency(stop.total_amount)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Single stop card ───────────────────────────────────────────────────────────
+function StopCard({ stop, stopNumber, onStatusClick, isCurrent, onOpenFullView }) {
+  const [expanded, setExpanded] = useState(isCurrent);
+  const isDelivered = stop.delivery_status === 'delivered';
+
+  return (
+    <div className={`ad-stop-card${isCurrent ? ' ad-stop-card--active' : ''}${isDelivered ? ' ad-stop-card--done' : ''}`}>
+      {/* Stop header */}
+      <button
+        className="ad-stop-card__header"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <div className="ad-stop-card__header-left">
+          <span className={`ad-stop-num${isCurrent ? ' ad-stop-num--active' : ''}${isDelivered ? ' ad-stop-num--done' : ''}`}>
+            {isDelivered ? <IconCheck /> : stopNumber}
+          </span>
+          <div>
+            <div className="ad-stop-card__customer">{stop.customer_name}</div>
+            <div className="ad-stop-card__order-num">{stop.order_number}</div>
+          </div>
+        </div>
+        <div className="ad-stop-card__header-right">
+          <StatusBadge status={stop.delivery_status} />
+          <svg
+            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 200ms' }}
+            aria-hidden="true"
+          >
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="ad-stop-card__body">
+          {/* Contact & address */}
+          <div className="ad-info-row ad-info-row--address">
+            <span className="ad-info-row__icon"><IconPin /></span>
+            <span className="ad-info-row__value">{stop.delivery_address}</span>
+          </div>
+          {stop.customer_contact && (
+            <div className="ad-info-row">
+              <span className="ad-info-row__icon"><IconPhone /></span>
+              <a href={`tel:${stop.customer_contact}`} className="ad-info-row__link">
+                {stop.customer_contact}
+              </a>
+            </div>
+          )}
+
+          {/* Items summary */}
+          <div className="ad-stop-card__items-label">
+            <IconPackage /> Order Items
+          </div>
+          <ul className="ad-items">
+            {(stop.items || []).map((item, i) => (
+              <li key={i} className="ad-item">
+                <span className="ad-item__qty">{item.quantity}×</span>
+                <span className="ad-item__name">{itemLabel(item)}</span>
+                <span className="ad-item__price">{formatCurrency(item.unit_price * item.quantity)}</span>
+              </li>
+            ))}
+          </ul>
+          {stop.special_request && (
+            <div className="ad-special-note">
+              <span className="ad-special-note__label">Note:</span>
+              {stop.special_request}
+            </div>
+          )}
+          <div className="ad-total">
+            <span>Total</span>
+            <span className="ad-total__amount">{formatCurrency(stop.total_amount)}</span>
+          </div>
+
+          {/* Actions */}
+          {isCurrent && !isDelivered && (
+            <div className="ad-card__actions" style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {stop.delivery_status === 'assigned' && (
+                <button
+                  className="ad-btn ad-btn--primary ad-btn--full"
+                  onClick={() => onStatusClick(stop.delivery_id, 'out_for_delivery')}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 8 16 12 12 16"/>
+                    <line x1="8" y1="12" x2="16" y2="12"/>
+                  </svg>
+                  Pick Up — Start Delivery
+                </button>
+              )}
+
+              {/* Full View button — always shown for current non-delivered stop */}
+              <button
+                className="ad-btn ad-btn--outline ad-btn--full"
+                onClick={() => onOpenFullView(stop)}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                </svg>
+                Full View
+              </button>
+            </div>
+          )}
+
+          {isDelivered && (
+            <div className="ad-delivered-note">
+              <IconCheck /> Delivered at {formatTime(stop.delivered_at)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -92,91 +568,111 @@ function NoDelivery() {
         </svg>
       </div>
       <h2 className="ad-empty__title">No active delivery</h2>
-      <p className="ad-empty__sub">
-        You have no delivery assigned right now. Check back when staff assigns one.
-      </p>
+      <p className="ad-empty__sub">You have no delivery assigned right now. Check back when staff assigns one.</p>
     </div>
   );
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ActiveDelivery() {
-  const [delivery, setDelivery]   = useState(null);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState('');
-  const [confirm, setConfirm]     = useState(null);  // { status, message }
-  const [actionLoading, setAL]    = useState(false);
-  const [successMsg, setSuccess]  = useState('');
-  const [initialLoad, setInitial] = useState(true);
+  const [batch,         setBatch]       = useState(null);
+  const [loading,       setLoading]     = useState(true);
+  const [error,         setError]       = useState('');
+  const [confirm,       setConfirm]     = useState(null);
+  const [actionLoad,    setActionLoad]  = useState(false);
+  const [successMsg,    setSuccess]     = useState('');
+  const [initialLoad,   setInitial]     = useState(true);
+  const [fullViewStop,  setFullView]    = useState(null); // stop object shown in full-view
   const { subscribe } = useSocketEventContext();
 
-  const fetchDelivery = useCallback(async () => {
+  const fetchBatch = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await getCurrentDelivery();
-      setDelivery(res.delivery || null);
+      const res = await getCurrentBatch();
+      setBatch(res.batch || null);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load delivery. Please try again.');
+      // Fallback: try single-delivery endpoint for backwards compat
+      try {
+        const res2 = await getCurrentDelivery();
+        if (res2.delivery) {
+          // Wrap in fake batch shape
+          setBatch({
+            batch_id: null,
+            status: 'in_progress',
+            timer_remaining_ms: null,
+            stops: [{
+              ...res2.delivery,
+              delivery_id:     res2.delivery.id,
+              delivery_status: res2.delivery.status,
+              stop_sequence:   1,
+            }],
+          });
+        } else {
+          setBatch(null);
+        }
+      } catch {
+        setError('Failed to load delivery. Please try again.');
+      }
     } finally {
       setInitial(false);
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchDelivery(); }, [fetchDelivery]);
+  useEffect(() => { fetchBatch(); }, [fetchBatch]);
 
-  // Live updates: the server pushes into this rider's private room. A new
-  // assignment (`delivery:new`) or any status change (`delivery:update`) just
-  // re-fetches, so the card appears/disappears without a manual refresh.
+  // Socket: re-fetch on delivery:new, delivery:update, batch:dispatched
   useEffect(() => {
     return subscribe((name) => {
-      if (name === 'delivery:new' || name === 'delivery:update') fetchDelivery();
+      if (['delivery:new', 'delivery:update', 'batch:dispatched'].includes(name)) {
+        fetchBatch();
+      }
     });
-  }, [subscribe, fetchDelivery]);
+  }, [subscribe, fetchBatch]);
 
-  const handleStatusClick = (nextStatus) => {
+  // Called from both StopCard (needs confirm modal) and StopFullView
+  // (slide-to-deliver bypasses the modal — it IS the confirmation gesture)
+  const handleStatusClick = (deliveryId, nextStatus, skipConfirm = false) => {
+    if (skipConfirm || nextStatus === 'delivered') {
+      // Delivered action: either via slide (skipConfirm=true) or direct call from fullview
+      // The slide button itself is the confirm gesture — no modal needed
+      executeStatusChange(deliveryId, nextStatus);
+      return;
+    }
     const messages = {
-      out_for_delivery: 'Mark this order as Out for Delivery? The customer will be notified.',
-      delivered:        'Mark this order as Delivered? This will complete the order.',
+      out_for_delivery: 'Mark this stop as Out for Delivery?',
     };
-    setConfirm({ status: nextStatus, message: messages[nextStatus] });
+    setConfirm({ deliveryId, status: nextStatus, message: messages[nextStatus] });
   };
 
-  const handleConfirm = async () => {
-    if (!confirm || !delivery) return;
-    setAL(true);
+  const executeStatusChange = async (deliveryId, status) => {
+    setActionLoad(true);
     try {
-      const res = await updateDeliveryStatus(delivery.id, confirm.status);
-      setDelivery(res.delivery || { ...delivery, status: confirm.status });
+      await updateDeliveryStatus(deliveryId, status);
       setSuccess(
-        confirm.status === 'delivered'
-          ? 'Order marked as delivered. Great job!'
-          : 'Status updated — customer has been notified.'
+        status === 'delivered'
+          ? 'Stop marked as delivered!'
+          : 'On the way — customer has been notified.'
       );
-      if (confirm.status === 'delivered') {
-        setTimeout(() => setDelivery(null), 2800);
-      }
+      // If full view is open, close it after delivered
+      if (status === 'delivered') setFullView(null);
+      await fetchBatch();
     } catch (err) {
       setError(err.response?.data?.message || 'Action failed. Please try again.');
     } finally {
-      setAL(false);
-      setConfirm(null);
+      setActionLoad(false);
       setTimeout(() => setSuccess(''), 3500);
     }
   };
 
-  const formatCurrency = (n) =>
-    `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
-
-  const formatTime = (iso) => {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const handleConfirm = async () => {
+    if (!confirm) return;
+    await executeStatusChange(confirm.deliveryId, confirm.status);
+    setConfirm(null);
   };
 
-  // Only the very first load blanks the screen; manual/auto refreshes keep the
-  // current card visible and dim it instead, so the page never jumps.
-  const firstLoad = loading && initialLoad;
+  const firstLoad  = loading && initialLoad;
   const refreshing = loading && !initialLoad;
 
   if (firstLoad) {
@@ -188,12 +684,25 @@ export default function ActiveDelivery() {
     );
   }
 
+  // Find current active stop (first non-delivered stop, ordered by stop_sequence)
+  const stops = batch?.stops ?? [];
+  const activeStop = stops.find((s) =>
+    s.delivery_status !== 'delivered' && s.delivery_status !== 'cancelled'
+  );
+  const deliveredCount = stops.filter((s) => s.delivery_status === 'delivered').length;
+
   return (
     <div className="ad-root">
       <header className="ad-header">
         <div>
           <h1 className="ad-header__title">Active Delivery</h1>
-          <p className="ad-header__sub">Your current assigned order</p>
+          <p className="ad-header__sub">
+            {batch?.status === 'waiting'
+              ? 'Collecting orders for your batch…'
+              : batch
+                ? `Stop ${deliveredCount + 1} of ${stops.length}`
+                : 'Your current assigned order'}
+          </p>
         </div>
       </header>
 
@@ -208,135 +717,59 @@ export default function ActiveDelivery() {
 
       {successMsg && (
         <div className="ad-alert ad-alert--success" role="status" aria-live="polite">
-          <IconCheck />
-          {successMsg}
+          <IconCheck />{successMsg}
         </div>
       )}
 
-      {!delivery ? (
+      {!batch ? (
         <NoDelivery />
+      ) : batch.status === 'waiting' ? (
+        <div className={`ad-card${refreshing ? ' ad-card--busy' : ''}`}>
+          <BatchWaitingScreen batch={batch} onRefresh={fetchBatch} />
+        </div>
       ) : (
         <div className={`ad-card${refreshing ? ' ad-card--busy' : ''}`} aria-busy={refreshing}>
-          {/* ── Header row ── */}
-          <div className="ad-card__head">
-            <div className="ad-card__order-info">
-              <span className="ad-card__order-num">{delivery.order_number}</span>
-              <span className="ad-card__assigned-at">
-                Assigned {formatTime(delivery.assigned_at)}
-              </span>
-            </div>
-            <StatusBadge status={delivery.status} />
-          </div>
-
-          {/* ── Customer info ── */}
-          <div className="ad-card__section">
-            <h2 className="ad-card__section-label">Customer</h2>
-            <div className="ad-card__info-grid">
-              <div className="ad-info-row">
-                <span className="ad-info-row__icon" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                  </svg>
-                </span>
-                <span className="ad-info-row__value">{delivery.customer_name}</span>
+          {/* Batch progress header */}
+          {stops.length > 1 && (
+            <div className="ad-batch-progress">
+              <div className="ad-batch-progress__label">
+                <IconClock />
+                Batch Progress — {deliveredCount}/{stops.length} delivered
               </div>
-              {delivery.customer_contact && (
-                <div className="ad-info-row">
-                  <span className="ad-info-row__icon" aria-hidden="true"><IconPhone /></span>
-                  <a
-                    href={`tel:${delivery.customer_contact}`}
-                    className="ad-info-row__link"
+              <div className="ad-batch-progress__bar">
+                <div
+                  className="ad-batch-progress__fill"
+                  style={{ width: `${(deliveredCount / stops.length) * 100}%` }}
+                />
+              </div>
+              <div className="ad-batch-progress__stops">
+                {stops.map((s, i) => (
+                  <div
+                    key={s.delivery_id}
+                    className={`ad-batch-progress__dot${s.delivery_status === 'delivered' ? ' ad-batch-progress__dot--done' : ''}${s === activeStop ? ' ad-batch-progress__dot--active' : ''}`}
+                    title={`Stop ${i + 1}: ${s.customer_name}`}
                   >
-                    {delivery.customer_contact}
-                  </a>
-                </div>
-              )}
-              <div className="ad-info-row ad-info-row--address">
-                <span className="ad-info-row__icon" aria-hidden="true"><IconPin /></span>
-                <span className="ad-info-row__value">{delivery.delivery_address}</span>
+                    {s.delivery_status === 'delivered' ? '✓' : i + 1}
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
+          )}
 
-          {/* ── Navigation Map ── */}
-          <div className="ad-card__section">
-            <Suspense fallback={
-              <div className="ad-loading" style={{ minHeight: 120 }}>
-                <span className="ad-spinner" aria-label="Loading map" />
-                <p style={{ fontSize: '0.8rem' }}>Loading map…</p>
-              </div>
-            }>
-              <DeliveryMap
-                delivery={delivery}
-                isActive={delivery.status === 'out_for_delivery'}
+          {/* Stop cards */}
+          <div className="ad-stops-list">
+            {stops.map((stop, i) => (
+              <StopCard
+                key={stop.delivery_id}
+                stop={stop}
+                stopNumber={i + 1}
+                totalStops={stops.length}
+                isCurrent={stop === activeStop}
+                onStatusClick={handleStatusClick}
+                onOpenFullView={setFullView}
               />
-            </Suspense>
+            ))}
           </div>
-
-          {/* ── Items ── */}
-          <div className="ad-card__section">
-            <h2 className="ad-card__section-label">
-              <IconPackage />
-              Order Items
-            </h2>
-            <ul className="ad-items" aria-label="Order items">
-              {(delivery.items || []).map((item, i) => (
-                <li key={i} className="ad-item">
-                  <span className="ad-item__qty">{item.quantity}×</span>
-                  <span className="ad-item__name">{itemLabel(item)}</span>
-                  <span className="ad-item__price">{formatCurrency(item.unit_price * item.quantity)}</span>
-                </li>
-              ))}
-            </ul>
-
-            {delivery.special_request && (
-              <div className="ad-special-note">
-                <span className="ad-special-note__label">Note:</span>
-                {delivery.special_request}
-              </div>
-            )}
-
-            <div className="ad-total">
-              <span>Total</span>
-              <span className="ad-total__amount">{formatCurrency(delivery.total_amount)}</span>
-            </div>
-          </div>
-
-          {/* ── Action buttons ── */}
-          {delivery.status === 'assigned' && (
-            <div className="ad-card__actions">
-              <button
-                className="ad-btn ad-btn--primary ad-btn--full"
-                onClick={() => handleStatusClick('out_for_delivery')}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 8 16 12 12 16"/><line x1="8" y1="12" x2="16" y2="12"/>
-                </svg>
-                Pick Up — Start Delivery
-              </button>
-            </div>
-          )}
-
-          {delivery.status === 'out_for_delivery' && (
-            <div className="ad-card__actions">
-              <button
-                className="ad-btn ad-btn--success ad-btn--full"
-                onClick={() => handleStatusClick('delivered')}
-              >
-                <IconCheck />
-                Mark as Delivered
-              </button>
-            </div>
-          )}
-
-          {delivery.status === 'delivered' && (
-            <div className="ad-card__actions">
-              <div className="ad-delivered-note">
-                <IconCheck />
-                Order successfully delivered.
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -345,7 +778,18 @@ export default function ActiveDelivery() {
           message={confirm.message}
           onConfirm={handleConfirm}
           onCancel={() => setConfirm(null)}
-          loading={actionLoading}
+          loading={actionLoad}
+        />
+      )}
+
+      {/* Full-view modal — both pick-up and delivered execute directly,
+          no confirm modal needed since opening Full View is already intentional */}
+      {fullViewStop && (
+        <StopFullView
+          stop={fullViewStop}
+          onClose={() => setFullView(null)}
+          onStatusClick={(id, status) => executeStatusChange(id, status)}
+          actionLoading={actionLoad}
         />
       )}
     </div>

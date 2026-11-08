@@ -587,6 +587,19 @@ function _emitSupportChatMessage({ chatId, customerId, messageId, senderType, co
 }
 
 /**
+ * emitBatchDispatched
+ * Batch timer or size limit fired → notify rider to start their trip.
+ *
+ * Event: `batch:dispatched`
+ * Receiver: `rider:<riderId>`
+ */
+function emitBatchDispatched({ riderId, batchId }) {
+  if (!_io) return;
+  _io.to(`rider:${riderId}`).emit('batch:dispatched', { rider_id: riderId, batch_id: batchId });
+  _io.to('staff').to('manager').emit('batch:dispatched', { rider_id: riderId, batch_id: batchId });
+}
+
+/**
  * emitRiderLocation
  * Rider GPS update → broadcast to staff/manager and the order's tracking room.
  *
@@ -638,4 +651,5 @@ module.exports = {
   _emitSupportChatMessage,
   emitPaymentResubmitted,
   emitRiderLocation,
+  emitBatchDispatched,
 };

@@ -56,9 +56,13 @@ const destIcon = L.divIcon({
   iconAnchor: [14, 36],
 });
 
-// ── OSRM config ───────────────────────────────────────────────────────────────
-// Override with VITE_OSRM_URL in .env for a self-hosted instance.
-const OSRM_BASE = import.meta.env.VITE_OSRM_URL || 'https://router.project-osrm.org';
+// ── Routing config ────────────────────────────────────────────────────────────
+// Uses OpenRouteService for accurate Philippine road routing.
+// Set VITE_ORS_API_KEY in .env (free key at openrouteservice.org).
+// Falls back to OSRM public demo when key is not set.
+const ORS_API_KEY = import.meta.env.VITE_ORS_API_KEY || '';
+const ORS_BASE    = 'https://api.openrouteservice.org';
+const OSRM_BASE   = import.meta.env.VITE_OSRM_URL || 'https://router.project-osrm.org';
 
 // Minimum distance (m) the rider must deviate before a route re-fetch is forced
 const REROUTE_THRESHOLD_M = 150;
@@ -108,6 +112,26 @@ function formatDuration(seconds) {
 function formatDistance(meters) {
   if (!Number.isFinite(meters)) return '—';
   return `${(meters / 1000).toFixed(1)} km`;
+}
+
+/**
+ * Parse ORS instruction text → modifier string compatible with maneuverText()
+ * ORS returns plain English instructions like "Turn right onto Rizal St"
+ */
+function orsModifier(instruction = '') {
+  const t = instruction.toLowerCase();
+  if (t.includes('turn left'))         return 'left';
+  if (t.includes('turn right'))        return 'right';
+  if (t.includes('slight left'))       return 'slight left';
+  if (t.includes('slight right'))      return 'slight right';
+  if (t.includes('sharp left'))        return 'sharp left';
+  if (t.includes('sharp right'))       return 'sharp right';
+  if (t.includes('straight'))          return 'straight';
+  if (t.includes('roundabout'))        return 'roundabout';
+  if (t.includes('u-turn'))            return 'uturn';
+  if (t.includes('arrive'))            return 'arrive';
+  if (t.includes('depart') || t.includes('head')) return 'depart';
+  return 'straight';
 }
 
 /** Map OSRM maneuver type+modifier → readable instruction */
@@ -253,6 +277,7 @@ export default function DeliveryMap({ delivery, isActive }) {
   const [followMode, setFollowMode] = useState(true);   // auto-follow rider on map
   const [firstFix,   setFirstFix]   = useState(false);  // triggers initial zoom-in once
 
+
   // ── Refs (stable across renders) ──────────────────────────────────────────
   const watchIdRef       = useRef(null);
   const lastSentRef      = useRef(null);   // { lat, lng, ts }
@@ -260,30 +285,86 @@ export default function DeliveryMap({ delivery, isActive }) {
   const routeFetchingRef = useRef(false);
   const hasHadFirstFix   = useRef(false);  // ensure firstFix fires only once
 
-  // ── Route fetching via OSRM ───────────────────────────────────────────────
+
+  // ── Route fetching — ORS first, OSRM fallback ─────────────────────────────
   const fetchRoute = useCallback(async (fromLat, fromLng, toLat, toLng) => {
     if (routeFetchingRef.current) return;
     routeFetchingRef.current = true;
     setRouteErr('');
+
     try {
-      const url = `${OSRM_BASE}/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&steps=true&annotations=false`;
-      const res  = await fetch(url);
-      if (!res.ok) throw new Error(`OSRM ${res.status}`);
-      const data = await res.json();
-      if (data.code !== 'Ok' || !data.routes?.length) throw new Error('No route found');
+      let routeData = null;
 
-      const r = data.routes[0];
-      // Decode GeoJSON polyline [[lng,lat],...] → Leaflet [[lat,lng],...]
-      const polyline = r.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-      const steps    = r.legs?.[0]?.steps ?? [];
+      // ── Try OpenRouteService first ──────────────────────────────────────
+      if (ORS_API_KEY) {
+        try {
+          const orsRes = await fetch(
+            `${ORS_BASE}/v2/directions/driving-car?` +
+            `start=${fromLng},${fromLat}&end=${toLng},${toLat}`,
+            {
+              headers: {
+                'Authorization': ORS_API_KEY,
+                'Accept':        'application/json, application/geo+json',
+              },
+              signal: AbortSignal.timeout(8000),
+            }
+          );
 
-      setRoute({ polyline, distance: r.distance, duration: r.duration, steps });
-      lastRouteRef.current = polyline;
+          if (!orsRes.ok) throw new Error(`ORS HTTP ${orsRes.status}`);
+          const orsData = await orsRes.json();
+          const feature = orsData.features?.[0];
+          if (!feature) throw new Error('ORS returned no route');
+
+          const props    = feature.properties.summary;
+          const coords   = feature.geometry.coordinates; // [lng, lat]
+          const polyline = coords.map(([lng, lat]) => [lat, lng]);
+
+          // ORS steps are inside segments
+          const steps = feature.properties.segments?.[0]?.steps ?? [];
+          const orsSteps = steps.map((s) => ({
+            maneuver: { type: s.type === 0 ? 'depart' : s.type === 10 ? 'arrive' : 'turn',
+                        modifier: orsModifier(s.instruction) },
+            name:     s.name || '',
+            distance: s.distance,
+            duration: s.duration,
+          }));
+
+          routeData = {
+            polyline,
+            distance: props.distance,
+            duration: props.duration,
+            steps:    orsSteps,
+          };
+        } catch (orsErr) {
+          console.warn('[DeliveryMap] ORS failed, trying OSRM:', orsErr.message);
+        }
+      }
+
+      // ── Fallback: OSRM ─────────────────────────────────────────────────
+      if (!routeData) {
+        const url  = `${OSRM_BASE}/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&steps=true`;
+        const res  = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.code !== 'Ok' || !data.routes?.length) throw new Error('No route found');
+
+        const r        = data.routes[0];
+        const polyline = r.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+        routeData = {
+          polyline,
+          distance: r.distance,
+          duration: r.duration,
+          steps:    r.legs?.[0]?.steps ?? [],
+        };
+      }
+
+      setRoute(routeData);
+      lastRouteRef.current = routeData.polyline;
       setFitMap(true);
+
     } catch (err) {
-      console.warn('[DeliveryMap] OSRM route error:', err.message);
+      console.warn('[DeliveryMap] Routing error:', err.message);
       setRouteErr('Could not calculate route. Showing straight line.');
-      // Fallback: straight line
       if (hasDestination) {
         const polyline = [[fromLat, fromLng], [toLat, toLng]];
         setRoute({ polyline, distance: null, duration: null, steps: [] });
@@ -475,7 +556,12 @@ export default function DeliveryMap({ delivery, isActive }) {
           {route && (
             <Polyline
               positions={route.polyline}
-              pathOptions={{ color: '#1D4ED8', weight: 4, opacity: 0.85, dashArray: null }}
+              pathOptions={{
+                color:     '#1D4ED8',
+                weight:    4,
+                opacity:   0.88,
+                dashArray: null,
+              }}
             />
           )}
 

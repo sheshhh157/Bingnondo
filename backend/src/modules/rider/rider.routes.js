@@ -18,6 +18,9 @@ router.get  ('/deliveries',          ctrl.getDeliveryHistory);   // GET  /api/ri
 router.get  ('/profile',             ctrl.getProfile);           // GET  /api/rider/profile
 router.patch('/profile',             ctrl.updateProfile);        // PATCH /api/rider/profile
 
+// ── Batch ──────────────────────────────────────────────────────────────────────
+router.get  ('/batch/current',       ctrl.getCurrentBatch);      // GET  /api/rider/batch/current
+
 // ── Live Location ──────────────────────────────────────────────────────────────
 router.post ('/location',            ctrl.updateLocation);       // POST /api/rider/location
 router.get  ('/location/:riderId',   ctrl.getRiderLocation);     // GET  /api/rider/location/:riderId
