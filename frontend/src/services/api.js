@@ -374,6 +374,34 @@ updateVariantGroup: (id, name, maxOptions) =>
       body: JSON.stringify({ status, reason }),
     }),
 
+  listEsp32Devices: () => apiRequest('/admin/system-settings/esp32-devices'),
+
+  saveEsp32Wifi: (code, data) =>
+    apiRequest(`/admin/system-settings/esp32-devices/${encodeURIComponent(code)}/wifi`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  resendEsp32Wifi: (code) =>
+    apiRequest(`/admin/system-settings/esp32-devices/${encodeURIComponent(code)}/wifi/resend`, {
+      method: 'PUT',
+    }),
+
+  esp32ConfigHistory: (code) =>
+    apiRequest(`/admin/system-settings/esp32-devices/${encodeURIComponent(code)}/history`),
+
+  testEsp32Connection: (code, server_url) =>
+    apiRequest(`/admin/system-settings/esp32-devices/${encodeURIComponent(code)}/test-connection`, {
+      method: 'POST',
+      body: JSON.stringify({ server_url }),
+    }),
+
+  bulkSaveEsp32Wifi: (data) =>
+    apiRequest('/admin/system-settings/esp32-devices/wifi/bulk', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
 };
 
 // ─── RIDER MANAGEMENT API (§6.5 — Admin) ─────────────────────────────────────

@@ -1,4 +1,5 @@
 const db = require('../../config/db');
+const crypto = require('../../config/esp32-config-crypto');
 const { emitMenuUpdate } = require('../../sockets');
 const {
   NOTIFICATION_CATEGORIES,
@@ -797,4 +798,328 @@ exports.saveNotificationSettings = async (req, res) => {
   } finally {
     client.release();
   }
+};
+
+exports.listEsp32Devices = async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT d.device_code,
+              d.location_label,
+              d.status,
+              d.last_ping_at,
+              c.ssid,
+              c.server_url,
+              c.version,
+              c.applied_version,
+              c.applied_at,
+              c.last_error
+       FROM esp32_devices d
+       LEFT JOIN esp32_wifi_configs c ON c.device_id = d.id
+       ORDER BY d.id`
+    );
+    return res.json({ data: rows });
+  } catch (err) {
+    console.error('[listEsp32Devices]', err);
+    return res.status(500).json({ message: 'Something went wrong.' });
+  }
+};
+
+exports.saveEsp32Wifi = async (req, res) => {
+  const client = await db.getClient();
+  let inTransaction = false;
+  try {
+    const { code } = req.params;
+    const { ssid, password, server_url } = req.body || {};
+
+    if (!ssid || typeof ssid !== 'string' || ssid.length < 1 || ssid.length > 32) {
+      return res.status(400).json({ message: 'SSID must be 1-32 characters.' });
+    }
+    if (password && (typeof password !== 'string' || password.length < 8 || password.length > 64)) {
+      return res.status(400).json({ message: 'Password must be 8-64 characters.' });
+    }
+    if (!server_url || typeof server_url !== 'string' || !/^https?:\/\/.+/i.test(server_url.trim())) {
+      return res.status(400).json({ message: 'Server URL must start with http:// or https://.' });
+    }
+    const serverUrlNorm = server_url.trim().replace(/\/+$/, '');
+
+    const deviceResult = await client.query(
+      'SELECT id FROM esp32_devices WHERE device_code = $1',
+      [code]
+    );
+    if (!deviceResult.rows[0]) {
+      return res.status(404).json({ message: 'Unknown device_code.' });
+    }
+    const deviceId = deviceResult.rows[0].id;
+
+    const cfgResult = await client.query(
+      `SELECT ssid, version, password_ciphertext
+         FROM esp32_wifi_configs
+        WHERE device_id = $1`,
+      [deviceId]
+    );
+
+    let version;
+    let ciphertext;
+    if (cfgResult.rowCount > 0) {
+      const row = cfgResult.rows[0];
+      if (ssid !== row.ssid && !password) {
+        return res.status(400).json({ message: 'Enter the Wi-Fi password when changing the network name.' });
+      }
+      version = row.version + 1;
+      ciphertext = password ? crypto.encryptPassword(password) : row.password_ciphertext;
+    } else {
+      if (!password) {
+        return res.status(400).json({ message: 'Password required for the first Wi-Fi setup.' });
+      }
+      version = 1;
+      ciphertext = crypto.encryptPassword(password);
+    }
+
+    const adminId = req.user.sub;
+
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    await client.query(
+      `INSERT INTO esp32_wifi_configs
+         (device_id, ssid, password_ciphertext, server_url, version, updated_by, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (device_id) DO UPDATE SET
+         ssid = EXCLUDED.ssid,
+         password_ciphertext = EXCLUDED.password_ciphertext,
+         server_url = EXCLUDED.server_url,
+         version = EXCLUDED.version,
+         updated_by = EXCLUDED.updated_by,
+         updated_at = NOW()`,
+      [deviceId, ssid, ciphertext, serverUrlNorm, version, adminId]
+    );
+
+    await writeAuditLog(client, adminId, 'update_esp32_wifi_config', 'esp32_wifi_configs', deviceId, {
+      device_code: code,
+      version,
+      ssid,
+      server_url: serverUrlNorm,
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
+
+    return res.json({ message: 'Wi-Fi config saved.', version });
+  } catch (err) {
+    if (inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+    console.error('[saveEsp32Wifi]', err);
+    return res.status(500).json({ message: 'Something went wrong.' });
+  } finally {
+    client.release();
+  }
+};
+
+// ─── ESP32 Wi-Fi: resend, history, test-connection, bulk ──────────────────────
+
+exports.resendEsp32Wifi = async (req, res) => {
+  const client = await db.getClient();
+  let inTransaction = false;
+  try {
+    const { code } = req.params;
+    const deviceResult = await client.query(
+      'SELECT id FROM esp32_devices WHERE device_code = $1',
+      [code]
+    );
+    if (!deviceResult.rows[0]) {
+      return res.status(404).json({ message: 'Unknown device_code.' });
+    }
+    const deviceId = deviceResult.rows[0].id;
+
+    const cfgResult = await client.query(
+      `SELECT ssid, password_ciphertext, server_url, version
+         FROM esp32_wifi_configs
+        WHERE device_id = $1`,
+      [deviceId]
+    );
+    if (cfgResult.rowCount === 0) {
+      return res.status(404).json({ message: 'No Wi-Fi config to resend.' });
+    }
+    const row = cfgResult.rows[0];
+    const version = row.version + 1;
+    const adminId = req.user.sub;
+
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    await client.query(
+      `INSERT INTO esp32_wifi_configs
+         (device_id, ssid, password_ciphertext, server_url, version, updated_by, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (device_id) DO UPDATE SET
+         ssid = EXCLUDED.ssid,
+         password_ciphertext = EXCLUDED.password_ciphertext,
+         server_url = EXCLUDED.server_url,
+         version = EXCLUDED.version,
+         updated_by = EXCLUDED.updated_by,
+         updated_at = NOW()`,
+      [deviceId, row.ssid, row.password_ciphertext, row.server_url, version, adminId]
+    );
+
+    await writeAuditLog(client, adminId, 'update_esp32_wifi_config', 'esp32_wifi_configs', deviceId, {
+      device_code: code,
+      version,
+      action: 'resend',
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
+
+    return res.json({ message: 'Wi-Fi config re-sent.', version });
+  } catch (err) {
+    if (inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+    console.error('[resendEsp32Wifi]', err);
+    return res.status(500).json({ message: 'Something went wrong.' });
+  } finally {
+    client.release();
+  }
+};
+
+exports.esp32ConfigHistory = async (req, res) => {
+  try {
+    const { code } = req.params;
+    const deviceResult = await db.query(
+      'SELECT id FROM esp32_devices WHERE device_code = $1',
+      [code]
+    );
+    if (!deviceResult.rows[0]) {
+      return res.status(404).json({ message: 'Unknown device_code.' });
+    }
+    const deviceId = deviceResult.rows[0].id;
+    const { rows } = await db.query(
+      `SELECT action, details, created_at
+         FROM audit_log
+        WHERE target_type = 'esp32_wifi_configs' AND target_id = $1
+        ORDER BY created_at DESC
+        LIMIT 50`,
+      [deviceId]
+    );
+    return res.json({ data: rows });
+  } catch (err) {
+    console.error('[esp32ConfigHistory]', err);
+    return res.status(500).json({ message: 'Something went wrong.' });
+  }
+};
+
+exports.testEsp32Connection = async (req, res) => {
+  try {
+    const { code } = req.params;
+    const { server_url } = req.body || {};
+    if (!server_url || typeof server_url !== 'string' || !/^https?:\/\/.+/i.test(server_url.trim())) {
+      return res.status(400).json({ message: 'Server URL must start with http:// or https://.' });
+    }
+    const url = server_url.trim().replace(/\/+$/, '') + '/api/esp32/alert?device_code=test-connection';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      return res.json({ reachable: true, status: resp.status, statusText: resp.statusText });
+    } catch (err) {
+      clearTimeout(timeout);
+      return res.json({ reachable: false, error: err.message || 'Connection failed.' });
+    }
+  } catch (err) {
+    console.error('[testEsp32Connection]', err);
+    return res.status(500).json({ message: 'Something went wrong.' });
+  }
+};
+
+exports.bulkSaveEsp32Wifi = async (req, res) => {
+  const { ssid, password, server_url, device_codes } = req.body || {};
+
+  if (!ssid || typeof ssid !== 'string' || ssid.length < 1 || ssid.length > 32) {
+    return res.status(400).json({ message: 'SSID must be 1-32 characters.' });
+  }
+  if (password && (typeof password !== 'string' || password.length < 8 || password.length > 64)) {
+    return res.status(400).json({ message: 'Password must be 8-64 characters.' });
+  }
+  if (!server_url || typeof server_url !== 'string' || !/^https?:\/\/.+/i.test(server_url.trim())) {
+    return res.status(400).json({ message: 'Server URL must start with http:// or https://.' });
+  }
+  const serverUrlNorm = server_url.trim().replace(/\/+$/, '');
+  const adminId = req.user.sub;
+
+  let targetCodes;
+  if (Array.isArray(device_codes) && device_codes.length > 0) {
+    targetCodes = device_codes.filter(String);
+  } else {
+    const { rows } = await db.query(
+      "SELECT device_code FROM esp32_devices WHERE status = 'online'"
+    );
+    targetCodes = rows.map((r) => r.device_code);
+  }
+
+  const results = [];
+  for (const code of targetCodes) {
+    const deviceResult = await db.query(
+      'SELECT id FROM esp32_devices WHERE device_code = $1',
+      [code]
+    );
+    if (!deviceResult.rows[0]) {
+      results.push({ device_code: code, status: 'skipped', reason: 'unknown device' });
+      continue;
+    }
+    const deviceId = deviceResult.rows[0].id;
+
+    const cfgResult = await db.query(
+      `SELECT ssid, version, password_ciphertext FROM esp32_wifi_configs WHERE device_id = $1`,
+      [deviceId]
+    );
+
+    let version;
+    let cipher;
+    if (cfgResult.rowCount > 0) {
+      const row = cfgResult.rows[0];
+      version = row.version + 1;
+      cipher = password ? crypto.encryptPassword(password) : row.password_ciphertext;
+    } else {
+      if (!password) {
+        results.push({ device_code: code, status: 'skipped', reason: 'password required for first setup' });
+        continue;
+      }
+      version = 1;
+      cipher = crypto.encryptPassword(password);
+    }
+
+    await db.query(
+      `INSERT INTO esp32_wifi_configs
+         (device_id, ssid, password_ciphertext, server_url, version, updated_by, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (device_id) DO UPDATE SET
+         ssid = EXCLUDED.ssid,
+         password_ciphertext = EXCLUDED.password_ciphertext,
+         server_url = EXCLUDED.server_url,
+         version = EXCLUDED.version,
+         updated_by = EXCLUDED.updated_by,
+         updated_at = NOW()`,
+      [deviceId, ssid, cipher, serverUrlNorm, version, adminId]
+    );
+
+    await db.query(
+      `INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [adminId, 'bulk_update_esp32_wifi_config', 'esp32_wifi_configs', deviceId, JSON.stringify({
+        device_code: code,
+        version,
+        ssid,
+        server_url: serverUrlNorm,
+      })]
+    );
+
+    results.push({ device_code: code, status: 'ok', version });
+  }
+
+  return res.json({
+    message: `Processed ${results.length} device(s).`,
+    results,
+  });
 };

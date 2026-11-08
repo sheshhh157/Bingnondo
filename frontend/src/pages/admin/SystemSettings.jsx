@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../../services/api';
-import { Spinner, Btn, Field, TextInput, PageHeader, Modal, ConfirmModal } from './adminShared';
+import { Spinner, Btn, Field, TextInput, PasswordInput, PageHeader, Modal, ConfirmModal, Badge } from './adminShared';
 import { useAdminToast } from './useAdminToast';
 import '../../styles/AdminPage.css';
 
@@ -447,6 +447,93 @@ function NotificationSettings({ categories, onChange }) {
   );
 }
 
+function defaultEsp32ServerUrl() {
+  const configured = import.meta.env.VITE_API_URL;
+  if (configured) return configured.replace(/\/+$/, '');
+  return window.location.origin;
+}
+
+function Esp32WifiModal({ device, onClose, onSaved, toast }) {
+  const [ssid, setSsid] = useState(device?.ssid || '');
+  const [password, setPassword] = useState('');
+  const [serverUrl, setServerUrl] = useState(device?.server_url || defaultEsp32ServerUrl());
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  function close() {
+    if (saving) return;
+    onClose();
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    if (saving) return;
+
+    const nextSsid = ssid.trim();
+    const nextUrl = serverUrl.trim().replace(/\/+$/, '');
+    if (!nextSsid) { setError('Wi-Fi name is required.'); return; }
+    if (!/^https?:\/\/.+/i.test(nextUrl)) {
+      setError('Server URL must start with http:// or https://.');
+      return;
+    }
+    if (!device?.ssid && !password) {
+      setError('Password is required for the first Wi-Fi setup.');
+      return;
+    }
+    if (password && password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (device?.ssid && nextSsid !== device.ssid && !password) {
+      setError('Enter the Wi-Fi password when changing the network name.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      const payload = { ssid: nextSsid, server_url: nextUrl };
+      if (password) payload.password = password;
+      const res = await adminAPI.saveEsp32Wifi(device.device_code, payload);
+      toast.success(res.data?.message || 'Wi-Fi config saved.');
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err?.response?.data?.message || err.message || 'Failed to save Wi-Fi config.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={close} title={`Configure ${device?.device_code || 'ESP32'}`} width={460}>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field label="Wi-Fi name (SSID)" id="esp32-ssid"
+          hint={device?.ssid ? undefined : 'The kitchen network the ESP32 should join.'}>
+          <TextInput id="esp32-ssid" value={ssid} maxLength={32}
+            onChange={e => setSsid(e.target.value)} autoFocus placeholder="Kitchen Wi-Fi" />
+        </Field>
+        <Field label="Wi-Fi password" id="esp32-password"
+          hint={device?.ssid ? 'Leave blank to keep the current password.' : 'Required for the first setup. 8-64 characters.'}>
+          <PasswordInput id="esp32-password" value={password} maxLength={64}
+            onChange={e => setPassword(e.target.value)} autoComplete="new-password" />
+        </Field>
+        <Field label="Server URL" id="esp32-server-url" hint="Example: http://192.168.1.10:5000">
+          <TextInput id="esp32-server-url" value={serverUrl} maxLength={200}
+            onChange={e => setServerUrl(e.target.value)} placeholder="http://192.168.1.10:5000" />
+        </Field>
+        {error && <span className="ap-field-error">{error}</span>}
+        <div className="ap-modal__footer">
+          <Btn variant="ghost" onClick={close} disabled={saving}>Cancel</Btn>
+          <Btn variant="gold" type="submit" loading={saving} disabled={!ssid.trim() || !serverUrl.trim()}>
+            Save Wi-Fi
+          </Btn>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────
 export default function SystemSettings() {
   const { toast } = useAdminToast();
@@ -463,19 +550,27 @@ export default function SystemSettings() {
   const [busyToggleId, setBusyToggleId] = useState(null);
   const [notifCats, setNotifCats]   = useState({});
   const [savingNotifs, setSavingNotifs] = useState(false);
+  const [esp32Devices, setEsp32Devices] = useState([]);
+  const [esp32Edit, setEsp32Edit] = useState(null);
+  const [esp32Busy, setEsp32Busy] = useState({});
+  const [esp32TestResult, setEsp32TestResult] = useState({});
+  const [esp32History, setEsp32History] = useState([]);
+  const [esp32HistoryDevice, setEsp32HistoryDevice] = useState(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [hoursRes, catsRes, notifRes, variantsRes] = await Promise.all([
+      const [hoursRes, catsRes, notifRes, variantsRes, esp32Res] = await Promise.all([
         adminAPI.getBusinessHours(),
         adminAPI.listCategories(),
         adminAPI.getNotificationSettings(),
         adminAPI.listVariantGroups(),
+        adminAPI.listEsp32Devices(),
       ]);
       const hoursData = hoursRes.data?.data ?? hoursRes.data ?? [];
       const catsData  = catsRes.data?.data  ?? catsRes.data  ?? [];
       const notifData = notifRes.data?.data ?? notifRes.data ?? {};
+      const esp32Data = esp32Res.data?.data ?? esp32Res.data ?? [];
       // Convert array from backend [ {day_of_week, day_label, open_time, close_time, is_closed} ]
       // to the shape BusinessHours component expects: { Monday: { open, close, closed } }
       const hoursMap = {};
@@ -495,6 +590,7 @@ export default function SystemSettings() {
       })));
       setVariantGroups(variantsRes.data?.data ?? variantsRes.data ?? []);
       setNotifCats(notifData.categories ?? {});
+      setEsp32Devices(Array.isArray(esp32Data) ? esp32Data : []);
     } catch { toast.error('Failed to load settings.'); }
     finally { setLoading(false); }
   }, [toast]);
@@ -502,6 +598,14 @@ export default function SystemSettings() {
   // Fetch-on-mount: the sync setLoading inside `loadAll` is intentional.
   // oxlint-disable-next-line react/set-state-in-effect
   useEffect(()=>{ loadAll(); },[loadAll]);
+
+  const refreshEsp32Devices = useCallback(async () => {
+    try {
+      const res = await adminAPI.listEsp32Devices();
+      const data = res.data?.data ?? res.data ?? [];
+      setEsp32Devices(Array.isArray(data) ? data : []);
+    } catch { toast.error('Failed to refresh ESP32 devices.'); }
+  }, [toast]);
 
   async function saveHours() {
     setSaving(true);
@@ -532,6 +636,55 @@ export default function SystemSettings() {
       toast.success('Notification settings saved.');
     } catch(err) { toast.error(err?.response?.data?.message || err.message || 'Save failed.'); }
     finally { setSavingNotifs(false); }
+  }
+
+  async function handleResendEsp32(device) {
+    setEsp32Busy(prev => ({ ...prev, [device.device_code]: true }));
+    try {
+      const res = await adminAPI.resendEsp32Wifi(device.device_code);
+      toast.success(res.data?.message || 'Wi-Fi config re-sent.');
+      await refreshEsp32Devices();
+    } catch(err) {
+      toast.error(err?.response?.data?.message || 'Resend failed.');
+    } finally {
+      setEsp32Busy(prev => { const next = { ...prev }; delete next[device.device_code]; return next; });
+    }
+  }
+
+  async function handleTestEsp32(device) {
+    const url = device.server_url || defaultEsp32ServerUrl();
+    setEsp32Busy(prev => ({ ...prev, [device.device_code]: true }));
+    setEsp32TestResult(prev => ({ ...prev, [device.device_code]: undefined }));
+    try {
+      const res = await adminAPI.testEsp32Connection(device.device_code, url);
+      if (res.data?.reachable) {
+        setEsp32TestResult(prev => ({ ...prev, [device.device_code]: { kind: 'success', message: `Reachable (HTTP ${res.data.status})` } }));
+        toast.success('Server URL reachable.');
+      } else {
+        setEsp32TestResult(prev => ({ ...prev, [device.device_code]: { kind: 'error', message: res.data?.error || 'Not reachable.' } }));
+        toast.error('Server URL not reachable.');
+      }
+    } catch(err) {
+      setEsp32TestResult(prev => ({ ...prev, [device.device_code]: { kind: 'error', message: err?.response?.data?.message || err.message || 'Test failed.' } }));
+      toast.error('Test connection failed.');
+    } finally {
+      setEsp32Busy(prev => { const next = { ...prev }; delete next[device.device_code]; return next; });
+    }
+  }
+
+  async function openEsp32History(device) {
+    try {
+      const res = await adminAPI.esp32ConfigHistory(device.device_code);
+      setEsp32History(res.data?.data ?? res.data ?? []);
+      setEsp32HistoryDevice(device);
+    } catch(err) {
+      toast.error(err?.response?.data?.message || 'Failed to load history.');
+    }
+  }
+
+  function closeEsp32History() {
+    setEsp32History([]);
+    setEsp32HistoryDevice(null);
   }
 
   async function handleAddCategory(name) {
@@ -654,6 +807,76 @@ export default function SystemSettings() {
           />
         </Section>
 
+        {/* ESP32 Wi‑Fi */}
+        <Section
+          title="ESP32 Wi‑Fi"
+          subtitle="Push the kitchen Wi‑Fi and server URL to the device. First-time setup still uses the Bingnondo-XXXX access point."
+        >
+          {esp32Devices.length === 0 ? (
+            <p className="sys-subsection__hint">No ESP32 devices registered.</p>
+          ) : (
+            <div className="ap-list-rows">
+              {esp32Devices.map(device => {
+                const configured = !!device.ssid;
+                const applied = configured
+                  && Number(device.version) > 0
+                  && Number(device.applied_version) >= Number(device.version);
+                return (
+                  <div key={device.device_code} className="ap-list-row">
+                    <div className="ap-list-row__info">
+                      <span className="ap-list-row__name">{device.device_code}</span>
+                      <Badge
+                        type={device.status === 'online' ? 'online' : 'offline'}
+                        label={device.status === 'online' ? 'Online' : 'Offline'}
+                      />
+                      <span className="sys-usage">
+                        {configured ? `Wi-Fi: ${device.ssid}` : 'Wi-Fi not configured'}
+                        {configured && Number(device.version) > 0
+                          ? ` · ${applied ? 'applied' : 'waiting for device'}`
+                          : ''}
+                      </span>
+                      {device.last_error && (
+                        <span className="sys-usage" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
+                          ⚠ {device.last_error}
+                        </span>
+                      )}
+                      {esp32TestResult[device.device_code] && (
+                        <span className="sys-usage" style={{ color: esp32TestResult[device.device_code].kind === 'success' ? 'var(--color-success)' : 'var(--color-primary)', fontWeight: 600 }}>
+                          {esp32TestResult[device.device_code].kind === 'success' ? '✓ ' : '✗ '}{esp32TestResult[device.device_code].message}
+                        </span>
+                      )}
+                    </div>
+                    <div className="ap-list-row__actions">
+                      <Btn variant="ghost" size="sm" onClick={() => setEsp32Edit(device)}>Configure</Btn>
+                      {configured && (
+                        <Btn variant="ghost" size="sm"
+                          onClick={() => handleTestEsp32(device)}
+                          disabled={esp32Busy[device.device_code]}
+                          title="Test server URL">
+                          {esp32Busy[device.device_code] ? <Spinner size={12} /> : 'Test'}
+                        </Btn>
+                      )}
+                      {(configured && !applied) || device.last_error ? (
+                        <Btn variant="gold" size="sm"
+                          onClick={() => handleResendEsp32(device)}
+                          disabled={esp32Busy[device.device_code]}
+                          title="Re-send config to device">
+                          {esp32Busy[device.device_code] ? <Spinner size={12} /> : 'Resend'}
+                        </Btn>
+                      ) : null}
+                      <Btn variant="ghost" size="sm"
+                        onClick={() => openEsp32History(device)}
+                        title="Config history">
+                        📜
+                      </Btn>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+
         {/* Menu categories & variants */}
         <Section
           title="Menu categories & variants"
@@ -712,6 +935,45 @@ export default function SystemSettings() {
         onClose={()=>setAddCatOpen(false)}
         onAdd={handleAddCategory}
       />
+
+      {esp32Edit && (
+        <Esp32WifiModal
+          key={esp32Edit.device_code}
+          device={esp32Edit}
+          onClose={()=>setEsp32Edit(null)}
+          onSaved={refreshEsp32Devices}
+          toast={toast}
+        />
+      )}
+
+      {esp32HistoryDevice && (
+        <Modal open onClose={closeEsp32History} title={`Config history — ${esp32HistoryDevice.device_code}`} width={560}>
+          {esp32History.length === 0 ? (
+            <p className="sys-subsection__hint">No config changes recorded yet.</p>
+          ) : (
+            <div className="ap-list-rows">
+              {esp32History.map((entry, i) => {
+                const details = typeof entry.details === 'string' ? JSON.parse(entry.details) : entry.details;
+                return (
+                  <div key={i} className="ap-list-row">
+                    <div className="ap-list-row__info">
+                      <span className="ap-list-row__name">{entry.action}</span>
+                      <span className="sys-usage">{details.device_code || ''}</span>
+                      <span className="sys-usage">
+                        {details.version ? `v${details.version}` : ''}
+                        {details.action === 'resend' ? ' · resent' : ''}
+                      </span>
+                      <span className="sys-usage" style={{ fontSize: '0.72rem', color: 'var(--color-muted-foreground)' }}>
+                        {new Date(entry.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Modal>
+      )}
 
       {variantModal && (
         <VariantGroupModal

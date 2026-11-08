@@ -30,8 +30,13 @@ Add to `backend/.env`:
 ```
 ESP32_DEVICE_KEY=pick_any_long_random_string
 ESP32_DEVICE_CODE=ESP32-KitchenA
+ESP32_CONFIG_SECRET=64_hex_characters
 ```
-Database: no new SQL. Your migration `008_esp32_devices.sql` already creates the device `ESP32-KitchenA`. If you haven't run it, run `npm --prefix backend run migrate`. Restart the backend.
+Generate the encryption secret once and keep it stable:
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+Database: run `npm --prefix backend run migrate`. Migration `008_esp32_devices.sql` creates the device `ESP32-KitchenA`, and `026_esp32_wifi_config.sql` stores the encrypted Wi-Fi config. Restart the backend.
 
 ## 2. Test before touching hardware
 ```
@@ -78,15 +83,28 @@ Three things that cost us hours — check them first if the screen misbehaves:
   ```powershell
   New-NetFirewallRule -DisplayName "Bingnondo backend 5000" -Direction Inbound -Protocol TCP -LocalPort 5000 -Action Allow -Profile Any
   ```
-- **Keep `SERVER_URL` in the sketch in sync** with the PC's LAN IP (`ipconfig`). A new DHCP lease breaks the ESP32 until the sketch is updated.
+- **The server URL is stored on the ESP32**, not hardcoded in the sketch. Enter it in the setup portal (`http://<PC-IP>:5000`). If the PC's LAN IP changes, hold the ESP32 button while powering on to clear the saved Wi-Fi/server settings, then run the portal again.
 - **USB Wi-Fi adapters stutter with power saving on** (dropped polls → `HTTP -1`). Disable it (admin PowerShell):
   ```powershell
   Set-NetAdapterAdvancedProperty -Name "Wi-Fi" -RegistryKeyword "*SelectiveSuspend" -RegistryValue 0
   ```
 - Liveness check anytime (in Postgres): `SELECT device_code, status, last_ping_at FROM esp32_devices;` — `last_ping_at` ticks on every poll.
 
-## 5. Flash
-Arduino IDE → Library Manager: install **Adafruit ST7735 and ST7789 Library** (accept its dependencies) and **ArduinoJson 7.x**. Open `esp32/kitchen_buzzer/kitchen_buzzer.ino`, fill in the five values at the top, choose your ESP32 board, upload, open Serial Monitor at 115200.
+## 5. Flash and connect Wi-Fi
+Arduino IDE → Library Manager: install **Adafruit ST7735 and ST7789 Library** (accept its dependencies), **ArduinoJson 7.x**, and **WiFiManager** (tzapu, v2.0.17+). Open `esp32/kitchen_buzzer/kitchen_buzzer.ino`, choose your ESP32 board, upload, and open Serial Monitor at 115200.
+
+Only `DEVICE_CODE` and `DEVICE_KEY` remain in the sketch. Wi-Fi credentials and the server URL are not hardcoded.
+
+First-time setup:
+1. Power the ESP32. It creates a setup Wi-Fi named **`Bingnondo-XXXX`** (the last 4 hex digits of its MAC address).
+2. On your phone, join that setup Wi-Fi. The phone will temporarily leave your normal Wi-Fi.
+3. Open **`192.168.4.1`** in the phone browser.
+4. Pick your kitchen Wi-Fi, enter its password, and enter the server URL, for example **`http://192.168.1.10:5000`** (use the PC's IPv4 address from `ipconfig`).
+5. Save. The ESP32 joins the same Wi-Fi as your phone and starts polling the backend.
+
+If the Wi-Fi password changes later, the ESP32 cannot reconnect and automatically reopens the `Bingnondo-XXXX` setup Wi-Fi. Join it from the phone and enter the new password. The saved server URL is prefilled.
+
+If you need to start over completely, hold the button while powering on. That clears the saved Wi-Fi and server URL and restarts the setup portal.
 
 - ESP32 and PC must be on the same Wi-Fi; allow Node.js through the PC firewall on port 5000 (see section 4).
 - **Screen stays white/blank or shows garbage:** check the wiring notes in section 3 first (BL to 3V3, module-side pin order) — on our build that was the real cause. If wiring is perfect and it is still blurred/garbled, set `#define USE_ST7789 0` and install the **Adafruit ILI9341** library instead.
@@ -96,6 +114,27 @@ Arduino IDE → Library Manager: install **Adafruit ST7735 and ST7789 Library** 
 - Tuning knobs at the top of the sketch: `POLL_MS` (1000 ms poll rate) and `POLL_TIMEOUT_MS` (1500 ms before a stuck poll gives up and retries).
 - Power: USB adapter (5V, 1A+) into the ESP32's micro-USB port.
 
+## 6. Change Wi-Fi from Admin → System Settings
+Once the ESP32 is online, you do not need the `Bingnondo-XXXX` portal for routine changes:
+
+1. Open **Admin → System Settings → ESP32 Wi-Fi**.
+2. Press **Configure** on the `ESP32-KitchenA` row.
+3. Enter the new SSID, password, and server URL. Leave the password blank to keep the current one. A password is required when the SSID changes.
+4. Save. The device checks `GET /api/esp32/config` every 30 seconds, joins the new network, and confirms with `POST /api/esp32/config/ack`.
+
+The admin table shows **applied** once the device confirms the version. If the device cannot join the new network it reconnects to the old Wi-Fi, records the error, and the portal remains the fallback. If the router password changes *before* the new config is pushed, the device cannot poll the backend and you must use the `Bingnondo-XXXX` portal.
+
+**Admin-push troubleshooting:**
+- **Status stays "waiting for device":** the device hasn't acknowledged the new config yet. It polls every 30 s (longer after failures). Confirm the device is **Online**, the server URL is correct, and the PC firewall allows port 5000. Press **Resend** to bump the version and make the device re-poll.
+- **Status shows an error (⚠):** the device failed to join the new network. It rolled back to the old Wi-Fi. Fix the SSID/password/server URL, then press **Resend** or save a new version. The screen also shows `CONFIG FAILED`.
+- **Serial `HTTP -1`:** the ESP32 can't reach the backend. Use **Test connection** in the admin row to check the URL, verify the PC IP hasn't changed, and check Windows Firewall on port 5000.
+- **Serial `HTTP 401`:** `ESP32_DEVICE_KEY` mismatch between `backend/.env` and the sketch.
+- **Serial `HTTP 404`:** device code not in `esp32_devices` (run migration `008`).
+- **Exponential backoff:** after a failed config, the device waits longer between retries (30 s → 60 s → … → 5 min). It won't retry the same bad version until a newer version is saved or the device reboots.
+- **Screen status chip:** `APPLYING…` while joining the new network, `CONFIG FAILED` on failure, blank once applied.
+- **History:** press the history button on a device row to see past config changes and versions.
+- **Bulk push:** use **PUT /api/admin/system-settings/esp32-devices/wifi/bulk** (or the admin UI) to push the same Wi-Fi to all online devices at once.
+
 ## Notes
 - The button (when added) acknowledges the *alert* (stops the buzz). It does not change the order's status; the kitchen still moves the order through preparing and ready on its own screen.
-- Your zip's `.env.example` was filled with joke values; I didn't touch it. Keep your real `.env` private.
+- Keep `backend/.env` private. `ESP32_CONFIG_SECRET` decrypts the Wi-Fi passwords stored in the database.

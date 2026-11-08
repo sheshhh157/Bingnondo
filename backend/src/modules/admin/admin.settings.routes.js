@@ -28,4 +28,11 @@ router.delete('/variants/:id', ctrl.deleteVariantGroup); // DELETE /api/admin/sy
 router.get('/notifications', ctrl.getNotificationSettings);  // GET /api/admin/system-settings/notifications
 router.put('/notifications', ctrl.saveNotificationSettings); // PUT /api/admin/system-settings/notifications
 
+router.get('/esp32-devices', ctrl.listEsp32Devices);          // GET /api/admin/system-settings/esp32-devices
+router.put('/esp32-devices/:code/wifi', ctrl.saveEsp32Wifi); // PUT /api/admin/system-settings/esp32-devices/:code/wifi
+router.put('/esp32-devices/:code/wifi/resend', ctrl.resendEsp32Wifi);   // PUT /api/admin/system-settings/esp32-devices/:code/wifi/resend
+router.get('/esp32-devices/:code/history', ctrl.esp32ConfigHistory);    // GET /api/admin/system-settings/esp32-devices/:code/history
+router.post('/esp32-devices/:code/test-connection', ctrl.testEsp32Connection); // POST /api/admin/system-settings/esp32-devices/:code/test-connection
+router.put('/esp32-devices/wifi/bulk', ctrl.bulkSaveEsp32Wifi); // PUT /api/admin/system-settings/esp32-devices/wifi/bulk
+
 module.exports = router;
