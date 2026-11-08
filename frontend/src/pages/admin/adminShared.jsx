@@ -90,6 +90,11 @@ export function AppSelect({ id, error, children, ...props }) {
 export function Modal({ open, onClose, title, width = 520, headingId = 'modal-title', children }) {
   const ref = useRef();
   const prevFocus = useRef(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -97,7 +102,7 @@ export function Modal({ open, onClose, title, width = 520, headingId = 'modal-ti
     const dialog = ref.current;
 
     const onKey = e => {
-      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'Escape') { onCloseRef.current(); return; }
       if (e.key !== 'Tab' || !dialog) return;
       const focusables = Array.from(
         dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
@@ -110,9 +115,15 @@ export function Modal({ open, onClose, title, width = 520, headingId = 'modal-ti
     };
 
     document.addEventListener('keydown', onKey);
-    const m = dialog.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    if (m) { if (!m.disabled) m.focus(); }
-    else if (dialog) dialog.focus();
+
+    if (dialog && !dialog.contains(document.activeElement)) {
+      const preferred = dialog.querySelector(
+        '[autofocus], input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
+      );
+      const fallback = dialog.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      const target = preferred || fallback || dialog;
+      target.focus();
+    }
 
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -122,7 +133,7 @@ export function Modal({ open, onClose, title, width = 520, headingId = 'modal-ti
       document.body.style.overflow = prevOverflow;
       if (prevFocus.current && prevFocus.current.focus) prevFocus.current.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return createPortal(
