@@ -69,6 +69,10 @@ router.get('/report', ...authed, dispatch(null, staffAuth, ctrl.getOrderReport))
 // Same ordering requirement as '/totals': must precede '/:id'.
 router.get('/online', ...authed, dispatch(null, staffAuth, ctrl.getOnlineOrders));
 
+// GET /api/orders/checkout-config — delivery fee + active payment QR codes
+// (customer app). Must be registered before '/:id'.
+router.get('/checkout-config', ...authed, requireCustomer, customerCtrl.getCheckoutConfig);
+
 // GET /api/orders/:id — get single order detail
 router.get('/:id', ...authed, dispatch(customerCtrl.getMyOrder, staffAuth, ctrl.getOrderById));
 

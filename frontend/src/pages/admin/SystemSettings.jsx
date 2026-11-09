@@ -1,7 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
-import { adminAPI } from '../../services/api';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { adminAPI, uploadAPI } from '../../services/api';
 import { Spinner, Btn, Field, TextInput, PasswordInput, PageHeader, Modal, ConfirmModal, Badge } from './adminShared';
 import { useAdminToast } from './useAdminToast';
+import {
+  LIMITS,
+  validateShortName,
+  validateText,
+  validateAmount,
+  sanitizeProductName,
+  sanitizeInteger,
+  sanitizeDecimal,
+} from '../../utils/validation';
 import '../../styles/AdminPage.css';
 
 const PlusIcon = ({ size = 13, stroke = 2.5 } = {}) => (
@@ -163,6 +172,15 @@ function CategoryManager({ categories, variantGroups, onRemove, onRename, onTogg
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Real-time rename error (excludes the row being renamed from duplicate check).
+  const renameError = validateShortName(editVal, {
+    label: 'Category name',
+    max: LIMITS.shortName,
+    list: categories,
+    getValue: (c) => c.name,
+    excludeId: editingId,
+  });
+
   function startEdit(c) {
     setEditingId(c.id);
     setEditVal(c.name);
@@ -175,7 +193,7 @@ function CategoryManager({ categories, variantGroups, onRemove, onRename, onTogg
 
   async function commitEdit(c) {
     const t = editVal.trim();
-    if (!t) return;
+    if (!t || renameError) return;
     if (t === c.name) { cancelEdit(); return; }
     setBusyId(c.id);
     const ok = await onRename(c, t);
@@ -208,14 +226,27 @@ function CategoryManager({ categories, variantGroups, onRemove, onRename, onTogg
                 <form key={c.id} className="ap-list-row ap-list-row--editing"
                   onSubmit={e=>{e.preventDefault(); commitEdit(c);}}>
                   <div className="ap-input-row" style={{flex:1}}>
-                    <input className="ap-input" value={editVal}
-                      onChange={e=>setEditVal(e.target.value)}
+                    <input
+                      className={`ap-input${renameError ? ' ap-input--error' : ''}`}
+                      value={editVal}
+                      onChange={e => setEditVal(sanitizeProductName(e.target.value, LIMITS.shortName))}
                       onKeyDown={e=>{ if(e.key==='Escape'){ e.preventDefault(); cancelEdit(); } }}
-                      maxLength={100} autoFocus disabled={busyId===c.id}
-                      aria-label={`Rename ${c.name}`}/>
+                      maxLength={LIMITS.shortName}
+                      autoFocus
+                      disabled={busyId===c.id}
+                      aria-label={`Rename ${c.name}`}
+                      aria-describedby={renameError ? `cat-rename-err-${c.id}` : undefined}
+                    />
+                    {renameError && (
+                      <p id={`cat-rename-err-${c.id}`} className="ap-field-error" role="alert"
+                        style={{fontSize:'0.75rem', color:'var(--color-danger)', marginTop:3}}>
+                        {renameError}
+                      </p>
+                    )}
                   </div>
                   <Btn variant="gold" size="sm" type="submit"
-                    disabled={busyId===c.id || !editVal.trim()} loading={busyId===c.id}>Save</Btn>
+                    disabled={busyId===c.id || !editVal.trim() || !!renameError}
+                    loading={busyId===c.id}>Save</Btn>
                   <Btn variant="ghost" size="sm"
                     onClick={cancelEdit} disabled={busyId===c.id}>Cancel</Btn>
                 </form>
@@ -271,37 +302,51 @@ function CategoryManager({ categories, variantGroups, onRemove, onRename, onTogg
 }
 
 // ── Add category modal ───────────────────────────────────────────────
-function AddCategoryModal({ open, onClose, onAdd }) {
-  const [name, setName] = useState('');
-  const [saving, setSaving] = useState(false);
+function AddCategoryModal({ open, onClose, onAdd, categories = [] }) {
+  const [name, setName]       = useState('');
+  const [touched, setTouched] = useState(false);
+  const [saving, setSaving]   = useState(false);
+
+  // Real-time derived error.
+  const liveError = validateShortName(name, {
+    label: 'Category name',
+    max: LIMITS.shortName,
+    list: categories,
+    getValue: (c) => c.name,
+  });
 
   async function submit(e) {
     e.preventDefault();
-    const t = name.trim();
-    if (!t || saving) return;
+    setTouched(true);
+    if (liveError || saving) return;
     setSaving(true);
-    const ok = await onAdd(t);
+    const ok = await onAdd(name.trim());
     setSaving(false);
-    if (ok !== false) { setName(''); onClose(); }
+    if (ok !== false) { setName(''); setTouched(false); onClose(); }
   }
 
   function close() {
     if (saving) return;
-    setName('');
+    setName(''); setTouched(false);
     onClose();
   }
+
+  const displayError = touched ? liveError : '';
 
   return (
     <Modal open={open} onClose={close} title="Add category" width={400}>
       <form onSubmit={submit}>
-        <Field label="Category name" id="cat-name">
-          <TextInput id="cat-name" value={name} maxLength={100}
-            onChange={e => setName(e.target.value)}
+        <Field label="Category name" id="cat-name" error={displayError}
+          hint={`Letters, digits, spaces allowed · max ${LIMITS.shortName} chars`}>
+          <TextInput id="cat-name" value={name} maxLength={LIMITS.shortName}
+            onChange={e => { setName(sanitizeProductName(e.target.value, LIMITS.shortName)); setTouched(true); }}
+            onBlur={() => setTouched(true)}
+            error={displayError}
             placeholder="e.g. Rice Meals" autoFocus />
         </Field>
         <div className="ap-modal__footer">
           <Btn variant="ghost" onClick={close} disabled={saving}>Cancel</Btn>
-          <Btn variant="gold" type="submit" loading={saving} disabled={!name.trim()}>Add category</Btn>
+          <Btn variant="gold" type="submit" loading={saving}>Add category</Btn>
         </div>
       </form>
     </Modal>
@@ -360,51 +405,78 @@ function VariantGroupList({ groups, usageOf, onEdit, onDelete, flashId }) {
   );
 }
 
-function VariantGroupModal({ group, onClose, onSaved, toast }) {
+function VariantGroupModal({ group, onClose, onSaved, toast, variantGroups = [] }) {
   const [name, setName]             = useState(group?.name ?? '');
   const [maxOptions, setMaxOptions] = useState(String(group?.max_options ?? 3));
+  const [touched, setTouched]       = useState({});
   const [saving, setSaving]         = useState(false);
-  const [error, setError]           = useState('');
+  const [serverError, setServerError] = useState('');
+
+  // Real-time derived errors.
+  const maxNum = Number(maxOptions);
+  const liveErrors = {
+    name: validateShortName(name, {
+      label: 'Variant name',
+      max: LIMITS.shortName,
+      list: variantGroups,
+      getValue: (g) => g.name,
+      excludeId: group?.id ?? null,
+    }),
+    maxOptions: (() => {
+      const raw = maxOptions.trim();
+      if (!raw) return 'Max options is required.';
+      if (!/^\d+$/.test(raw)) return 'Max options must be a whole number.';
+      if (maxNum < 1 || maxNum > 10) return 'Max options must be between 1 and 10.';
+      return '';
+    })(),
+  };
+
+  const touch = (k) => setTouched(t => ({ ...t, [k]: true }));
+  const err   = (k) => (touched[k] ? liveErrors[k] : '');
 
   async function save(e) {
     e.preventDefault();
-    const cleanName = name.trim();
-    const maxNum = Number(maxOptions);
-    const err = validateVariantGroup(cleanName, maxNum);
-    if (err) { setError(err); return; }
-    setSaving(true); setError('');
+    setTouched({ name: true, maxOptions: true });
+    if (Object.values(liveErrors).some(Boolean)) return;
+    setSaving(true); setServerError('');
     try {
       const res = group
-        ? await adminAPI.updateVariantGroup(group.id, cleanName, maxNum)
-        : await adminAPI.createVariantGroup(cleanName, maxNum);
+        ? await adminAPI.updateVariantGroup(group.id, name.trim(), maxNum)
+        : await adminAPI.createVariantGroup(name.trim(), maxNum);
       const saved = res.data?.data ?? res.data;
       onSaved(saved);
       toast.success(group ? `Variant "${saved.name}" saved.` : `Variant "${saved.name}" created.`);
       onClose();
     } catch (e2) {
-      setError(e2?.response?.data?.message || e2?.message || 'Failed to save variant.');
+      setServerError(e2?.response?.data?.message || e2?.message || 'Failed to save variant.');
     } finally { setSaving(false); }
   }
 
   return (
     <Modal open onClose={onClose} title={group ? `Edit variant — ${group.name}` : 'Add variant'} width={440}>
       <form onSubmit={save}>
-        <Field label="Variant name" id="vg-name">
-          <TextInput id="vg-name" value={name} maxLength={100}
-            onChange={e => setName(e.target.value)}
+        <Field label="Variant name" id="vg-name" error={err('name')}
+          hint={`Letters, digits, spaces allowed · max ${LIMITS.shortName} chars`}>
+          <TextInput id="vg-name" value={name} maxLength={LIMITS.shortName}
+            onChange={e => { setName(sanitizeProductName(e.target.value, LIMITS.shortName)); touch('name'); }}
+            onBlur={() => touch('name')}
+            error={err('name')}
             placeholder="e.g. Flavor, Solo / Sharing, Hot / Cold" autoFocus />
         </Field>
-        <Field label="Max options" id="vg-max">
-          <input id="vg-max" className="ap-input" type="number" min={1} max={10} step={1}
-            value={maxOptions}
-            onChange={e => setMaxOptions(e.target.value)}
+        <Field label="Max options" id="vg-max" error={err('maxOptions')}
+          hint="Whole number between 1 and 10 — numbers only">
+          <TextInput id="vg-max" value={maxOptions}
+            onChange={e => { setMaxOptions(sanitizeInteger(e.target.value, 2)); touch('maxOptions'); }}
+            onBlur={() => touch('maxOptions')}
+            error={err('maxOptions')}
+            inputMode="numeric"
             aria-label="Maximum number of options" />
         </Field>
         <p className="ap-variant-note">
           Option names and prices are entered per menu item in Menu Management — this group only sets
           the maximum number of options an item may offer.
         </p>
-        {error && <p className="ap-variant-error" role="alert">{error}</p>}
+        {serverError && <p className="ap-variant-error" role="alert">{serverError}</p>}
         <div className="ap-modal__footer">
           <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
           <Btn variant="gold" type="submit" loading={saving}>{group ? 'Save variant' : 'Add variant'}</Btn>
@@ -444,6 +516,205 @@ function NotificationSettings({ categories, onChange }) {
         </label>
       ))}
     </div>
+  );
+}
+
+// ── Payment QR codes ─────────────────────────────────────────────────
+// The image goes straight to Cloudinary; only its URL/public_id are stored
+// with the account name and number in the database.
+function QrCodeModal({ code, onClose, onSaved, toast }) {
+  const isEdit = !!code;
+  const [name, setName] = useState(code?.name ?? '');
+  const [number, setNumber] = useState(code?.number ?? '');
+  const [isActive, setIsActive] = useState(code ? !!code.is_active : true);
+  const [displayOrder, setDisplayOrder] = useState(String(code?.display_order ?? 0));
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(code?.image_url ?? '');
+  const [touched, setTouched] = useState({});
+  const [serverError, setServerError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef(null);
+  const objectUrlRef = useRef(null);
+
+  useEffect(() => () => {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+  }, []);
+
+  const liveErrors = {
+    name: validateText(name, { label: 'Account name', max: 100 }),
+    number: validateText(number, { label: 'Account number', max: 50 }),
+    image: preview ? '' : 'Upload a QR code image.',
+    displayOrder: (() => {
+      const raw = displayOrder.trim();
+      if (!raw) return '';
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 0 || n > 9999) return 'Display order must be between 0 and 9999.';
+      return '';
+    })(),
+  };
+
+  const touch = (k) => setTouched(t => ({ ...t, [k]: true }));
+  const err = (k) => (touched[k] ? liveErrors[k] : '');
+
+  function pickFile(f) {
+    if (!f) return;
+    if (!f.type.startsWith('image/')) {
+      setServerError('Only image files are allowed (JPG, PNG, WEBP).');
+      return;
+    }
+    if (f.size > 5 * 1024 * 1024) {
+      setServerError('Image is too large. Maximum size is 5MB.');
+      return;
+    }
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const url = URL.createObjectURL(f);
+    objectUrlRef.current = url;
+    setFile(f);
+    setPreview(url);
+    setServerError('');
+    touch('image');
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setTouched({ name: true, number: true, image: true, displayOrder: true });
+    if (Object.values(liveErrors).some(Boolean)) return;
+
+    setSaving(true);
+    setServerError('');
+
+    let uploadedPublicId = null;
+    try {
+      let imageUrl = code?.image_url ?? null;
+      let imagePublicId = code?.image_public_id ?? null;
+
+      if (file) {
+        const { data } = await uploadAPI.uploadQrImage(file);
+        imageUrl = data.url;
+        imagePublicId = data.public_id;
+        uploadedPublicId = data.public_id;
+      }
+
+      const payload = {
+        name: name.trim(),
+        number: number.trim(),
+        image_url: imageUrl,
+        image_public_id: imagePublicId,
+        is_active: isActive,
+        display_order: Number(displayOrder) || 0,
+      };
+
+      const res = isEdit
+        ? await adminAPI.updatePaymentQrCode(code.id, payload)
+        : await adminAPI.createPaymentQrCode(payload);
+      const saved = res.data?.data ?? res.data;
+
+      onSaved(saved);
+      toast.success(isEdit ? 'QR code updated.' : 'QR code added.');
+      onClose();
+    } catch (e2) {
+      // The upload may have succeeded even when saving the record failed.
+      if (uploadedPublicId) {
+        uploadAPI.deleteQrImage(uploadedPublicId).catch(() => { /* non-critical */ });
+      }
+      setServerError(e2?.response?.data?.message || e2?.message || 'Failed to save QR code.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={isEdit ? `Edit QR code — ${code.name}` : 'Add payment QR code'} width={480}>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field label="QR code image" id="qr-image" error={err('image')}
+          hint="JPG, PNG or WEBP · max 5MB. The image uploads directly to the cloud.">
+          <div
+            className="sys-qr-upload"
+            role="button"
+            tabIndex={0}
+            aria-label="Upload QR code image"
+            onClick={() => fileRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
+          >
+            {preview ? (
+              <img src={preview} alt="QR code preview" className="sys-qr-upload__img" />
+            ) : (
+              <div className="sys-qr-upload__placeholder">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20h1"/>
+                </svg>
+                <span><strong>Click to upload</strong> the QR code image</span>
+                <span className="sys-qr-upload__hint">JPG, PNG · max 5MB</span>
+              </div>
+            )}
+            <input
+              ref={fileRef}
+              id="qr-image"
+              type="file"
+              accept="image/*"
+              className="sys-qr-upload__input"
+              onChange={(e) => { pickFile(e.target.files[0]); e.target.value = ''; }}
+            />
+          </div>
+        </Field>
+
+        <Field label="Account name" id="qr-name" error={err('name')}
+          hint="Shown to customers beside the QR code, e.g. the GCash account holder.">
+          <TextInput id="qr-name" value={name} maxLength={100}
+            onChange={(e) => { setName(sanitizeProductName(e.target.value, 100)); touch('name'); }}
+            onBlur={() => touch('name')}
+            error={err('name')}
+            placeholder="e.g. Bingnondo Cafe / Juan Dela Cruz"
+            autoFocus />
+        </Field>
+
+        <Field label="Account number" id="qr-number" error={err('number')}
+          hint="The mobile number or account number tied to the QR code.">
+          <TextInput id="qr-number" value={number} maxLength={50}
+            onChange={(e) => { setNumber(e.target.value.replace(/[\r\n]/g, '').slice(0, 50)); touch('number'); }}
+            onBlur={() => touch('number')}
+            error={err('number')}
+            inputMode="numeric"
+            placeholder="e.g. 0917 123 4567" />
+        </Field>
+
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          <div style={{ flex: '0 0 130px' }}>
+            <Field label="Display order" id="qr-order" error={err('displayOrder')} hint="Lower shows first.">
+              <TextInput id="qr-order" value={displayOrder} inputMode="numeric"
+                onChange={(e) => { setDisplayOrder(sanitizeInteger(e.target.value, 4)); touch('displayOrder'); }}
+                onBlur={() => touch('displayOrder')}
+                error={err('displayOrder')} />
+            </Field>
+          </div>
+          <label className="ap-switch-row" style={{ flex: 1, paddingTop: 18 }}>
+            <span className="ap-switch-row__text">
+              <span className="ap-switch-row__label">Show at checkout</span>
+              <span className="ap-switch-row__desc">Customers see this QR code when paying with GCash.</span>
+            </span>
+            <span className="ap-switch">
+              <input type="checkbox" checked={isActive}
+                onChange={(e) => setIsActive(e.target.checked)}
+                aria-label="Show this QR code at checkout" />
+              <span className="ap-switch__track" aria-hidden="true"><span className="ap-switch__thumb" /></span>
+            </span>
+          </label>
+        </div>
+
+        {serverError && <p className="ap-variant-error" role="alert">{serverError}</p>}
+
+        <div className="ap-modal__footer">
+          <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
+          <Btn variant="gold" type="submit" loading={saving}>{isEdit ? 'Save QR code' : 'Add QR code'}</Btn>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -550,6 +821,12 @@ export default function SystemSettings() {
   const [busyToggleId, setBusyToggleId] = useState(null);
   const [notifCats, setNotifCats]   = useState({});
   const [savingNotifs, setSavingNotifs] = useState(false);
+  const [qrCodes, setQrCodes]       = useState([]);
+  const [qrModal, setQrModal]       = useState(null);   // null | { code: null | code }
+  const [deleteQr, setDeleteQr]     = useState(null);
+  const [deletingQr, setDeletingQr] = useState(false);
+  const [deliveryFee, setDeliveryFee] = useState({ enabled: false, amount: '0' });
+  const [savingFee, setSavingFee]   = useState(false);
   const [esp32Devices, setEsp32Devices] = useState([]);
   const [esp32Edit, setEsp32Edit] = useState(null);
   const [esp32Busy, setEsp32Busy] = useState({});
@@ -560,17 +837,23 @@ export default function SystemSettings() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [hoursRes, catsRes, notifRes, variantsRes, esp32Res] = await Promise.all([
+      const [hoursRes, catsRes, notifRes, variantsRes, esp32Res, qrRes, feeRes] = await Promise.all([
         adminAPI.getBusinessHours(),
         adminAPI.listCategories(),
         adminAPI.getNotificationSettings(),
         adminAPI.listVariantGroups(),
         adminAPI.listEsp32Devices(),
+        // These two are new tables/settings — fall back to safe defaults so
+        // the rest of the page still loads on a database without migration 028.
+        adminAPI.listPaymentQrCodes().catch(() => ({ data: { data: [] } })),
+        adminAPI.getDeliveryFee().catch(() => ({ data: { data: { enabled: false, amount: 0 } } })),
       ]);
       const hoursData = hoursRes.data?.data ?? hoursRes.data ?? [];
       const catsData  = catsRes.data?.data  ?? catsRes.data  ?? [];
       const notifData = notifRes.data?.data ?? notifRes.data ?? {};
       const esp32Data = esp32Res.data?.data ?? esp32Res.data ?? [];
+      const qrData    = qrRes.data?.data ?? qrRes.data ?? [];
+      const feeData   = feeRes.data?.data ?? feeRes.data ?? {};
       // Convert array from backend [ {day_of_week, day_label, open_time, close_time, is_closed} ]
       // to the shape BusinessHours component expects: { Monday: { open, close, closed } }
       const hoursMap = {};
@@ -591,6 +874,11 @@ export default function SystemSettings() {
       setVariantGroups(variantsRes.data?.data ?? variantsRes.data ?? []);
       setNotifCats(notifData.categories ?? {});
       setEsp32Devices(Array.isArray(esp32Data) ? esp32Data : []);
+      setQrCodes(Array.isArray(qrData) ? qrData : []);
+      setDeliveryFee({
+        enabled: !!feeData.enabled,
+        amount: String(feeData.amount ?? 0),
+      });
     } catch { toast.error('Failed to load settings.'); }
     finally { setLoading(false); }
   }, [toast]);
@@ -636,6 +924,57 @@ export default function SystemSettings() {
       toast.success('Notification settings saved.');
     } catch(err) { toast.error(err?.response?.data?.message || err.message || 'Save failed.'); }
     finally { setSavingNotifs(false); }
+  }
+
+  function handleQrSaved(saved) {
+    setQrCodes(prev => {
+      const exists = prev.some(q => q.id === saved.id);
+      const next = exists
+        ? prev.map(q => (q.id === saved.id ? saved : q))
+        : [...prev, saved];
+      return next.sort((a, b) => (a.display_order - b.display_order) || (a.id - b.id));
+    });
+  }
+
+  async function handleDeleteQr() {
+    if (!deleteQr) return;
+    setDeletingQr(true);
+    try {
+      await adminAPI.deletePaymentQrCode(deleteQr.id);
+      setQrCodes(prev => prev.filter(q => q.id !== deleteQr.id));
+      toast.success(`QR code "${deleteQr.name}" removed.`);
+      setDeleteQr(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to delete QR code.');
+    } finally {
+      setDeletingQr(false);
+    }
+  }
+
+  async function saveDeliveryFee() {
+    const raw = String(deliveryFee.amount ?? '').trim();
+    // Treat an empty field or a trailing decimal point ("0.") as a whole number.
+    const amountStr = (raw === '' ? '0' : raw).replace(/\.$/, '');
+    const amountError = validateAmount(amountStr, { label: 'Delivery fee', min: 0 });
+    if (amountError) {
+      toast.error(amountError);
+      return;
+    }
+
+    setSavingFee(true);
+    try {
+      const res = await adminAPI.saveDeliveryFee({
+        enabled: deliveryFee.enabled,
+        amount: Number(amountStr),
+      });
+      const saved = res.data?.data ?? res.data;
+      setDeliveryFee({ enabled: !!saved.enabled, amount: String(saved.amount ?? 0) });
+      toast.success('Delivery fee saved.');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to save delivery fee.');
+    } finally {
+      setSavingFee(false);
+    }
   }
 
   async function handleResendEsp32(device) {
@@ -789,7 +1128,7 @@ export default function SystemSettings() {
 
         <PageHeader
           title="System Settings"
-          sub="Store-level configuration: operating hours, the master category and variant lists, and notifications."
+          sub="Store-level configuration: operating hours, payment QR codes, delivery fee, categories, variants, and notifications."
         />
 
         {/* Business Hours */}
@@ -805,6 +1144,67 @@ export default function SystemSettings() {
             categories={notifCats}
             onChange={(id, checked)=>setNotifCats(v=>({...v,[id]:checked}))}
           />
+        </Section>
+
+        {/* Payment QR codes */}
+        <Section
+          title="Payment QR codes"
+          subtitle="Upload the GCash (or other e-wallet) QR codes customers scan at checkout. The account name and number are shown beside the image."
+          action={<Btn variant="gold" size="sm" icon={<PlusIcon />} onClick={() => setQrModal({ code: null })}>Add QR code</Btn>}
+        >
+          {qrCodes.length === 0 ? (
+            <p className="sys-subsection__hint">No QR codes yet. Add one so customers can pay.</p>
+          ) : (
+            <div className="ap-list-rows">
+              {qrCodes.map(code => (
+                <div key={code.id} className="ap-list-row">
+                  <div className="sys-qr-row">
+                    <img src={code.image_url} alt={`${code.name} QR code`} className="sys-qr-thumb" />
+                    <div className="ap-list-row__info" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+                      <span className="ap-list-row__name">{code.name}</span>
+                      <span className="ap-list-row__meta">{code.number}</span>
+                      <Badge type={code.is_active ? 'active' : 'inactive'} label={code.is_active ? 'Active' : 'Hidden'} />
+                    </div>
+                  </div>
+                  <div className="ap-list-row__actions">
+                    <button type="button" className="ap-icon-btn" onClick={() => setQrModal({ code })}
+                      aria-label={`Edit ${code.name}`} title={`Edit ${code.name}`}><PencilIcon /></button>
+                    <button type="button" className="ap-icon-btn ap-icon-btn--danger" onClick={() => setDeleteQr(code)}
+                      aria-label={`Delete ${code.name}`} title={`Delete ${code.name}`}><TrashIcon /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        {/* Delivery fee */}
+        <Section
+          title="Delivery fee"
+          subtitle="Added to online/mobile orders at checkout. Counter orders are not charged."
+          action={<Btn variant="gold" size="sm" onClick={saveDeliveryFee} loading={savingFee}>Save fee</Btn>}
+        >
+          <label className="ap-switch-row">
+            <span className="ap-switch-row__text">
+              <span className="ap-switch-row__label">Charge a delivery fee</span>
+              <span className="ap-switch-row__desc">When off, online orders are charged the food subtotal only.</span>
+            </span>
+            <span className="ap-switch">
+              <input type="checkbox" checked={deliveryFee.enabled}
+                onChange={(e) => setDeliveryFee(v => ({ ...v, enabled: e.target.checked }))}
+                aria-label="Charge a delivery fee" />
+              <span className="ap-switch__track" aria-hidden="true"><span className="ap-switch__thumb" /></span>
+            </span>
+          </label>
+          <div style={{ maxWidth: 260, marginTop: 10 }}>
+            <Field label="Delivery fee amount" id="delivery-fee"
+              hint="Up to 2 decimal places. Applies to online orders only.">
+              <TextInput id="delivery-fee" value={deliveryFee.amount} inputMode="decimal" prefix="₱"
+                disabled={!deliveryFee.enabled}
+                onChange={(e) => setDeliveryFee(v => ({ ...v, amount: sanitizeDecimal(e.target.value) }))}
+                placeholder="0.00" />
+            </Field>
+          </div>
         </Section>
 
         {/* ESP32 Wi‑Fi */}
@@ -934,6 +1334,7 @@ export default function SystemSettings() {
         open={addCatOpen}
         onClose={()=>setAddCatOpen(false)}
         onAdd={handleAddCategory}
+        categories={categories}
       />
 
       {esp32Edit && (
@@ -975,12 +1376,34 @@ export default function SystemSettings() {
         </Modal>
       )}
 
+      {qrModal && (
+        <QrCodeModal
+          key={qrModal.code?.id ?? 'new'}
+          code={qrModal.code}
+          onClose={() => setQrModal(null)}
+          onSaved={handleQrSaved}
+          toast={toast}
+        />
+      )}
+
+      <ConfirmModal
+        open={!!deleteQr}
+        onClose={() => setDeleteQr(null)}
+        onConfirm={handleDeleteQr}
+        loading={deletingQr}
+        title="Delete QR code"
+        message={`Delete the "${deleteQr?.name}" QR code? The image is removed from the cloud too. This action is logged.`}
+        confirmLabel="Delete"
+        variant="danger"
+      />
+
       {variantModal && (
         <VariantGroupModal
           group={variantModal.group}
           onClose={()=>setVariantModal(null)}
           onSaved={handleVariantSaved}
           toast={toast}
+          variantGroups={variantGroups}
         />
       )}
 

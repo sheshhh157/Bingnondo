@@ -651,3 +651,157 @@ exports.getRiderLocation = async (req, res) => {
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WORK STATUS — daily check-in
+//
+// Logic:
+//   - work_status + work_status_set_at stored on riders row.
+//   - "Same day" is compared in Asia/Manila (UTC+8) so midnight resets happen
+//     at 12:00 AM local time regardless of server TZ.
+//   - admin_work_override wins over rider's own choice.
+//     If admin override exists for today, skip the prompt entirely.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true if the given timestamp is from today (Asia/Manila).
+ */
+function isTodayManila(ts) {
+  if (!ts) return false;
+  const manilaOffset = 8 * 60; // minutes
+  const now    = new Date();
+  const tsDate = new Date(ts);
+
+  const toManila = (d) => {
+    const utcMs = d.getTime() + d.getTimezoneOffset() * 60000;
+    return new Date(utcMs + manilaOffset * 60000);
+  };
+
+  const nowManila = toManila(now);
+  const tsManila  = toManila(tsDate);
+
+  return (
+    nowManila.getFullYear() === tsManila.getFullYear() &&
+    nowManila.getMonth()    === tsManila.getMonth()    &&
+    nowManila.getDate()     === tsManila.getDate()
+  );
+}
+
+// ─── GET /api/rider/work-status ───────────────────────────────────────────────
+// Returns whether the rider needs to answer today's prompt.
+// Response:
+//   { needs_prompt: bool, work_status: 'working'|'off'|null, overridden_by_admin: bool }
+exports.getWorkStatus = async (req, res) => {
+  try {
+    const riderId = req.user.sub;
+
+    const { rows } = await db.query(
+      `SELECT work_status, work_status_set_at,
+              admin_work_override, admin_work_override_at
+         FROM riders
+        WHERE id = $1`,
+      [riderId]
+    );
+
+    if (!rows[0]) return res.status(404).json({ message: 'Rider not found.' });
+
+    const r = rows[0];
+
+    // Admin override active today?
+    const adminOverrideToday = r.admin_work_override !== null &&
+                               isTodayManila(r.admin_work_override_at);
+
+    if (adminOverrideToday) {
+      return res.json({
+        needs_prompt:        false,
+        work_status:         r.admin_work_override,
+        overridden_by_admin: true,
+      });
+    }
+
+    // Rider already answered today?
+    const answeredToday = r.work_status !== null &&
+                          isTodayManila(r.work_status_set_at);
+
+    return res.json({
+      needs_prompt:        !answeredToday,
+      work_status:         answeredToday ? r.work_status : null,
+      overridden_by_admin: false,
+    });
+  } catch (err) {
+    console.error('[rider.getWorkStatus]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─── POST /api/rider/work-status ──────────────────────────────────────────────
+// Rider answers the daily prompt. One-shot per day.
+// Body: { status: 'working' | 'off' }
+exports.setWorkStatus = async (req, res) => {
+  try {
+    const riderId = req.user.sub;
+    const { status } = req.body;
+
+    if (!['working', 'off'].includes(status)) {
+      return res.status(400).json({ message: "status must be 'working' or 'off'." });
+    }
+
+    // Guard: allow only if no answer yet today (and no admin override)
+    const { rows: current } = await db.query(
+      `SELECT work_status, work_status_set_at,
+              admin_work_override, admin_work_override_at
+         FROM riders WHERE id = $1`,
+      [riderId]
+    );
+
+    if (!current[0]) return res.status(404).json({ message: 'Rider not found.' });
+
+    const r = current[0];
+
+    // Admin override active today — rider cannot change it
+    if (r.admin_work_override !== null && isTodayManila(r.admin_work_override_at)) {
+      return res.status(409).json({
+        message: 'Your availability for today has been set by admin and cannot be changed.',
+        work_status:         r.admin_work_override,
+        overridden_by_admin: true,
+      });
+    }
+
+    // Already answered today
+    if (r.work_status !== null && isTodayManila(r.work_status_set_at)) {
+      return res.status(409).json({
+        message: 'You have already set your availability for today.',
+        work_status: r.work_status,
+      });
+    }
+
+    // Persist the choice
+    const { rows: updated } = await db.query(
+      `UPDATE riders
+          SET work_status        = $1,
+              work_status_set_at = NOW(),
+              updated_at         = NOW()
+        WHERE id = $2
+        RETURNING work_status, work_status_set_at`,
+      [status, riderId]
+    );
+
+    // If rider chose to work, reflect that in their operational status too
+    if (status === 'working') {
+      await db.query(
+        `UPDATE riders SET status = 'available', updated_at = NOW()
+          WHERE id = $1 AND status = 'inactive'`,
+        [riderId]
+      );
+    }
+
+    return res.json({
+      work_status:         updated[0].work_status,
+      work_status_set_at:  updated[0].work_status_set_at,
+      overridden_by_admin: false,
+    });
+  } catch (err) {
+    console.error('[rider.setWorkStatus]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};

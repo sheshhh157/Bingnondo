@@ -1320,6 +1320,60 @@
   white-space: nowrap;
 }
 .sys-usage { font-size: 0.7rem; color: var(--color-muted-foreground); }
+
+/* ─── Payment QR codes (System Settings) ─────────────────────────────── */
+.sys-qr-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.sys-qr-thumb {
+  width: 58px;
+  height: 58px;
+  flex-shrink: 0;
+  padding: 3px;
+  object-fit: contain;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: #fff;
+}
+.sys-qr-upload {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 160px;
+  padding: 14px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.sys-qr-upload:hover { border-color: var(--color-gold); }
+.sys-qr-upload:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+.sys-qr-upload__input { display: none; }
+.sys-qr-upload__img {
+  max-width: 180px;
+  max-height: 180px;
+  object-fit: contain;
+}
+.sys-qr-upload__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-muted-foreground);
+  font-size: 0.75rem;
+  text-align: center;
+}
+.sys-qr-upload__placeholder strong {
+  color: var(--color-foreground);
+  font-weight: 600;
+}
+.sys-qr-upload__hint { font-size: 0.68rem; }
 .sys-hint-inline {
   margin: 0;
   font-size: 0.7rem;

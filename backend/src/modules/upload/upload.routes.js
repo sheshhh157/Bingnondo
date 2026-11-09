@@ -1,11 +1,14 @@
 const express = require('express');
 const router  = express.Router();
 const { authenticateToken, requireStaff, requireRoles } = require('../../middleware/auth.middleware');
-const { upload } = require('../../config/cloudinary');
+const { upload, uploadQr } = require('../../config/cloudinary');
 const ctrl = require('./upload.controller');
 
 // 'cashier' added — cashier can now upload menu images via the Staff Portal tab
 const staffWrite = [authenticateToken, requireStaff, requireRoles('cashier', 'admin')];
+
+// Payment QR codes are managed from System Settings, so admins only.
+const adminWrite = [authenticateToken, requireStaff, requireRoles('admin')];
 
 // Multer error handler — converts multer errors to clean JSON responses
 function handleMulterError(err, req, res, next) {
@@ -32,6 +35,22 @@ router.delete(
   '/menu-image',
   ...staffWrite,
   ctrl.deleteMenuImage
+);
+
+// POST /api/upload/qr-code  — admin uploads a payment QR image to Cloudinary
+router.post(
+  '/qr-code',
+  ...adminWrite,
+  uploadQr.single('image'),
+  handleMulterError,
+  ctrl.uploadQrCode
+);
+
+// DELETE /api/upload/qr-code  — remove a QR image from Cloudinary by public_id
+router.delete(
+  '/qr-code',
+  ...adminWrite,
+  ctrl.deleteQrCode
 );
 
 module.exports = router;

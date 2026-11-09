@@ -180,7 +180,7 @@ ensureSchema()
       console.log(`                GET/PUT              /api/admin/riders/:id`);
       console.log(`                PATCH                /api/admin/riders/:id/status`);
       console.log(`                POST                 /api/admin/riders/:id/reset-password`);
-      console.log(`Restrictions: GET                  /api/admin/customer-restrictions`);
+      console.log(`Restrictions: GET/POST             /api/admin/customer-restrictions`);
       console.log(`              GET                  /api/admin/customer-restrictions/:id/violations`);
       console.log(`              PATCH                /api/admin/customer-restrictions/:id`);
       console.log(`              PATCH                /api/admin/customer-restrictions/:id/account-status`);

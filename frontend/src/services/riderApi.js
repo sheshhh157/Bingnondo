@@ -132,6 +132,29 @@ export const updateRiderLocation = (payload) => post('/api/rider/location', payl
  */
 export const getRiderLocation = (riderId) => get(`/api/rider/location/${riderId}`);
 
+// ── Daily Work Status ──────────────────────────────────────────────────────────
+
+/**
+ * GET /api/rider/work-status
+ * Returns the rider's work status for today.
+ *
+ * Response shape:
+ * {
+ *   needs_prompt:        boolean,          // true → show the slide prompt
+ *   work_status:         'working' | 'off' | null,
+ *   overridden_by_admin: boolean,
+ * }
+ */
+export const getWorkStatus = () => get('/api/rider/work-status');
+
+/**
+ * POST /api/rider/work-status
+ * Rider answers the daily prompt. One-shot per day (resets at 12:00 AM).
+ *
+ * payload: { status: 'working' | 'off' }
+ */
+export const setWorkStatus = (status) => post('/api/rider/work-status', { status });
+
 export default {
   getCurrentDelivery,
   updateDeliveryStatus,
@@ -141,4 +164,6 @@ export default {
   updateRiderLocation,
   getRiderLocation,
   getCurrentBatch,
+  getWorkStatus,
+  setWorkStatus,
 };

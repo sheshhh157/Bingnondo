@@ -47,4 +47,46 @@ async function deleteMenuImage(req, res, next) {
   }
 }
 
-module.exports = { uploadMenuImage, deleteMenuImage };
+// ─── POST /api/upload/qr-code ────────────────────────────────────────────────
+// Admin-only. Multer has already streamed the file to Cloudinary.
+async function uploadQrCode(req, res, next) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file provided.' });
+    }
+
+    res.status(201).json({
+      url:       req.file.path,
+      public_id: req.file.filename,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── DELETE /api/upload/qr-code ──────────────────────────────────────────────
+// Body: { public_id: 'bingnondo/qr_codes/abc123' }
+async function deleteQrCode(req, res, next) {
+  try {
+    const { public_id } = req.body;
+    if (!public_id) {
+      return res.status(400).json({ message: 'public_id is required.' });
+    }
+
+    if (!String(public_id).startsWith('bingnondo/qr_codes/')) {
+      return res.status(403).json({ message: 'Cannot delete files outside the QR code folder.' });
+    }
+
+    const result = await cloudinary.uploader.destroy(public_id);
+
+    if (result.result === 'not found') {
+      return res.status(404).json({ message: 'Image not found on Cloudinary.' });
+    }
+
+    res.json({ message: 'Image deleted.', result: result.result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { uploadMenuImage, deleteMenuImage, uploadQrCode, deleteQrCode };

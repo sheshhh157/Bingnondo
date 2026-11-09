@@ -185,6 +185,27 @@ export const uploadAPI = {
       method: 'DELETE',
       body: JSON.stringify({ public_id }),
     }),
+
+  /**
+   * Upload a payment QR code image to Cloudinary (admin only).
+   * @param {File} file
+   * @returns {{ data: { url: string, public_id: string } }}
+   */
+  uploadQrImage: (file) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return uploadRequest('/upload/qr-code', fd);
+  },
+
+  /**
+   * Delete a payment QR code image from Cloudinary.
+   * @param {string} public_id  — e.g. 'bingnondo/qr_codes/abc123'
+   */
+  deleteQrImage: (public_id) =>
+    apiRequest('/upload/qr-code', {
+      method: 'DELETE',
+      body: JSON.stringify({ public_id }),
+    }),
 };
 
 // ─── KITCHEN ──────────────────────────────────────────────────────────────────
@@ -346,6 +367,37 @@ updateVariantGroup: (id, name, maxOptions) =>
       body: JSON.stringify({ categories }),
     }),
 
+  // ── Delivery Fee ─────────────────────────────────────────────────────────────
+  getDeliveryFee: () =>
+    apiRequest('/admin/system-settings/delivery-fee'),
+
+  saveDeliveryFee: (data) =>
+    apiRequest('/admin/system-settings/delivery-fee', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: data.enabled, amount: data.amount }),
+    }),
+
+  // ── Payment QR Codes ─────────────────────────────────────────────────────────
+  listPaymentQrCodes: () =>
+    apiRequest('/admin/system-settings/qr-codes'),
+
+  createPaymentQrCode: (data) =>
+    apiRequest('/admin/system-settings/qr-codes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updatePaymentQrCode: (id, data) =>
+    apiRequest(`/admin/system-settings/qr-codes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deletePaymentQrCode: (id) =>
+    apiRequest(`/admin/system-settings/qr-codes/${id}`, {
+      method: 'DELETE',
+    }),
+
   // ── Customer Restrictions ────────────────────────────────────────────────────
   listCustomerRestrictions: (params = {}) => {
     const q = new URLSearchParams();
@@ -358,6 +410,19 @@ updateVariantGroup: (id, name, maxOptions) =>
     const qs = q.toString();
     return apiRequest(`/admin/customer-restrictions${qs ? `?${qs}` : ''}`);
   },
+
+  createCustomerAccount: (data) =>
+    apiRequest('/admin/customer-restrictions', {
+      method: 'POST',
+      body: JSON.stringify({
+        first_name:    data.first_name,
+        last_name:     data.last_name,
+        email:         data.email,
+        mobile_number: data.mobile_number,
+        password:      data.temp_password,   // backend expects 'password'
+        address:       data.address || undefined,
+      }),
+    }),
 
   getCustomerViolations: (customerId) =>
     apiRequest(`/admin/customer-restrictions/${customerId}/violations`),
@@ -433,7 +498,9 @@ export const adminRidersAPI = {
    *  created with a NULL hash that can never sign in.
    */
   create: (payload) => apiClient.post('/api/admin/riders', {
-    full_name:     payload.full_name,
+    first_name:    payload.first_name,
+    middle_name:   payload.middle_name,
+    last_name:     payload.last_name,
     mobile_number: payload.mobile_number,
     email:         payload.email,
     plate_number:  payload.plate_number,
@@ -447,7 +514,9 @@ export const adminRidersAPI = {
    *  update contract (use resetPassword instead) and is dropped here.
    */
   update: (id, payload) => apiClient.put(`/api/admin/riders/${id}`, {
-    full_name:     payload.full_name,
+    first_name:    payload.first_name,
+    middle_name:   payload.middle_name,
+    last_name:     payload.last_name,
     mobile_number: payload.mobile_number,
     email:         payload.email,
     plate_number:  payload.plate_number,
@@ -465,6 +534,13 @@ export const adminRidersAPI = {
 
   /** DELETE /api/admin/riders/:id — permanently remove a rider */
   remove: (id) => apiClient.del(`/api/admin/riders/${id}`),
+
+  /** PATCH /api/admin/riders/:id/work-override — set or clear today's work override
+   *  override: 'working' | 'off' | null
+   *  null clears the override (rider will be prompted on next login after midnight)
+   */
+  setWorkOverride: (id, override) =>
+    apiClient.patch(`/api/admin/riders/${id}/work-override`, { override }),
 };
 
 // ─── ADMIN DELIVERIES API ─────────────────────────────────────────────────────

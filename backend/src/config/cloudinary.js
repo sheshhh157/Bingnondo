@@ -56,4 +56,28 @@ const uploadReceipt = multer({
   },
 });
 
-module.exports = { cloudinary, upload, uploadReceipt };
+// ─── Multer storage: payment QR codes ────────────────────────────────────────
+// QR codes need to stay sharp, so no resizing — only format/quality tuning.
+const qrStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder:          'bingnondo/qr_codes',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [
+      { quality: 'auto:good', fetch_format: 'auto' },
+    ],
+  },
+});
+
+const uploadQr = multer({
+  storage: qrStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed.'));
+    }
+    cb(null, true);
+  },
+});
+
+module.exports = { cloudinary, upload, uploadReceipt, uploadQr };

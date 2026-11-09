@@ -8,6 +8,11 @@ import {
 import { useAdminToast } from './useAdminToast';
 import { formatDate } from './format';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
+import {
+  LIMITS,
+  sanitizePersonName, sanitizeEmail,
+  validatePersonName, validateEmail, validatePassword,
+} from '../../utils/validation';
 import '../../styles/AdminPage.css';
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -23,16 +28,9 @@ const ROLE_DESC = {
   kitchen_staff: 'Kitchen Staff: sees the kitchen queue and updates order progress.',
 };
 
-// ── name uniqueness ───────────────────────────────────────────────────────────
-// Staff names must be unique. Compared case- and whitespace-insensitively so
-// "Maria  Santos" and "maria santos" are treated as the same person.
-const normalizeName = (name) => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
-
-function isNameTaken(name, accounts, selfId) {
-  const normalized = normalizeName(name);
-  if (!normalized) return false;
-  return accounts.some((a) => a.id !== selfId && normalizeName(a.full_name) === normalized);
-}
+// (name uniqueness is handled by validatePersonName from validation.js)
+// full_name is a generated column in the DB — the frontend never composes it.
+// We just send first_name, middle_name (optional), last_name separately.
 
 // ── tiny icons ────────────────────────────────────────────────────────────────
 const PlusIcon = () => (
@@ -83,57 +81,135 @@ const KebabIcon = () => (
 
 // ── Create account modal ──────────────────────────────────────────────────────
 function CreateModal({ open, onClose, onCreated, toast, accounts = [] }) {
-  const [form, setForm] = useState({ full_name: '', email: '', role: 'cashier', temp_password: '' });
-  const [errors, setErrors] = useState({});
+  const EMPTY = { first_name: '', middle_name: '', last_name: '', email: '', role: 'cashier', temp_password: '' };
+  const [form, setForm]       = useState(EMPTY);
+  const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })); };
+  // Compose just for the real-time duplicate UI check (backend does the final check too).
+  const composedName = [form.first_name, form.middle_name, form.last_name]
+    .map(s => s.trim()).filter(Boolean).join(' ');
 
-  function validate() {
-    const e = {};
-    if (!form.full_name.trim())                   e.full_name     = 'Full name is required.';
-    else if (isNameTaken(form.full_name, accounts)) e.full_name   = 'This name is already in use.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email.';
-    if (!form.role)                    e.role          = 'Select a role.';
-    if (form.temp_password.length < 8) e.temp_password = 'Minimum 8 characters.';
-    setErrors(e); return Object.keys(e).length === 0;
+  const liveErrors = {
+    first_name:    validatePersonName(form.first_name,  { label: 'First name' }),
+    middle_name:   form.middle_name.trim()
+                     ? validatePersonName(form.middle_name, { label: 'Middle name', required: false })
+                     : '',
+    last_name:     validatePersonName(form.last_name,   { label: 'Last name' }),
+    duplicate:     composedName && accounts.some(
+                     (a) => a.full_name?.trim().toLowerCase() === composedName.toLowerCase()
+                   ) ? 'This name is already in use.' : '',
+    email:         validateEmail(form.email),
+    role:          form.role ? '' : 'Select a role.',
+    temp_password: validatePassword(form.temp_password),
+  };
+
+  const set = (k, v) => {
+    setForm(f => ({ ...f, [k]: v }));
+    setTouched(t => ({ ...t, [k]: true }));
+  };
+
+  const handleFirstChange  = (e) => set('first_name',  sanitizePersonName(e.target.value, LIMITS.personName));
+  const handleMiddleChange = (e) => set('middle_name', sanitizePersonName(e.target.value, LIMITS.personName));
+  const handleLastChange   = (e) => set('last_name',   sanitizePersonName(e.target.value, LIMITS.personName));
+  const handleEmailChange  = (e) => set('email', sanitizeEmail(e.target.value));
+  const handlePassChange   = (e) => set('temp_password', e.target.value.slice(0, LIMITS.password));
+
+  function hasErrors() {
+    return !!(liveErrors.first_name || liveErrors.middle_name || liveErrors.last_name ||
+              liveErrors.duplicate || liveErrors.email || liveErrors.role || liveErrors.temp_password);
   }
 
   async function submit() {
-    if (!validate()) return;
+    setTouched({ first_name: true, middle_name: true, last_name: true, email: true, role: true, temp_password: true });
+    if (hasErrors()) return;
     setLoading(true);
     try {
       await adminAPI.createStaffAccount({
-        full_name:     form.full_name.trim(),
+        first_name:    form.first_name.trim(),
+        middle_name:   form.middle_name.trim() || undefined,
+        last_name:     form.last_name.trim(),
         email:         form.email.trim(),
         role:          form.role,
         temp_password: form.temp_password,
       });
-      toast.success(`Account created for ${form.full_name.trim()}.`);
+      toast.success(`Account created for ${composedName}.`);
       onCreated();
       onClose();
-      setForm({ full_name: '', email: '', role: 'cashier', temp_password: '' });
+      setForm(EMPTY);
+      setTouched({});
     } catch (err) {
       toast.error(err?.response?.data?.message || err.message || 'Failed to create account.');
     } finally { setLoading(false); }
   }
 
+  const err = (k) => (touched[k] ? liveErrors[k] : '');
+  // Duplicate error shows once either first or last name is touched.
+  const dupErr = (touched.first_name || touched.last_name) ? liveErrors.duplicate : '';
+
   return (
     <Modal open={open} onClose={onClose} title="Create staff account">
       <form onSubmit={e => { e.preventDefault(); submit(); }}>
-        <Field label="Full name" id="sa-name" error={errors.full_name}>
-          <TextInput id="sa-name" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="e.g. Maria Santos" error={errors.full_name} autoFocus />
+
+        {/* Name row: First + Last side by side */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
+          <Field label="First name" id="sa-first" error={err('first_name')}>
+            <TextInput id="sa-first" value={form.first_name}
+              onChange={handleFirstChange}
+              onBlur={() => setTouched(t => ({ ...t, first_name: true }))}
+              placeholder="e.g. Maria"
+              error={err('first_name')}
+              maxLength={LIMITS.personName}
+              autoFocus />
+          </Field>
+          <Field label="Last name" id="sa-last" error={err('last_name')}>
+            <TextInput id="sa-last" value={form.last_name}
+              onChange={handleLastChange}
+              onBlur={() => setTouched(t => ({ ...t, last_name: true }))}
+              placeholder="e.g. Santos"
+              error={err('last_name')}
+              maxLength={LIMITS.personName} />
+          </Field>
+        </div>
+
+        <Field label="Middle name" id="sa-middle" error={err('middle_name')}
+          hint="Optional">
+          <TextInput id="sa-middle" value={form.middle_name}
+            onChange={handleMiddleChange}
+            onBlur={() => setTouched(t => ({ ...t, middle_name: true }))}
+            placeholder="e.g. Reyes"
+            error={err('middle_name')}
+            maxLength={LIMITS.personName} />
         </Field>
-        <Field label="Email address" id="sa-email" error={errors.email}>
-          <TextInput id="sa-email" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="staff@bingnondo.com" error={errors.email} />
+
+        {dupErr && (
+          <p className="ap-field-error" role="alert" style={{ marginTop: -8, marginBottom: 10, fontSize: '0.75rem', color: 'var(--color-danger)' }}>
+            {dupErr}
+          </p>
+        )}
+
+        <Field label="Email address" id="sa-email" error={err('email')}>
+          <TextInput id="sa-email" value={form.email}
+            onChange={handleEmailChange}
+            onBlur={() => setTouched(t => ({ ...t, email: true }))}
+            placeholder="staff@bingnondo.com"
+            error={err('email')}
+            maxLength={LIMITS.email} />
         </Field>
-        <Field label="Role" id="sa-role" error={errors.role} hint={ROLE_DESC[form.role]}>
-          <AppSelect id="sa-role" value={form.role} onChange={e => set('role', e.target.value)}>
+        <Field label="Role" id="sa-role" error={err('role')} hint={ROLE_DESC[form.role]}>
+          <AppSelect id="sa-role" value={form.role}
+            onChange={e => set('role', e.target.value)}>
             {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </AppSelect>
         </Field>
-        <Field label="Temporary password" id="sa-pass" error={errors.temp_password}>
-          <PasswordInput id="sa-pass" value={form.temp_password} onChange={e => set('temp_password', e.target.value)} placeholder="Min. 8 characters" error={errors.temp_password} autoComplete="new-password" />
+        <Field label="Temporary password" id="sa-pass" error={err('temp_password')}
+          hint={`Min. 8 characters · max ${LIMITS.password}`}>
+          <PasswordInput id="sa-pass" value={form.temp_password}
+            onChange={handlePassChange}
+            onBlur={() => setTouched(t => ({ ...t, temp_password: true }))}
+            placeholder="Min. 8 characters"
+            error={err('temp_password')}
+            autoComplete="new-password" />
         </Field>
         <p className="ap-field-hint">
           Staff will be prompted to change this password on first sign-in. All actions are logged.
@@ -149,35 +225,62 @@ function CreateModal({ open, onClose, onCreated, toast, accounts = [] }) {
 
 // ── Edit account modal ────────────────────────────────────────────────────────
 function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
-  const [form, setForm] = useState({
-    full_name: account.full_name || '',
-    email:     account.email || '',
-    role:      account.role || 'cashier',
-  });
-  const [errors, setErrors] = useState({});
+  // The DB now returns first_name, middle_name, last_name directly — no splitting needed.
+  const [form, setForm] = useState(() => ({
+    first_name:  account.first_name  || '',
+    middle_name: account.middle_name || '',
+    last_name:   account.last_name   || '',
+    email: account.email || '',
+    role:  account.role  || 'cashier',
+  }));
+  const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })); };
+  const composedName = [form.first_name, form.middle_name, form.last_name]
+    .map(s => s.trim()).filter(Boolean).join(' ');
 
-  function validate() {
-    const e = {};
-    if (!form.full_name.trim()) e.full_name = 'Full name is required.';
-    else if (isNameTaken(form.full_name, accounts, account.id)) e.full_name = 'This name is already in use.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email.';
-    if (!form.role) e.role = 'Select a role.';
-    setErrors(e); return Object.keys(e).length === 0;
+  const liveErrors = {
+    first_name:  validatePersonName(form.first_name,  { label: 'First name' }),
+    middle_name: form.middle_name.trim()
+                   ? validatePersonName(form.middle_name, { label: 'Middle name', required: false })
+                   : '',
+    last_name:   validatePersonName(form.last_name,   { label: 'Last name' }),
+    duplicate:   composedName && composedName.toLowerCase() !== (account.full_name || '').toLowerCase() &&
+                 accounts.some((a) => a.id !== account.id &&
+                   a.full_name?.trim().toLowerCase() === composedName.toLowerCase()
+                 ) ? 'This name is already in use.' : '',
+    email:       validateEmail(form.email),
+    role:        form.role ? '' : 'Select a role.',
+  };
+
+  const set = (k, v) => {
+    setForm(f => ({ ...f, [k]: v }));
+    setTouched(t => ({ ...t, [k]: true }));
+  };
+
+  const handleFirstChange  = (e) => set('first_name',  sanitizePersonName(e.target.value, LIMITS.personName));
+  const handleMiddleChange = (e) => set('middle_name', sanitizePersonName(e.target.value, LIMITS.personName));
+  const handleLastChange   = (e) => set('last_name',   sanitizePersonName(e.target.value, LIMITS.personName));
+  const handleEmailChange  = (e) => set('email', sanitizeEmail(e.target.value));
+
+  function hasErrors() {
+    return !!(liveErrors.first_name || liveErrors.middle_name || liveErrors.last_name ||
+              liveErrors.duplicate || liveErrors.email || liveErrors.role);
   }
 
   async function submit() {
-    if (!validate()) return;
+    setTouched({ first_name: true, middle_name: true, last_name: true, email: true, role: true });
+    if (hasErrors()) return;
     setLoading(true);
     try {
       await adminAPI.updateStaffAccount(account.id, {
-        full_name: form.full_name.trim(),
-        email:     form.email.trim(),
-        role:      form.role,
+        first_name:  form.first_name.trim(),
+        middle_name: form.middle_name.trim() || undefined,
+        last_name:   form.last_name.trim(),
+        email:       form.email.trim(),
+        role:        form.role,
       });
-      toast.success(`${form.full_name.trim()} updated.`);
+      toast.success(`${composedName} updated.`);
       onSaved();
       onClose();
     } catch (err) {
@@ -185,17 +288,60 @@ function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
     } finally { setLoading(false); }
   }
 
+  const err   = (k) => (touched[k] ? liveErrors[k] : '');
+  const dupErr = (touched.first_name || touched.last_name) ? liveErrors.duplicate : '';
+
   return (
     <Modal open onClose={onClose} title="Edit staff account">
       <form onSubmit={e => { e.preventDefault(); submit(); }}>
-        <Field label="Full name" id="sa-edit-name" error={errors.full_name}>
-          <TextInput id="sa-edit-name" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="e.g. Maria Santos" error={errors.full_name} autoFocus />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
+          <Field label="First name" id="sa-edit-first" error={err('first_name')}>
+            <TextInput id="sa-edit-first" value={form.first_name}
+              onChange={handleFirstChange}
+              onBlur={() => setTouched(t => ({ ...t, first_name: true }))}
+              placeholder="e.g. Maria"
+              error={err('first_name')}
+              maxLength={LIMITS.personName}
+              autoFocus />
+          </Field>
+          <Field label="Last name" id="sa-edit-last" error={err('last_name')}>
+            <TextInput id="sa-edit-last" value={form.last_name}
+              onChange={handleLastChange}
+              onBlur={() => setTouched(t => ({ ...t, last_name: true }))}
+              placeholder="e.g. Santos"
+              error={err('last_name')}
+              maxLength={LIMITS.personName} />
+          </Field>
+        </div>
+
+        <Field label="Middle name" id="sa-edit-middle" error={err('middle_name')}
+          hint="Optional">
+          <TextInput id="sa-edit-middle" value={form.middle_name}
+            onChange={handleMiddleChange}
+            onBlur={() => setTouched(t => ({ ...t, middle_name: true }))}
+            placeholder="e.g. Reyes"
+            error={err('middle_name')}
+            maxLength={LIMITS.personName} />
         </Field>
-        <Field label="Email address" id="sa-edit-email" error={errors.email}>
-          <TextInput id="sa-edit-email" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="staff@bingnondo.com" error={errors.email} />
+
+        {dupErr && (
+          <p className="ap-field-error" role="alert" style={{ marginTop: -8, marginBottom: 10, fontSize: '0.75rem', color: 'var(--color-danger)' }}>
+            {dupErr}
+          </p>
+        )}
+
+        <Field label="Email address" id="sa-edit-email" error={err('email')}>
+          <TextInput id="sa-edit-email" value={form.email}
+            onChange={handleEmailChange}
+            onBlur={() => setTouched(t => ({ ...t, email: true }))}
+            placeholder="staff@bingnondo.com"
+            error={err('email')}
+            maxLength={LIMITS.email} />
         </Field>
-        <Field label="Role" id="sa-edit-role" error={errors.role} hint={ROLE_DESC[form.role]}>
-          <AppSelect id="sa-edit-role" value={form.role} onChange={e => set('role', e.target.value)}>
+        <Field label="Role" id="sa-edit-role" error={err('role')} hint={ROLE_DESC[form.role]}>
+          <AppSelect id="sa-edit-role" value={form.role}
+            onChange={e => set('role', e.target.value)}>
             {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </AppSelect>
         </Field>
@@ -211,16 +357,20 @@ function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
 // ── Reset password modal ──────────────────────────────────────────────────────
 function ResetPasswordModal({ open, onClose, account, toast }) {
   const [newPassword, setNewPassword] = useState('');
-  const [error, setError]             = useState('');
+  const [touched, setTouched]         = useState(false);
   const [loading, setLoading]         = useState(false);
 
+  const liveError = validatePassword(newPassword);
+
   async function submit() {
-    if (newPassword.length < 8) { setError('Minimum 8 characters.'); return; }
+    setTouched(true);
+    if (liveError) return;
     setLoading(true);
     try {
       await adminAPI.resetStaffPassword(account.id, newPassword);
       toast.success(`Password reset for ${account.full_name}.`);
       setNewPassword('');
+      setTouched(false);
       onClose();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Reset failed.');
@@ -233,8 +383,16 @@ function ResetPasswordModal({ open, onClose, account, toast }) {
         <p className="ap-field-hint" style={{ marginBottom: 14 }}>
           Enter a new password for this staff member. They should change it on next login.
         </p>
-        <Field id="rp-pass" error={error}>
-          <PasswordInput id="rp-pass" value={newPassword} onChange={e => { setNewPassword(e.target.value); setError(''); }} placeholder="New password (min. 8 chars)" error={error} autoFocus aria-label="New password" />
+        <Field id="rp-pass" error={touched ? liveError : ''}
+          hint={`Min. 8 characters · max ${LIMITS.password}`}>
+          <PasswordInput id="rp-pass"
+            value={newPassword}
+            onChange={e => { setNewPassword(e.target.value.slice(0, LIMITS.password)); setTouched(true); }}
+            onBlur={() => setTouched(true)}
+            placeholder="New password (min. 8 chars)"
+            error={touched ? liveError : ''}
+            autoFocus
+            aria-label="New password" />
         </Field>
         <div className="ap-modal__footer">
           <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>

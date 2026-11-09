@@ -12,7 +12,9 @@
  *      customers.status, and writes an audit row with from/to/reason.
  *   6. Validation: invalid status and a missing reason are 400s, an unknown
  *      customer is a 404.
- *   7. The whole router is admin-only — a cashier token gets a 403.
+ *   7. POST / creates a verified, active mobile-app account with a hashed
+ *      password, an audit row, and rejects duplicates/invalid input.
+ *   8. The whole router is admin-only — a cashier token gets a 403.
  *
  * The database-backed tests are skipped when no database is reachable. Each
  * test creates its own throwaway customers and removes them (together with
@@ -346,6 +348,109 @@ test('account-status validation: bad status, missing reason, unknown customer', 
   }
 });
 
+test('POST creates a verified, active mobile-app account with an audit row', async (t) => {
+  if (!(await canQuery())) return t.skip('no database');
+  const token = await signInAdmin();
+  if (!token) return t.skip('no active admin account');
+
+  const run = Date.now();
+  const ids = [];
+  try {
+    const email  = uniqueEmail(run);
+    const mobile = uniqueMobile(run);
+
+    const res = await call('POST', '/api/admin/customer-restrictions', {
+      token,
+      body: {
+        first_name: 'Maria',
+        last_name: 'Santos',
+        email,
+        mobile_number: mobile,
+        password: 'temp-pass-123',
+        address: '123 Test Street',
+      },
+    });
+    assert.equal(res.status, 201);
+    const id = res.body?.customer?.id;
+    ids.push(id);
+    assert.ok(id, 'response must include the new customer id');
+
+    const { rows } = await db.query(
+      `SELECT email, first_name, last_name, mobile_number, status, email_verified,
+              password_hash, address, profile_completed
+         FROM customers WHERE id = $1`,
+      [id]
+    );
+    const row = rows[0];
+    assert.equal(row.email, email);
+    assert.equal(row.first_name, 'Maria');
+    assert.equal(row.last_name, 'Santos');
+    assert.equal(row.mobile_number, mobile);
+    assert.equal(row.status, 'active');
+    assert.equal(row.email_verified, true);
+    assert.equal(row.address, '123 Test Street');
+    assert.equal(row.profile_completed, true);
+    assert.notEqual(row.password_hash, 'temp-pass-123', 'password must be hashed');
+    assert.equal(await require('bcrypt').compare('temp-pass-123', row.password_hash), true);
+
+    const audits = await auditRowsFor(id);
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, 'customer_account_created');
+    assert.equal(audits[0].details.customer_email, email);
+  } finally {
+    await cleanupCustomers(ids);
+  }
+});
+
+test('POST rejects duplicate email/mobile and invalid input', async (t) => {
+  if (!(await canQuery())) return t.skip('no database');
+  const token = await signInAdmin();
+  if (!token) return t.skip('no active admin account');
+
+  const run = Date.now();
+  const ids = [];
+  try {
+    const email  = uniqueEmail(run);
+    const mobile = uniqueMobile(run);
+
+    const first = await call('POST', '/api/admin/customer-restrictions', {
+      token,
+      body: { first_name: 'Test', last_name: 'User', email, mobile_number: mobile, password: 'temp-pass-123' },
+    });
+    assert.equal(first.status, 201);
+    ids.push(first.body?.customer?.id);
+
+    const dupEmail = await call('POST', '/api/admin/customer-restrictions', {
+      token,
+      body: { first_name: 'Other', last_name: 'User', email, mobile_number: uniqueMobile(run), password: 'temp-pass-123' },
+    });
+    assert.equal(dupEmail.status, 409);
+    assert.match(dupEmail.body?.message || '', /email/i);
+
+    const dupMobile = await call('POST', '/api/admin/customer-restrictions', {
+      token,
+      body: { first_name: 'Other', last_name: 'User', email: uniqueEmail(run), mobile_number: mobile, password: 'temp-pass-123' },
+    });
+    assert.equal(dupMobile.status, 409);
+    assert.match(dupMobile.body?.message || '', /mobile/i);
+
+    const badEmail = await call('POST', '/api/admin/customer-restrictions', {
+      token,
+      body: { first_name: 'Test', last_name: 'User', email: 'not-an-email', mobile_number: uniqueMobile(run), password: 'temp-pass-123' },
+    });
+    assert.equal(badEmail.status, 400);
+
+    const shortPass = await call('POST', '/api/admin/customer-restrictions', {
+      token,
+      body: { first_name: 'Test', last_name: 'User', email: uniqueEmail(run), mobile_number: uniqueMobile(run), password: 'short' },
+    });
+    assert.equal(shortPass.status, 400);
+    assert.match(shortPass.body?.message || '', /password/i);
+  } finally {
+    await cleanupCustomers(ids);
+  }
+});
+
 test('a non-admin token is refused with 403', async (t) => {
   if (!(await canQuery())) return t.skip('no database');
   const admToken = await signInAdmin();
@@ -359,4 +464,10 @@ test('a non-admin token is refused with 403', async (t) => {
     body: { status: 'suspended', reason: 'nope' },
   });
   assert.equal(patch.status, 403);
+
+  const post = await call('POST', '/api/admin/customer-restrictions', {
+    token: cashierToken(),
+    body: { first_name: 'A', last_name: 'B', email: 'x@y.test', mobile_number: '09171234567', password: 'temp-pass-123' },
+  });
+  assert.equal(post.status, 403);
 });

@@ -4,6 +4,11 @@ import { inventoryAPI, categoriesAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
 import { UNIT_OPTIONS } from '../../utils/units';
+import {
+  LIMITS,
+  sanitizeProductName, sanitizeDecimal,
+  validateShortName, validateStockNumber, isDuplicate, normalizeKey,
+} from '../../utils/validation';
 import '../../styles/InventoryPage.css';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -121,7 +126,10 @@ function RestockModal({ item, onClose, onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const qty = Number(quantity);
-    if (!qty || qty <= 0) { setError('Enter a valid quantity.'); return; }
+    if (!quantity || qty <= 0 || !Number.isFinite(qty)) {
+      setError('Enter a valid quantity greater than 0.');
+      return;
+    }
     setLoading(true); setError('');
     try {
       await onSubmit(item.id, { change_type: 'restock', quantity: qty, note });
@@ -168,20 +176,19 @@ function RestockModal({ item, onClose, onSubmit }) {
               <input
                 id="txn-qty"
                 ref={inputRef}
-                type="number"
-                min={1}
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={quantity}
-                onChange={(e) => { setQuantity(e.target.value); setError(''); }}
+                onChange={(e) => { setQuantity(sanitizeDecimal(e.target.value, { maxDecimals: 2, maxIntegerDigits: 6 })); setError(''); }}
                 className="inv-field__input"
                 placeholder="e.g. 50"
-                required
               />
-              {quantity && (
+              {quantity && Number(quantity) > 0 && (
                 <p className="inv-field__hint">
-                  New total: <strong>{item.current_stock + Number(quantity)} {item.unit}</strong>
+                  New total: <strong>{(item.current_stock + Number(quantity)).toFixed(2)} {item.unit}</strong>
                 </p>
               )}
+              <p className="inv-field__hint">Numbers only</p>
             </div>
 
             <div className="inv-field">
@@ -192,9 +199,10 @@ function RestockModal({ item, onClose, onSubmit }) {
                 id="txn-note"
                 type="text"
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
+                onChange={(e) => setNote(e.target.value.slice(0, LIMITS.note))}
                 className="inv-field__input"
                 placeholder="e.g. Delivery from supplier"
+                maxLength={LIMITS.note}
               />
             </div>
 
@@ -297,14 +305,12 @@ function AdjustModal({ item, onClose, onSubmit }) {
               <input
                 id="adjust-qty"
                 ref={inputRef}
-                type="number"
-                min={0}
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={newStock}
-                onChange={(e) => { setNewStock(e.target.value); setError(''); }}
+                onChange={(e) => { setNewStock(sanitizeDecimal(e.target.value, { maxDecimals: 2, maxIntegerDigits: 6 })); setError(''); }}
                 className="inv-field__input"
                 placeholder="0"
-                required
               />
               {valid && (
                 <p className="inv-field__hint">
@@ -480,7 +486,7 @@ function CategoryMultiSelect({ id, categories, value, onChange }) {
 }
 
 // ─── Add / Edit ingredient modal ──────────────────────────────────────────────
-function ItemModal({ mode, item, categories, onClose, onSubmit }) {
+function ItemModal({ mode, item, categories, allItems = [], onClose, onSubmit }) {
   const isEdit = mode === 'edit';
   const [name, setName]                 = useState(item?.name || '');
   const [unit, setUnit]                 = useState(item?.unit || '');
@@ -488,7 +494,8 @@ function ItemModal({ mode, item, categories, onClose, onSubmit }) {
   const [reorderLevel, setReorderLevel] = useState(item?.reorder_level != null ? String(item.reorder_level) : '');
   const [categoryIds, setCategoryIds]   = useState(() => (item?.categories || []).map((c) => c.id));
   const [loading, setLoading]           = useState(false);
-  const [error, setError]               = useState('');
+  const [serverError, setServerError]   = useState('');
+  const [touched, setTouched]           = useState({});
   const nameRef = useRef(null);
 
   useEffect(() => {
@@ -502,11 +509,32 @@ function ItemModal({ mode, item, categories, onClose, onSubmit }) {
     };
   }, [onClose]);
 
+  // Real-time errors — derived, never stored.
+  const liveErrors = {
+    name:         validateShortName(name, {
+                    label: 'Ingredient name',
+                    max: LIMITS.inventoryName,
+                    list: allItems,
+                    getValue: (r) => r.name,
+                    excludeId: item?.id ?? null,
+                  }),
+    unit:         unit ? '' : 'Please select a unit.',
+    currentStock: validateStockNumber(currentStock, { label: 'Starting stock', required: false }),
+    reorderLevel: validateStockNumber(reorderLevel, { label: 'Reorder level', required: false }),
+  };
+
+  const touch = (k) => setTouched(t => ({ ...t, [k]: true }));
+  const err   = (k) => (touched[k] ? liveErrors[k] : '');
+
+  const handleNameChange  = (e) => { setName(sanitizeProductName(e.target.value, LIMITS.inventoryName)); touch('name'); };
+  const handleStockChange = (e) => { setCurrentStock(sanitizeDecimal(e.target.value, { maxDecimals: 2, maxIntegerDigits: 6 })); touch('currentStock'); };
+  const handleReorderChange = (e) => { setReorderLevel(sanitizeDecimal(e.target.value, { maxDecimals: 2, maxIntegerDigits: 6 })); touch('reorderLevel'); };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) { setError('Ingredient name is required.'); return; }
-    if (!unit)        { setError('Please select a unit.'); return; }
-    setLoading(true); setError('');
+    setTouched({ name: true, unit: true, currentStock: true, reorderLevel: true });
+    if (Object.values(liveErrors).some(Boolean)) return;
+    setLoading(true); setServerError('');
     try {
       await onSubmit({
         name:          name.trim(),
@@ -517,9 +545,14 @@ function ItemModal({ mode, item, categories, onClose, onSubmit }) {
       });
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save ingredient.');
+      setServerError(err.response?.data?.message || 'Failed to save ingredient.');
     } finally { setLoading(false); }
   };
+
+  // Duplicate name indicator (shown inline, not as a blocking error on the
+  // name field, so the user can still see context while they rethink).
+  const nameDuplicate = name.trim() &&
+    isDuplicate(name.trim(), allItems, (r) => r.name, item?.id ?? null);
 
   return createPortal(
     <div className="inv-modal-overlay" onClick={onClose} role="presentation">
@@ -542,17 +575,31 @@ function ItemModal({ mode, item, categories, onClose, onSubmit }) {
         <div className="inv-modal__body">
           <form id="inv-item-form" onSubmit={handleSubmit} noValidate>
             <div className="inv-field">
-              <label htmlFor="ing-name" className="inv-field__label">Ingredient name <span className="inv-field__required">*</span></label>
+              <label htmlFor="ing-name" className="inv-field__label">
+                Ingredient name <span className="inv-field__required">*</span>
+              </label>
               <input
                 id="ing-name"
                 ref={nameRef}
                 type="text"
                 value={name}
-                onChange={(e) => { setName(e.target.value); setError(''); }}
-                className="inv-field__input"
+                onChange={handleNameChange}
+                onBlur={() => touch('name')}
+                className={`inv-field__input${err('name') ? ' inv-field__input--error' : ''}`}
                 placeholder="e.g. Pork belly"
-                required
+                maxLength={LIMITS.inventoryName}
               />
+              {err('name') && (
+                <p className="inv-field__error" role="alert">{err('name')}</p>
+              )}
+              {!err('name') && nameDuplicate && (
+                <p className="inv-field__warn" role="alert">
+                  An ingredient with this name already exists.
+                </p>
+              )}
+              <p className="inv-field__hint">
+                {name.length}/{LIMITS.inventoryName} chars · letters, digits, spaces allowed
+              </p>
             </div>
 
             <div className="inv-field">
@@ -560,15 +607,16 @@ function ItemModal({ mode, item, categories, onClose, onSubmit }) {
               <select
                 id="ing-unit"
                 value={unit}
-                onChange={(e) => { setUnit(e.target.value); setError(''); }}
-                className="inv-field__input"
-                required
+                onChange={(e) => { setUnit(e.target.value); touch('unit'); }}
+                onBlur={() => touch('unit')}
+                className={`inv-field__input${err('unit') ? ' inv-field__input--error' : ''}`}
               >
                 <option value="">Select unit…</option>
                 {UNIT_OPTIONS.map((u) => (
                   <option key={u.value} value={u.value}>{u.label}</option>
                 ))}
               </select>
+              {err('unit') && <p className="inv-field__error" role="alert">{err('unit')}</p>}
             </div>
 
             <div className="inv-field">
@@ -590,14 +638,15 @@ function ItemModal({ mode, item, categories, onClose, onSubmit }) {
                 </label>
                 <input
                   id="ing-stock"
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={currentStock}
-                  onChange={(e) => setCurrentStock(e.target.value)}
-                  className="inv-field__input"
+                  onChange={handleStockChange}
+                  onBlur={() => touch('currentStock')}
+                  className={`inv-field__input${err('currentStock') ? ' inv-field__input--error' : ''}`}
                   placeholder="0"
                 />
+                {err('currentStock') && <p className="inv-field__error" role="alert">{err('currentStock')}</p>}
               </div>
 
               <div className="inv-field">
@@ -606,23 +655,24 @@ function ItemModal({ mode, item, categories, onClose, onSubmit }) {
                 </label>
                 <input
                   id="ing-reorder"
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={reorderLevel}
-                  onChange={(e) => setReorderLevel(e.target.value)}
-                  className="inv-field__input"
+                  onChange={handleReorderChange}
+                  onBlur={() => touch('reorderLevel')}
+                  className={`inv-field__input${err('reorderLevel') ? ' inv-field__input--error' : ''}`}
                   placeholder="0"
                 />
+                {err('reorderLevel') && <p className="inv-field__error" role="alert">{err('reorderLevel')}</p>}
               </div>
             </div>
 
-            {error && (
+            {serverError && (
               <p className="inv-modal__error" role="alert">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                {error}
+                {serverError}
               </p>
             )}
           </form>
@@ -1070,6 +1120,7 @@ export default function InventoryPage() {
           mode={itemModal.mode}
           item={itemModal.item}
           categories={categories}
+          allItems={items}
           onClose={() => setItemModal(null)}
           onSubmit={handleItemSubmit}
         />

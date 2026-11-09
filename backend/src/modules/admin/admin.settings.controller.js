@@ -6,6 +6,7 @@ const {
   normalizeNotificationSettings,
   readNotificationSettings,
 } = require('./notificationSettings');
+const { SETTINGS_KEY: DELIVERY_FEE_KEY, readDeliveryFee } = require('../../config/deliveryFee');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -794,6 +795,74 @@ exports.saveNotificationSettings = async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[saveNotificationSettings]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  } finally {
+    client.release();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELIVERY FEE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/system-settings/delivery-fee
+ * Returns { enabled, amount }. Missing/malformed config reads as fee-off.
+ */
+exports.getDeliveryFee = async (req, res) => {
+  try {
+    const fee = await readDeliveryFee();
+    return res.json({ data: fee });
+  } catch (err) {
+    console.error('[getDeliveryFee]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+/**
+ * PUT /api/admin/system-settings/delivery-fee
+ * Body: { enabled: boolean, amount: number }
+ *
+ * The amount is stored even while the fee is disabled so the admin can toggle
+ * it back on without retyping it.
+ */
+exports.saveDeliveryFee = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const adminId = req.user.sub;
+    const { enabled, amount: rawAmount } = req.body || {};
+
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ message: '`enabled` must be true or false.' });
+    }
+
+    const amount = Number(rawAmount);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 99999999.99) {
+      return res.status(400).json({ message: 'Delivery fee must be a number between 0 and 99,999,999.99.' });
+    }
+    if (Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-9) {
+      return res.status(400).json({ message: 'Delivery fee allows up to 2 decimal places.' });
+    }
+
+    const settings = { enabled, amount: Math.round(amount * 100) / 100 };
+
+    await client.query('BEGIN');
+
+    await client.query(
+      `INSERT INTO system_settings (key, value, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [DELIVERY_FEE_KEY, JSON.stringify(settings)]
+    );
+
+    await writeAuditLog(client, adminId, 'update_delivery_fee', 'system_settings', null, settings);
+
+    await client.query('COMMIT');
+
+    return res.json({ message: 'Delivery fee saved successfully.', data: settings });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[saveDeliveryFee]', err);
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   } finally {
     client.release();

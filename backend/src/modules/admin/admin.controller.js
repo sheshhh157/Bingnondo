@@ -80,18 +80,26 @@ exports.getStaffAccount = async (req, res) => {
 /**
  * POST /api/admin/staff-accounts
  * Create a new staff account.
- * Body: { full_name, email, password, role }
+ * Body: { first_name, middle_name?, last_name, email, password, role }
+ * (full_name is a generated column — do not pass it; it is computed by the DB)
  */
 exports.createStaffAccount = async (req, res) => {
   const client = await db.getClient();
   try {
-    const { full_name, email, password, role } = req.body;
+    const { first_name, middle_name, last_name, email, password, role } = req.body;
     const adminId = req.user.sub;
 
-    if (!full_name || !email || !password || !role) {
-      return res.status(400).json({ message: 'full_name, email, password, and role are required.' });
+    const cleanFirst  = String(first_name  ?? '').trim();
+    const cleanMiddle = String(middle_name ?? '').trim() || null;
+    const cleanLast   = String(last_name   ?? '').trim();
+
+    if (!cleanFirst || !cleanLast || !email || !password || !role) {
+      return res.status(400).json({ message: 'first_name, last_name, email, password, and role are required.' });
     }
-    // Hard block — admin accounts can never be created via this endpoint, no exceptions
+    if (/\d/.test(cleanFirst) || /\d/.test(cleanLast) || (cleanMiddle && /\d/.test(cleanMiddle))) {
+      return res.status(400).json({ message: 'Name fields must not contain numbers.' });
+    }
+    // Hard block — admin accounts can never be created via this endpoint
     if (role === 'admin') {
       return res.status(403).json({ message: 'Admin accounts cannot be created through this interface.' });
     }
@@ -106,7 +114,7 @@ exports.createStaffAccount = async (req, res) => {
 
     await client.query('BEGIN');
 
-    // Check email uniqueness
+    // Email uniqueness
     const { rows: existing } = await client.query(
       'SELECT id FROM staff_accounts WHERE email = $1',
       [normalizedEmail]
@@ -116,12 +124,14 @@ exports.createStaffAccount = async (req, res) => {
       return res.status(409).json({ message: 'An account with this email already exists.' });
     }
 
-    // Check full name uniqueness (case- and whitespace-insensitive)
+    // Full name uniqueness — compare against the generated full_name column.
     const { rows: nameTaken } = await client.query(
       `SELECT id FROM staff_accounts
         WHERE lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
             = lower(regexp_replace(btrim($1),        '[[:space:]]+', ' ', 'g'))`,
-      [full_name]
+      [
+        [cleanFirst, cleanMiddle, cleanLast].filter(Boolean).join(' ')
+      ]
     );
     if (nameTaken.length > 0) {
       await client.query('ROLLBACK');
@@ -131,10 +141,10 @@ exports.createStaffAccount = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const { rows } = await client.query(
-      `INSERT INTO staff_accounts (full_name, email, password_hash, role, created_by)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO staff_accounts (first_name, middle_name, last_name, email, password_hash, role, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [full_name.trim(), normalizedEmail, passwordHash, role, adminId]
+      [cleanFirst, cleanMiddle, cleanLast, normalizedEmail, passwordHash, role, adminId]
     );
     const newStaff = rows[0];
 
@@ -265,36 +275,42 @@ exports.resetStaffPassword = async (req, res) => {
 /**
  * PUT /api/admin/staff-accounts/:id
  * Update a staff account's name, email and/or role.
- * Body: { full_name?, email?, role? }
+ * Body: { first_name?, middle_name?, last_name?, email?, role? }
+ * (full_name is generated — never pass it directly)
  */
 exports.updateStaffAccount = async (req, res) => {
   const client = await db.getClient();
   try {
     const staffId = parseInt(req.params.id, 10);
     const adminId = req.user.sub;
-    const { full_name, email, role } = req.body;
+    const { first_name, middle_name, last_name, email, role } = req.body;
 
     if (isNaN(staffId)) return res.status(400).json({ message: 'Invalid staff ID.' });
 
     const { rows: currentRows } = await client.query(
-      'SELECT id, full_name, email, role FROM staff_accounts WHERE id = $1',
+      'SELECT id, first_name, middle_name, last_name, full_name, email, role FROM staff_accounts WHERE id = $1',
       [staffId]
     );
     const current = currentRows[0];
     if (!current) return res.status(404).json({ message: 'Staff account not found.' });
-    // Only cashier / kitchen_staff accounts are managed here (never admin/owner/legacy staff)
     if (!VALID_ROLES.includes(current.role)) {
       return res.status(403).json({ message: 'This account cannot be modified through this interface.' });
     }
 
-    const nextName  = full_name !== undefined ? String(full_name).trim() : null;
-    const nextEmail = email    !== undefined ? String(email).toLowerCase().trim() : null;
-    const nextRole  = role     !== undefined ? role : null;
+    const nextFirst  = first_name  !== undefined ? String(first_name).trim()  : null;
+    const nextMiddle = middle_name !== undefined
+                         ? (String(middle_name).trim() || null)
+                         : undefined; // undefined = don't touch
+    const nextLast   = last_name   !== undefined ? String(last_name).trim()   : null;
+    const nextEmail  = email       !== undefined ? String(email).toLowerCase().trim() : null;
+    const nextRole   = role        !== undefined ? role : null;
 
-    if (nextName !== null && nextName === '') {
-      return res.status(400).json({ message: 'Full name cannot be empty.' });
-    }
-    if (nextEmail !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+    if (nextFirst  !== null && nextFirst  === '') return res.status(400).json({ message: 'First name cannot be empty.' });
+    if (nextLast   !== null && nextLast   === '') return res.status(400).json({ message: 'Last name cannot be empty.' });
+    if (nextFirst  !== null && /\d/.test(nextFirst))  return res.status(400).json({ message: 'First name must not contain numbers.' });
+    if (nextLast   !== null && /\d/.test(nextLast))   return res.status(400).json({ message: 'Last name must not contain numbers.' });
+    if (nextMiddle && /\d/.test(nextMiddle))           return res.status(400).json({ message: 'Middle name must not contain numbers.' });
+    if (nextEmail  !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
       return res.status(400).json({ message: 'Enter a valid email address.' });
     }
     if (nextRole !== null && !VALID_ROLES.includes(nextRole)) {
@@ -317,14 +333,19 @@ exports.updateStaffAccount = async (req, res) => {
       }
     }
 
-    // Full name uniqueness (case- and whitespace-insensitive), ignoring this account.
-    if (nextName !== null) {
+    // Build the composed name we're updating to, for the duplicate check.
+    const composedFirst  = nextFirst  ?? current.first_name;
+    const composedMiddle = nextMiddle !== undefined ? nextMiddle : current.middle_name;
+    const composedLast   = nextLast   ?? current.last_name;
+    const composedName   = [composedFirst, composedMiddle, composedLast].filter(Boolean).join(' ');
+
+    if (nextFirst !== null || nextMiddle !== undefined || nextLast !== null) {
       const { rows: nameDup } = await client.query(
         `SELECT id FROM staff_accounts
           WHERE id <> $2
             AND lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
               = lower(regexp_replace(btrim($1),        '[[:space:]]+', ' ', 'g'))`,
-        [nextName, staffId]
+        [composedName, staffId]
       );
       if (nameDup.length > 0) {
         await client.query('ROLLBACK');
@@ -334,19 +355,21 @@ exports.updateStaffAccount = async (req, res) => {
 
     const { rows } = await client.query(
       `UPDATE staff_accounts SET
-         full_name  = COALESCE($1, full_name),
-         email      = COALESCE($2, email),
-         role       = COALESCE($3, role),
-         updated_at = NOW()
-       WHERE id = $4
+         first_name  = COALESCE($1, first_name),
+         middle_name = CASE WHEN $2::text IS NOT NULL THEN $2 ELSE middle_name END,
+         last_name   = COALESCE($3, last_name),
+         email       = COALESCE($4, email),
+         role        = COALESCE($5, role),
+         updated_at  = NOW()
+       WHERE id = $6
        RETURNING *`,
-      [nextName || null, nextEmail || null, nextRole, staffId]
+      [nextFirst, nextMiddle ?? null, nextLast, nextEmail, nextRole, staffId]
     );
     const updated = rows[0];
 
     await writeAuditLog(client, adminId, 'update_staff_account', 'staff_accounts', staffId, {
       before: { full_name: current.full_name, email: current.email, role: current.role },
-      after:  { full_name: updated.full_name,  email: updated.email,  role: updated.role  },
+      after:  { full_name: updated.full_name, email: updated.email, role: updated.role  },
     });
 
     await client.query('COMMIT');

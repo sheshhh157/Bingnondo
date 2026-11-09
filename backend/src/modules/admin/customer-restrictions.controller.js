@@ -1,6 +1,20 @@
+const bcrypt = require('bcrypt');
 const db = require('../../config/db');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
+
+const BCRYPT_ROUNDS = 12;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** Normalize a PH mobile number to the 11 characters the column allows. */
+function normalizeMobile(value) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) return `0${digits}`;
+  if (digits.length === 12 && digits.startsWith('63')) return `0${digits.slice(2)}`;
+  if (digits.length === 11) return digits;
+  return digits.slice(-11);
+}
 
 async function writeAuditLog(client, actorId, action, targetType, targetId, details = {}) {
   await client.query(
@@ -366,6 +380,105 @@ exports.updateCustomerAccountStatus = async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[customer-restrictions] updateCustomerAccountStatus:', err);
+    res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * POST /api/admin/customer-restrictions
+ *
+ * Admin creates a mobile-app (customer) account on a user's behalf. The
+ * account is created already verified and active so the user can sign in to
+ * the app immediately with the temporary password.
+ *
+ * Body: { first_name, last_name, email, mobile_number, password, address? }
+ */
+exports.createCustomerAccount = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const body = req.body || {};
+    const firstName = String(body.first_name || '').trim();
+    const lastName  = String(body.last_name  || '').trim();
+    const email     = String(body.email || '').toLowerCase().trim();
+    const mobile    = normalizeMobile(body.mobile_number);
+    const password  = typeof body.password === 'string' ? body.password : '';
+    const address   = String(body.address || '').trim() || null;
+
+    if (!firstName) return res.status(400).json({ message: 'First name is required.' });
+    if (!lastName)  return res.status(400).json({ message: 'Last name is required.' });
+    if (firstName.length > 50) return res.status(400).json({ message: 'First name must be 50 characters or fewer.' });
+    if (lastName.length > 50)  return res.status(400).json({ message: 'Last name must be 50 characters or fewer.' });
+
+    if (!email || !EMAIL_RE.test(email)) {
+      return res.status(400).json({ message: 'Enter a valid email address.' });
+    }
+    if (!/^(09\d{9}|639\d{9})$/.test(mobile)) {
+      return res.status(400).json({ message: 'Enter a valid mobile number (e.g. 09XX XXX XXXX).' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    }
+    if (password.length > 128) {
+      return res.status(400).json({ message: 'Password must be 128 characters or fewer.' });
+    }
+
+    // Uniqueness is enforced by DB constraints too, but checking first gives a
+    // clear field-specific message instead of a generic conflict.
+    const { rows: existing } = await client.query(
+      `SELECT email, mobile_number FROM customers
+        WHERE email = $1 OR mobile_number = $2
+        LIMIT 1`,
+      [email, mobile]
+    );
+    if (existing.length > 0) {
+      if (existing[0].email === email) {
+        return res.status(409).json({ message: 'An account with this email already exists.' });
+      }
+      return res.status(409).json({ message: 'An account with this mobile number already exists.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      `INSERT INTO customers
+            (email, password_hash, email_verified, first_name, last_name,
+             mobile_number, mobile_verified, address, profile_completed, status)
+       VALUES ($1, $2, TRUE, $3, $4, $5, TRUE, $6, $7, 'active')
+       RETURNING id, email, first_name, last_name, mobile_number, status, created_at`,
+      [email, passwordHash, firstName, lastName, mobile, address, Boolean(address)]
+    );
+    const customer = rows[0];
+
+    await writeAuditLog(
+      client,
+      req.user.sub,
+      'customer_account_created',
+      'customer',
+      customer.id,
+      {
+        customer_email: customer.email,
+        customer_name:  `${firstName} ${lastName}`.trim(),
+        mobile_number:  customer.mobile_number,
+        created_by:     req.user.sub,
+      }
+    );
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      message: 'User account created.',
+      customer,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err?.code === '23505') {
+      return res.status(409).json({ message: 'An account with this email or mobile number already exists.' });
+    }
+    console.error('[customer-restrictions] createCustomerAccount:', err);
     res.status(500).json({ message: 'Something went wrong. Please try again.' });
   } finally {
     client.release();

@@ -25,4 +25,8 @@ router.get  ('/batch/current',       ctrl.getCurrentBatch);      // GET  /api/ri
 router.post ('/location',            ctrl.updateLocation);       // POST /api/rider/location
 router.get  ('/location/:riderId',   ctrl.getRiderLocation);     // GET  /api/rider/location/:riderId
 
+// ── Daily Work Status ──────────────────────────────────────────────────────────
+router.get  ('/work-status',         ctrl.getWorkStatus);        // GET  /api/rider/work-status
+router.post ('/work-status',         ctrl.setWorkStatus);        // POST /api/rider/work-status
+
 module.exports = router;
