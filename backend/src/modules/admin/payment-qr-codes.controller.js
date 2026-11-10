@@ -1,5 +1,6 @@
 const db = require('../../config/db');
 const { cloudinary } = require('../../config/cloudinary');
+const { archiveRecord } = require('./archive.service');
 
 // Only images that live in our QR folder may be deleted from Cloudinary.
 const QR_FOLDER = 'bingnondo/qr_codes/';
@@ -228,16 +229,21 @@ exports.deleteQrCode = async (req, res) => {
     const existing = rows[0];
 
     await client.query('BEGIN');
+    await archiveRecord(client, {
+      entityType: 'payment_qr_code',
+      entityId: qrId,
+      displayName: existing.name,
+      payload: { record: existing },
+      actorId: req.user.sub,
+    });
     await client.query('DELETE FROM payment_qr_codes WHERE id = $1', [qrId]);
-    await writeAuditLog(client, req.user.sub, 'delete_payment_qr_code', qrId, {
+    await writeAuditLog(client, req.user.sub, 'archive_payment_qr_code', qrId, {
       name: existing.name,
       number: existing.number,
     });
     await client.query('COMMIT');
 
-    await destroyQrImage(existing.image_public_id);
-
-    return res.json({ message: 'QR code deleted successfully.' });
+    return res.json({ message: 'QR code moved to the archive for 30 days.' });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[deleteQrCode]', err);

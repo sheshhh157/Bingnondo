@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const db = require('../../config/db');
+const { archiveRecord } = require('./archive.service');
 const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('../rider/assignment');
 
 const BCRYPT_ROUNDS = 12;
@@ -57,7 +58,11 @@ exports.listRiders = async (req, res) => {
     const { rows } = await db.query(
       `SELECT
          r.id,
+         r.first_name,
+         r.middle_name,
+         r.last_name,
          r.full_name,
+         r.profile_image_url,
          r.mobile_number,
          r.email,
          r.plate_number,
@@ -521,13 +526,14 @@ exports.deleteRider = async (req, res) => {
       return res.status(400).json({ message: 'Invalid rider ID.' });
     }
 
-    const { rows: current } = await client.query(
-      `SELECT id, full_name, mobile_number, email, status FROM riders WHERE id = $1`,
+    const { rows: currentRows } = await client.query(
+      `SELECT to_jsonb(r) AS record FROM riders r WHERE r.id = $1`,
       [riderId]
     );
-    if (!current[0]) return res.status(404).json({ message: 'Rider not found.' });
+    const current = currentRows[0]?.record;
+    if (!current) return res.status(404).json({ message: 'Rider not found.' });
 
-    if (current[0].status === 'on_delivery') {
+    if (current.status === 'on_delivery') {
       return res.status(409).json({
         message: 'Cannot delete a rider who is currently on a delivery. Wait until they complete it, or deactivate them.',
       });
@@ -535,6 +541,13 @@ exports.deleteRider = async (req, res) => {
 
     await client.query('BEGIN');
 
+    await archiveRecord(client, {
+      entityType: 'rider',
+      entityId: riderId,
+      displayName: current.full_name,
+      payload: { record: current },
+      actorId: req.user.sub,
+    });
     const { rows } = await client.query(
       `DELETE FROM riders WHERE id = $1 RETURNING id`,
       [riderId]
@@ -544,15 +557,15 @@ exports.deleteRider = async (req, res) => {
       return res.status(404).json({ message: 'Rider not found.' });
     }
 
-    await writeAuditLog(client, req.user.sub, 'delete_rider', 'rider', riderId, {
-      full_name: current[0].full_name,
-      mobile_number: current[0].mobile_number,
-      email: current[0].email,
+    await writeAuditLog(client, req.user.sub, 'archive_rider', 'rider', riderId, {
+      full_name: current.full_name,
+      mobile_number: current.mobile_number,
+      email: current.email,
     });
 
     await client.query('COMMIT');
 
-    res.json({ message: 'Rider deleted successfully.' });
+    res.json({ message: 'Rider moved to the archive for 30 days.' });
   } catch (err) {
     await client.query('ROLLBACK');
     if (err && err.code === '23503') {

@@ -293,8 +293,8 @@ function CategoryManager({ categories, variantGroups, onRemove, onRename, onTogg
         onConfirm={confirmDelete}
         loading={deleting}
         title="Delete category"
-        message={`Delete the "${deleteTarget?.name}" category? This cannot be undone. This action is logged.`}
-        confirmLabel="Delete"
+        message={`Move the "${deleteTarget?.name}" category to the archive? It can be restored for 30 days.`}
+        confirmLabel="Archive"
         variant="danger"
       />
     </div>
@@ -942,7 +942,7 @@ export default function SystemSettings() {
     try {
       await adminAPI.deletePaymentQrCode(deleteQr.id);
       setQrCodes(prev => prev.filter(q => q.id !== deleteQr.id));
-      toast.success(`QR code "${deleteQr.name}" removed.`);
+      toast.success(`QR code "${deleteQr.name}" moved to the archive for 30 days.`);
       setDeleteQr(null);
     } catch (err) {
       toast.error(err?.response?.data?.message || err.message || 'Failed to delete QR code.');
@@ -1392,8 +1392,8 @@ export default function SystemSettings() {
         onConfirm={handleDeleteQr}
         loading={deletingQr}
         title="Delete QR code"
-        message={`Delete the "${deleteQr?.name}" QR code? The image is removed from the cloud too. This action is logged.`}
-        confirmLabel="Delete"
+        message={`Move the "${deleteQr?.name}" QR code to the archive? Its image will be kept for 30 days so it can be restored.`}
+        confirmLabel="Archive"
         variant="danger"
       />
 
@@ -1413,8 +1413,8 @@ export default function SystemSettings() {
         onConfirm={handleDeleteVariant}
         loading={deletingVariant}
         title="Delete variant"
-        message={`Delete the "${deleteVariant?.name}" variant? Its options are removed too. This action is logged.`}
-        confirmLabel="Delete"
+        message={`Move the "${deleteVariant?.name}" variant to the archive? Its options can be restored for 30 days.`}
+        confirmLabel="Archive"
         variant="danger"
       />
     </>

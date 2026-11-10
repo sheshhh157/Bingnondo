@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { inventoryAPI, categoriesAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { UNIT_OPTIONS } from '../../utils/units';
 import {
   LIMITS,
@@ -702,6 +703,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('name');
@@ -797,8 +799,8 @@ export default function InventoryPage() {
 
   const filtered = useMemo(() => {
     let r = items;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase();
       r = r.filter((i) => i.name.toLowerCase().includes(q) || i.unit.toLowerCase().includes(q));
     }
     if (filterStatus === 'out') r = r.filter((i) => i.current_stock <= 0);
@@ -812,10 +814,10 @@ export default function InventoryPage() {
       if (sortBy === 'stock_desc') return b.current_stock - a.current_stock;
       return 0;
     });
-  }, [items, search, filterStatus, filterCategory, sortBy]);
+  }, [items, debouncedSearch, filterStatus, filterCategory, sortBy]);
 
   // Reset to page 1 when filters/search/perPage change
-  useEffect(() => { setPage(1); }, [search, filterStatus, filterCategory, sortBy, perPage]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, filterStatus, filterCategory, sortBy, perPage]);
 
   // Paginated slices — single perPage for both table and cards
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
@@ -976,7 +978,7 @@ export default function InventoryPage() {
                   <path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"/>
                   <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
                 </svg>
-                <p>{search ? 'No items match your search.' : 'Inventory is empty.'}</p>
+                <p>{debouncedSearch ? 'No items match your search.' : 'Inventory is empty.'}</p>
               </div>
             : pagedTable.map((item) => (
                 <InventoryCard
@@ -1035,7 +1037,7 @@ export default function InventoryPage() {
               : filtered.length === 0
                 ? <tr><td colSpan={7}>
                     <div className="inv-empty">
-                      <p>{search ? 'No items match your search.' : 'Inventory is empty.'}</p>
+                      <p>{debouncedSearch ? 'No items match your search.' : 'Inventory is empty.'}</p>
                     </div>
                   </td></tr>
                 : pagedTable.map((item) => (

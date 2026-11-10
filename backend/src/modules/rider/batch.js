@@ -24,7 +24,7 @@
 
 const db = require('../../config/db');
 
-const MAX_BATCH_SIZE    = 5;
+const MAX_BATCH_SIZE    = 10;
 const BATCH_WINDOW_MS   = 20 * 60 * 1000; // 20 minutes
 
 // ── Routing provider config ───────────────────────────────────────────────────
@@ -571,6 +571,7 @@ async function getRiderActiveBatch(riderId) {
   return {
     batch_id:          batch.id,
     status:            batch.status,
+    max_orders:        MAX_BATCH_SIZE,
     batch_started_at:  batch.batch_started_at,
     dispatched_at:     batch.dispatched_at,
     timer_remaining_ms: timerRemainingMs,

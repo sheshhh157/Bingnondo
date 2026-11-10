@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const db = require('../../config/db');
+const { archiveRecord } = require('./archive.service');
 
 const BCRYPT_ROUNDS = 12;
 
@@ -36,7 +37,7 @@ exports.listStaffAccounts = async (req, res) => {
     const { rows: accounts } = await db.query(
       `SELECT
          sa.id, sa.full_name, sa.email, sa.role, sa.status,
-         sa.created_by, sa.created_at, sa.updated_at,
+         sa.created_by, sa.created_at, sa.updated_at, sa.profile_image_url,
          creator.full_name AS created_by_name
        FROM staff_accounts sa
        LEFT JOIN staff_accounts creator ON creator.id = sa.created_by
@@ -404,10 +405,10 @@ exports.deleteStaffAccount = async (req, res) => {
     }
 
     const { rows: currentRows } = await client.query(
-      'SELECT id, full_name, email, role FROM staff_accounts WHERE id = $1',
+      'SELECT to_jsonb(sa) AS record FROM staff_accounts sa WHERE sa.id = $1',
       [staffId]
     );
-    const current = currentRows[0];
+    const current = currentRows[0]?.record;
     if (!current) return res.status(404).json({ message: 'Staff account not found.' });
     if (!VALID_ROLES.includes(current.role)) {
       return res.status(403).json({ message: 'This account cannot be deleted through this interface.' });
@@ -415,6 +416,13 @@ exports.deleteStaffAccount = async (req, res) => {
 
     await client.query('BEGIN');
 
+    await archiveRecord(client, {
+      entityType: 'staff_account',
+      entityId: staffId,
+      displayName: current.full_name,
+      payload: { record: current },
+      actorId: adminId,
+    });
     const { rows } = await client.query(
       `DELETE FROM staff_accounts WHERE id = $1 AND role != 'admin'
        RETURNING id, full_name, email, role`,
@@ -425,7 +433,7 @@ exports.deleteStaffAccount = async (req, res) => {
       return res.status(404).json({ message: 'Staff account not found.' });
     }
 
-    await writeAuditLog(client, adminId, 'delete_staff_account', 'staff_accounts', staffId, {
+    await writeAuditLog(client, adminId, 'archive_staff_account', 'staff_accounts', staffId, {
       full_name: current.full_name,
       email: current.email,
       role: current.role,
@@ -433,7 +441,7 @@ exports.deleteStaffAccount = async (req, res) => {
 
     await client.query('COMMIT');
 
-    return res.json({ message: 'Staff account deleted successfully.' });
+    return res.json({ message: 'Staff account moved to the archive for 30 days.' });
   } catch (err) {
     await client.query('ROLLBACK');
     if (err && err.code === '23503') {

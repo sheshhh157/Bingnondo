@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { menuAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { currency, menuAvailVariant } from '../../utils/format';
 import { MENU_EVENTS, outOfStockIngredients } from './oversightData';
 import PageSkeleton from '../../components/PageSkeleton';
@@ -20,9 +21,10 @@ export default function MenuPage() {
   });
 
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [showAvailable, setShowAvailable] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
-  const query = search.trim().toLowerCase();
+  const query = debouncedSearch.trim().toLowerCase();
 
   const unavailableCount = useMemo(() => items.filter((i) => !i.is_available).length, [items]);
 

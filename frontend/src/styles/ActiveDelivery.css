@@ -961,12 +961,16 @@
 .ad-btn--outline:hover:not(:disabled) { background: var(--rl-surface-2); }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   SLIDE TO DELIVER BUTTON
+   SLIDE ACTION
    ══════════════════════════════════════════════════════════════════════════════ */
 
 .ad-slide-track {
   position: relative;
   container-type: inline-size;
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
   height: 52px;
   border-radius: 26px;
   background: var(--rl-surface-2);

@@ -23,6 +23,7 @@ const adminDeliveryRoutes = require('./src/modules/admin/admin.deliveries.routes
 const adminAuditRoutes    = require('./src/modules/admin/admin.audit.routes');
 const adminNotificationsRoutes = require('./src/modules/admin/admin.notifications.routes'); // Notification bell feed
 const adminCustomerRestrictionsRoutes = require('./src/modules/admin/customer-restrictions.routes'); // §6.4
+const adminArchiveRoutes = require('./src/modules/admin/archive.routes');
 const supportChatRoutes   = require('./src/modules/support-chat/support-chat.routes');
 const uploadRoutes        = require('./src/modules/upload/upload.routes');
 
@@ -58,6 +59,10 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'private, no-store');
+  next();
+});
 app.use('/api', generalApiLimiter);
 
 // ─── Auth Routes (with tighter rate limits on sensitive endpoints) ─────────────
@@ -114,6 +119,7 @@ app.use('/api/admin/riders',          adminRiderRoutes);   // §6.5 Rider CRUD (
 app.use('/api/admin/deliveries',      adminDeliveryRoutes); // Riders & Deliveries — read-only list
 app.use('/api/admin/audit-log',       adminAuditRoutes);  // §6.6 Admin audit trail
 app.use('/api/admin/notifications',   adminNotificationsRoutes); // Bell feed + seen marker
+app.use('/api/admin/archive', adminArchiveRoutes);
 // Customer Restrictions (§6.4) — Admin only
 app.use('/api/admin/customer-restrictions', adminCustomerRestrictionsRoutes);
 app.use('/api/support-chat',          supportChatRoutes);
@@ -146,9 +152,22 @@ const PORT = process.env.PORT || 5000;
 // support_chat_messages.is_read). Runs BEFORE the server starts accepting
 // requests so a freshly provisioned database is ready on the first call.
 const { restoreBatchTimers } = require('./src/modules/rider/batch');
+const { purgeExpiredArchiveRecords } = require('./src/modules/admin/archive.service');
+const ARCHIVE_PURGE_INTERVAL_MS = 60 * 60 * 1000;
 
 ensureSchema()
-  .then(() => restoreBatchTimers())
+  .then(async () => {
+    await restoreBatchTimers();
+    purgeExpiredArchiveRecords().catch((err) => {
+      console.error('[archive] Initial purge failed:', err);
+    });
+    const purgeTimer = setInterval(() => {
+      purgeExpiredArchiveRecords().catch((err) => {
+        console.error('[archive] Scheduled purge failed:', err);
+      });
+    }, ARCHIVE_PURGE_INTERVAL_MS);
+    purgeTimer.unref();
+  })
   .catch((err) => console.error('[schema] ensureSchema failed:', err.message))
   .finally(() => {
     server.listen(PORT, () => {

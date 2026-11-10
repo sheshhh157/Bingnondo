@@ -92,8 +92,8 @@ export const getDeliveryHistory = (params = {}) => {
  * Response shape:
  * {
  *   rider: {
- *     id, full_name, email, mobile_number,
- *     plate_number, vehicle_type, status, last_login
+ *     id, first_name, middle_name, last_name, full_name, email, mobile_number,
+ *     plate_number, vehicle_type, status, last_login, profile_image_url
  *   }
  * }
  */
@@ -102,7 +102,7 @@ export const getRiderProfile = () => get('/api/rider/profile');
 /**
  * PATCH /api/rider/profile
  * Update editable profile fields.
- * payload: { plate_number?, vehicle_type?, mobile_number? }
+ * payload: { first_name?, middle_name?, last_name?, plate_number?, vehicle_type?, mobile_number? }
  */
 export const updateRiderProfile = (payload) => patch('/api/rider/profile', payload);
 
@@ -114,6 +114,7 @@ export const updateRiderProfile = (payload) => patch('/api/rider/profile', paylo
  * timer remaining, and per-stop delivery info including destination coordinates.
  */
 export const getCurrentBatch = () => get('/api/rider/batch/current');
+export const dispatchCurrentBatch = () => post('/api/rider/batch/dispatch');
 
 // ── Live Location ──────────────────────────────────────────────────────────────
 
@@ -164,6 +165,7 @@ export default {
   updateRiderLocation,
   getRiderLocation,
   getCurrentBatch,
+  dispatchCurrentBatch,
   getWorkStatus,
   setWorkStatus,
 };

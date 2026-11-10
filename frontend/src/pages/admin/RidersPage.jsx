@@ -128,7 +128,7 @@ function RiderDutyBadge({ rider }) {
 }
 
 // ── Rider Avatar ──────────────────────────────────────────────────────────────
-function RiderAvatar({ name, status }) {
+function RiderAvatar({ name, status, imageUrl }) {
   const initials = (name || '?')
     .split(' ')
     .slice(0, 2)
@@ -138,6 +138,13 @@ function RiderAvatar({ name, status }) {
   return (
     <div className={`rd-avatar rd-avatar--${status || 'inactive'}`} aria-hidden="true">
       {initials}
+      {imageUrl && (
+        <img
+          src={imageUrl}
+          alt=""
+          onError={e => { e.currentTarget.style.display = 'none'; }}
+        />
+      )}
     </div>
   );
 }
@@ -429,7 +436,7 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
     <Modal open={open} onClose={onClose} title="Reset Rider Password" width={420}>
       <form onSubmit={e => { e.preventDefault(); handleSave(); }}>
         <div className="rd-reset-rider">
-          <RiderAvatar name={rider?.full_name} status={rider?.status} />
+          <RiderAvatar name={rider?.full_name} status={rider?.status} imageUrl={rider?.profile_image_url} />
           <div>
             <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-foreground)' }}>{rider?.full_name}</div>
             <div style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', marginTop: 2 }}>{rider?.mobile_number}</div>
@@ -485,7 +492,7 @@ function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onRes
 
         <div className="rd-drawer__profile">
           <div className="rd-drawer__avatar-wrap">
-            <RiderAvatar name={rider.full_name} status={rider.status} />
+            <RiderAvatar name={rider.full_name} status={rider.status} imageUrl={rider.profile_image_url} />
             <div className={`rd-drawer__status-ring rd-drawer__status-ring--${rider.status}`} aria-hidden="true" />
           </div>
           <div className="rd-drawer__name">{rider.full_name}</div>
@@ -641,7 +648,7 @@ function RiderRow({ rider, onSelect, isSelected }) {
     >
       <td>
         <div className="ap-member">
-          <RiderAvatar name={rider.full_name} status={rider.status} />
+          <RiderAvatar name={rider.full_name} status={rider.status} imageUrl={rider.profile_image_url} />
           <div className="ap-member__info">
             <span className="ap-member__name" title={rider.full_name}>{rider.full_name}</span>
             <span className="ap-member__email" title={rider.mobile_number}>{rider.mobile_number}</span>
@@ -902,7 +909,7 @@ function RidersTab() {
     setDeleteSaving(true);
     try {
       await adminRidersAPI.remove(deleteTarget.id);
-      toast.success('Rider deleted.');
+      toast.success('Rider moved to the archive for 30 days.');
       setDeleteOpen(false);
       if (selected?.id === deleteTarget.id) { setSelected(null); setDrawerOpen(false); }
       fetchRiders(true);
@@ -1081,8 +1088,8 @@ function RidersTab() {
         onClose={() => setDeleteOpen(false)}
         onConfirm={handleConfirmDelete}
         title="Delete Rider"
-        message={`Permanently delete ${deleteTarget?.full_name || 'this rider'}? This can't be undone. Riders with delivery history can't be deleted — deactivate them instead.`}
-        confirmLabel="Delete"
+        message={`Move ${deleteTarget?.full_name || 'this rider'} to the archive? It can be restored for 30 days. Riders with delivery history cannot be archived — deactivate them instead.`}
+        confirmLabel="Archive"
         variant="danger"
         loading={deleteSaving}
       />

@@ -80,4 +80,41 @@ const uploadQr = multer({
   },
 });
 
-module.exports = { cloudinary, upload, uploadReceipt, uploadQr };
+function createProfileImageStorage(folder) {
+  return new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder,
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+      transformation: [
+        { width: 512, height: 512, crop: 'fill', gravity: 'face', quality: 'auto:good', fetch_format: 'auto' },
+      ],
+    },
+  });
+}
+
+function createProfileImageUpload(folder) {
+  return multer({
+    storage: createProfileImageStorage(folder),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowed.includes(file.mimetype)) {
+        return cb(new Error('Profile photo must be JPG, PNG, or WEBP.'));
+      }
+      cb(null, true);
+    },
+  });
+}
+
+const uploadProfileImage = createProfileImageUpload('bingnondo/staff_profiles');
+const uploadRiderProfileImage = createProfileImageUpload('bingnondo/rider_profiles');
+
+module.exports = {
+  cloudinary,
+  upload,
+  uploadReceipt,
+  uploadQr,
+  uploadProfileImage,
+  uploadRiderProfileImage,
+};

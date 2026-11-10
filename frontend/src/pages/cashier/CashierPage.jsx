@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { menuAPI } from '../../services/cashierApi';
 import { connectSocket } from '../../services/socket';
 import { currency } from '../../utils/format';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import MenuGrid from './components/MenuGrid';
 import OrderDraft from './components/OrderDraft';
 import PaymentModal from './components/PaymentModal';
@@ -24,6 +25,7 @@ export default function CashierPage({ view, onToggleSidebar, sidebarOpen, onOpen
   const [activeCategory, setActiveCategory] = useState(null);
   const [draft, setDraft]                 = useState([]);        // [{ key, id, name, price, variant_id, variant_name, qty, note }]
   const [search, setSearch]               = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [menuLoading, setMenuLoading]     = useState(true);
   const [menuError, setMenuError]         = useState('');
   const [paymentModal, setPaymentModal]   = useState(null);      // { items, total, draft } | null
@@ -196,7 +198,7 @@ export default function CashierPage({ view, onToggleSidebar, sidebarOpen, onOpen
   // ─── Filtered items ───────────────────────────────────────────────
   const visibleItems = menuItems.filter((item) => {
     const matchCat    = activeCategory ? item.category_id === activeCategory : true;
-    const matchSearch = search.trim() ? item.name.toLowerCase().includes(search.trim().toLowerCase()) : true;
+    const matchSearch = debouncedSearch.trim() ? item.name.toLowerCase().includes(debouncedSearch.trim().toLowerCase()) : true;
     const matchAvail  = showAvailableOnly ? item.is_available : true;
     return matchCat && matchSearch && matchAvail;
   });
@@ -294,10 +296,19 @@ export default function CashierPage({ view, onToggleSidebar, sidebarOpen, onOpen
                   </div>
                 </div>
 
-                {!search && categories.length > 0 && (
+                {!debouncedSearch && categories.length > 0 && (
                   <nav className="cashier-categories" aria-label="Menu categories">
+                    <button
+                      type="button"
+                      className={`cashier-cat-btn${activeCategory === null ? ' cashier-cat-btn--active' : ''}`}
+                      onClick={() => { setActiveCategory(null); setMenuPage(1); }}
+                      aria-pressed={activeCategory === null}
+                    >
+                      All
+                    </button>
                     {categories.map((cat) => (
                       <button
+                        type="button"
                         key={cat.id}
                         className={`cashier-cat-btn${activeCategory === cat.id ? ' cashier-cat-btn--active' : ''}`}
                         onClick={() => { setActiveCategory(cat.id); setMenuPage(1); }}

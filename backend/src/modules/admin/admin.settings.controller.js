@@ -7,6 +7,7 @@ const {
   readNotificationSettings,
 } = require('./notificationSettings');
 const { SETTINGS_KEY: DELIVERY_FEE_KEY, readDeliveryFee } = require('../../config/deliveryFee');
+const { archiveRecord } = require('./archive.service');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -294,7 +295,7 @@ exports.updateCategory = async (req, res) => {
 
     // Check the category exists
     const { rows: existing } = await client.query(
-      'SELECT id, name FROM menu_categories WHERE id = $1',
+      'SELECT * FROM menu_categories WHERE id = $1 FOR UPDATE',
       [categoryId]
     );
     if (existing.length === 0) {
@@ -352,7 +353,7 @@ exports.deleteCategory = async (req, res) => {
     await client.query('BEGIN');
 
     const { rows: existing } = await client.query(
-      'SELECT id, name FROM menu_categories WHERE id = $1',
+      'SELECT * FROM menu_categories WHERE id = $1 FOR UPDATE',
       [categoryId]
     );
     if (existing.length === 0) {
@@ -372,15 +373,34 @@ exports.deleteCategory = async (req, res) => {
       });
     }
 
+    const { rows: variantLinks } = await client.query(
+      'SELECT category_id, variant_group_id FROM menu_category_variant_groups WHERE category_id = $1',
+      [categoryId]
+    );
+    const { rows: inventoryLinks } = await client.query(
+      'SELECT inventory_item_id, category_id FROM inventory_item_categories WHERE category_id = $1',
+      [categoryId]
+    );
+    await archiveRecord(client, {
+      entityType: 'menu_category',
+      entityId: categoryId,
+      displayName: existing[0].name,
+      payload: {
+        record: existing[0],
+        variant_links: variantLinks.map((row) => [row.category_id, row.variant_group_id]),
+        inventory_links: inventoryLinks.map((row) => [row.inventory_item_id, row.category_id]),
+      },
+      actorId: adminId,
+    });
     await client.query('DELETE FROM menu_categories WHERE id = $1', [categoryId]);
 
-    await writeAuditLog(client, adminId, 'delete_menu_category', 'menu_categories', categoryId, {
+    await writeAuditLog(client, adminId, 'archive_menu_category', 'menu_categories', categoryId, {
       name: existing[0].name,
     });
 
     await client.query('COMMIT');
 
-    return res.json({ message: `Category "${existing[0].name}" deleted successfully.` });
+    return res.json({ message: `Category "${existing[0].name}" moved to the archive for 30 days.` });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[deleteCategory]', err);
@@ -632,7 +652,7 @@ exports.updateVariantGroup = async (req, res) => {
     await client.query('BEGIN');
 
     const existing = await client.query(
-      'SELECT id, name FROM variant_groups WHERE id = $1',
+      'SELECT * FROM variant_groups WHERE id = $1 FOR UPDATE',
       [groupId]
     );
     if (existing.rowCount === 0) {
@@ -689,7 +709,7 @@ exports.deleteVariantGroup = async (req, res) => {
     await client.query('BEGIN');
 
     const existing = await client.query(
-      'SELECT id, name FROM variant_groups WHERE id = $1',
+      'SELECT * FROM variant_groups WHERE id = $1 FOR UPDATE',
       [groupId]
     );
     if (existing.rowCount === 0) {
@@ -703,9 +723,30 @@ exports.deleteVariantGroup = async (req, res) => {
       [groupId]
     );
 
+    const { rows: categoryLinks } = await client.query(
+      'SELECT category_id, variant_group_id FROM menu_category_variant_groups WHERE variant_group_id = $1',
+      [groupId]
+    );
+    const { rows: menuItemVariants } = await client.query(
+      `SELECT to_jsonb(miv) AS record
+         FROM menu_item_variants miv
+        WHERE miv.variant_group_id = $1`,
+      [groupId]
+    );
+    await archiveRecord(client, {
+      entityType: 'variant_group',
+      entityId: groupId,
+      displayName: existing.rows[0].name,
+      payload: {
+        record: existing.rows[0],
+        category_links: categoryLinks.map((row) => [row.category_id, row.variant_group_id]),
+        menu_item_variants: menuItemVariants.map((row) => row.record),
+      },
+      actorId: adminId,
+    });
     await client.query('DELETE FROM variant_groups WHERE id = $1', [groupId]);
 
-    await writeAuditLog(client, adminId, 'delete_variant_group', 'variant_groups', groupId, {
+    await writeAuditLog(client, adminId, 'archive_variant_group', 'variant_groups', groupId, {
       name: existing.rows[0].name,
     });
 
@@ -716,7 +757,7 @@ exports.deleteVariantGroup = async (req, res) => {
       if (item) emitMenuUpdate(item);
     }
 
-    return res.json({ message: `Variant "${existing.rows[0].name}" deleted successfully.` });
+    return res.json({ message: `Variant "${existing.rows[0].name}" moved to the archive for 30 days.` });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[deleteVariantGroup]', err);

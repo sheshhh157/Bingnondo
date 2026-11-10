@@ -2,7 +2,13 @@ const db = require('../../config/db');
 const { emitOrderStatus, emitDeliveryUpdate } = require('../../sockets');
 const { canTransition } = require('../orders/status-transitions');
 const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('./assignment');
-const { getRiderActiveBatch, completeBatchStop } = require('./batch');
+const {
+  getRiderActiveBatch,
+  completeBatchStop,
+  dispatchBatch,
+  clearBatchTimer,
+} = require('./batch');
+const socketHub = require('../../sockets');
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 function orderNumber(id) {
@@ -125,6 +131,67 @@ exports.getCurrentBatch = async (req, res) => {
   } catch (err) {
     console.error('[rider.getCurrentBatch]', err);
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/rider/batch/dispatch
+//
+// Manually dispatch the rider's current waiting batch. The timer and full-batch
+// paths remain automatic; this lets a rider leave earlier when ready.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.dispatchCurrentBatch = async (req, res) => {
+  const client = await db.getClient();
+  let batchId;
+  const riderId = req.user.sub;
+
+  try {
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      `SELECT id
+         FROM delivery_batches
+        WHERE rider_id = $1 AND status = 'waiting'
+        ORDER BY batch_started_at ASC
+        LIMIT 1
+        FOR UPDATE`,
+      [riderId]
+    );
+
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'There is no waiting batch to dispatch.' });
+    }
+
+    batchId = rows[0].id;
+    const batch = await dispatchBatch(client, batchId);
+    if (!batch) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'The batch has no orders to dispatch.' });
+    }
+
+    await client.query(
+      `UPDATE deliveries
+          SET status = 'assigned', assigned_at = COALESCE(assigned_at, NOW())
+        WHERE batch_id = $1 AND status IN ('pending_assignment', 'assigned')`,
+      [batchId]
+    );
+    await client.query(
+      `UPDATE riders SET status = 'on_delivery', updated_at = NOW() WHERE id = $1`,
+      [riderId]
+    );
+
+    await client.query('COMMIT');
+
+    clearBatchTimer(riderId);
+    socketHub.emitBatchDispatched({ riderId, batchId });
+    return res.status(200).json({ message: 'Batch dispatched.', batch_id: batchId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[rider.dispatchCurrentBatch]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  } finally {
+    client.release();
   }
 };
 
@@ -466,8 +533,8 @@ exports.getProfile = async (req, res) => {
     const riderId = req.user.sub;
 
     const { rows } = await db.query(
-      `SELECT id, full_name, email, mobile_number,
-              plate_number, vehicle_type, status, last_login
+      `SELECT id, first_name, middle_name, last_name, full_name, email, mobile_number,
+              plate_number, vehicle_type, status, last_login, profile_image_url
          FROM riders WHERE id = $1`,
       [riderId]
     );
@@ -486,17 +553,39 @@ exports.getProfile = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // BONUS — PATCH /api/rider/profile  (used by RiderProfile.jsx)
 //
-// Editable fields: plate_number, vehicle_type, mobile_number
+// Editable fields: name, plate_number, vehicle_type, mobile_number
 // ─────────────────────────────────────────────────────────────────────────────
 exports.updateProfile = async (req, res) => {
   try {
     const riderId = req.user.sub;
-    const { plate_number, vehicle_type, mobile_number } = req.body;
+    const { first_name, middle_name, last_name, plate_number, vehicle_type, mobile_number } = req.body;
 
     // Build dynamic SET clause — only update fields that were sent
     const fields = [];
     const values = [];
     let idx = 1;
+
+    if (first_name !== undefined) {
+      if (typeof first_name !== 'string' || !first_name.trim() || first_name.trim().length > 100 || /\d/.test(first_name)) {
+        return res.status(400).json({ message: 'Enter a valid first name (up to 100 characters, no numbers).' });
+      }
+      fields.push(`first_name = $${idx++}`);
+      values.push(first_name.trim());
+    }
+    if (middle_name !== undefined) {
+      if (middle_name !== null && (typeof middle_name !== 'string' || middle_name.trim().length > 100 || /\d/.test(middle_name))) {
+        return res.status(400).json({ message: 'Enter a valid middle name (up to 100 characters, no numbers).' });
+      }
+      fields.push(`middle_name = $${idx++}`);
+      values.push(typeof middle_name === 'string' ? middle_name.trim() || null : null);
+    }
+    if (last_name !== undefined) {
+      if (typeof last_name !== 'string' || !last_name.trim() || last_name.trim().length > 100 || /\d/.test(last_name)) {
+        return res.status(400).json({ message: 'Enter a valid last name (up to 100 characters, no numbers).' });
+      }
+      fields.push(`last_name = $${idx++}`);
+      values.push(last_name.trim());
+    }
 
     if (plate_number !== undefined) {
       fields.push(`plate_number = $${idx++}`);
@@ -525,8 +614,8 @@ exports.updateProfile = async (req, res) => {
       `UPDATE riders
           SET ${fields.join(', ')}
         WHERE id = $${idx}
-       RETURNING id, full_name, email, mobile_number,
-                 plate_number, vehicle_type, status, last_login`,
+       RETURNING id, first_name, middle_name, last_name, full_name, email, mobile_number,
+                 plate_number, vehicle_type, status, last_login, profile_image_url`,
       values
     );
 

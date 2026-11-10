@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, Fragment } from 'react';
 import { inventoryAPI } from '../../services/oversightApi';
 import useLiveData from '../../hooks/useLiveData';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { stockStatus, stockBadgeVariant, stockStatusText } from '../../utils/format';
 import { toCsv, downloadCsv } from '../../utils/csv';
 import { listEvent, stockPatch, stockCounts } from './oversightData';
@@ -97,6 +98,7 @@ function MovementHistory({ itemId }) {
 
 export default function OversightStocks() {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [openId, setOpenId] = useState(null);
@@ -116,8 +118,8 @@ export default function OversightStocks() {
 
   const filtered = useMemo(() => {
     let r = items;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase();
       r = r.filter((i) => i.name.toLowerCase().includes(q) || i.unit.toLowerCase().includes(q));
     }
     if (filterStatus !== 'all') {
@@ -129,7 +131,7 @@ export default function OversightStocks() {
       if (sortBy === 'stock_desc') return b.current_stock - a.current_stock;
       return 0;
     });
-  }, [items, search, filterStatus, sortBy]);
+  }, [items, debouncedSearch, filterStatus, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);

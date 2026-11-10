@@ -20,6 +20,7 @@ router.patch('/profile',             ctrl.updateProfile);        // PATCH /api/r
 
 // ── Batch ──────────────────────────────────────────────────────────────────────
 router.get  ('/batch/current',       ctrl.getCurrentBatch);      // GET  /api/rider/batch/current
+router.post ('/batch/dispatch',      ctrl.dispatchCurrentBatch);  // POST /api/rider/batch/dispatch
 
 // ── Live Location ──────────────────────────────────────────────────────────────
 router.post ('/location',            ctrl.updateLocation);       // POST /api/rider/location

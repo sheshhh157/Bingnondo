@@ -361,6 +361,14 @@ function toManagerOrderPayload(order) {
   };
 }
 
+function emitOnlineOrderNew(order) {
+  if (!_io || !order) return;
+  _io.to('cashier').to('staff').emit('online_order:new', {
+    orderId: order.id ?? order.orderId,
+    orderNumber: order.order_number ?? order.orderNumber,
+  });
+}
+
 function emitNewOrder(order) {
   if (!_io) return;
   // Kitchen display listens for `new_order` (KITCHEN_EVENTS.NEW_ORDER); it keeps
@@ -368,6 +376,9 @@ function emitNewOrder(order) {
   _io.to('kitchen').emit('new_order', order);
   // Manager dashboard listens for `order:new` (useLiveData in the manager pages).
   _io.to('manager').emit('order:new', toManagerOrderPayload(order));
+  if (order.order_type === 'online') {
+    emitOnlineOrderNew(order);
+  }
   console.log(`[socket] → new_order (kitchen) + order:new (manager): ${order.order_number}`);
 }
 
@@ -632,6 +643,7 @@ function emitPaymentResubmitted(payload) {
 module.exports = {
   setIO,
   emitNewOrder,
+  emitOnlineOrderNew,
   emitOrderStatus,
   emitOrderReady,
   emitMenuUpdate,

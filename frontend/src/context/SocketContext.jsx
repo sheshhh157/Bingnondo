@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback, us
 import { io } from 'socket.io-client';
 import { SOCKET_ROOM_BY_ROLE } from '../services/socket';
 import { getToken } from '../services/apiClient';
+import { invalidateApiCache } from '../services/requestCache';
 
 const SocketContext = createContext(null);
 const SocketEventContext = createContext(null);
@@ -189,10 +190,13 @@ export function SocketProvider({ children }) {
 
       const listeners = listenersRef.current;
       const capture = (name) => (payload) => {
+        if (name !== 'rider:location') invalidateApiCache();
         setLastEvent({ name, payload });
         for (const listener of listeners) listener(name, payload);
       };
       socket.on('order:new', capture('order:new'));
+      socket.on('new_order', capture('new_order'));
+      socket.on('online_order:new', capture('online_order:new'));
       socket.on('order:status', capture('order:status'));
       socket.on('order:ready', capture('order:ready'));
       socket.on('inventory:update', capture('inventory:update'));
@@ -205,8 +209,11 @@ export function SocketProvider({ children }) {
       socket.on('payment:pending', capture('payment:pending'));
       socket.on('payment:verified', capture('payment:verified'));
       socket.on('payment:rejected', capture('payment:rejected'));
+      socket.on('payment:resubmitted', capture('payment:resubmitted'));
       socket.on('rider:location', capture('rider:location'));
       socket.on('batch:dispatched', capture('batch:dispatched'));
+      socket.on('support_chat:message', capture('support_chat:message'));
+      socket.on('chat_thread_locked', capture('chat_thread_locked'));
 
       return socket;
     })();

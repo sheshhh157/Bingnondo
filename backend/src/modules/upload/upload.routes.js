@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
-const { authenticateToken, requireStaff, requireRoles } = require('../../middleware/auth.middleware');
-const { upload, uploadQr } = require('../../config/cloudinary');
+const { authenticateToken, requireStaff, requireRider, requireRoles } = require('../../middleware/auth.middleware');
+const { upload, uploadQr, uploadProfileImage, uploadRiderProfileImage } = require('../../config/cloudinary');
 const ctrl = require('./upload.controller');
 
 // 'cashier' added — cashier can now upload menu images via the Staff Portal tab
@@ -9,6 +9,8 @@ const staffWrite = [authenticateToken, requireStaff, requireRoles('cashier', 'ad
 
 // Payment QR codes are managed from System Settings, so admins only.
 const adminWrite = [authenticateToken, requireStaff, requireRoles('admin')];
+const staffProfileWrite = [authenticateToken, requireStaff];
+const riderProfileWrite = [authenticateToken, requireRider];
 
 // Multer error handler — converts multer errors to clean JSON responses
 function handleMulterError(err, req, res, next) {
@@ -16,6 +18,9 @@ function handleMulterError(err, req, res, next) {
     return res.status(413).json({ message: 'Image is too large. Maximum size is 5MB.' });
   }
   if (err?.message === 'Only image files are allowed.') {
+    return res.status(415).json({ message: err.message });
+  }
+  if (err?.message === 'Profile photo must be JPG, PNG, or WEBP.') {
     return res.status(415).json({ message: err.message });
   }
   next(err);
@@ -30,7 +35,23 @@ router.post(
   ctrl.uploadMenuImage
 );
 
-// DELETE /api/upload/menu-image  — remove an image from Cloudinary by public_id
+router.post(
+  '/profile-image',
+  ...staffProfileWrite,
+  uploadProfileImage.single('image'),
+  handleMulterError,
+  ctrl.uploadStaffProfileImage
+);
+
+router.post(
+  '/rider-profile-image',
+  ...riderProfileWrite,
+  uploadRiderProfileImage.single('image'),
+  handleMulterError,
+  ctrl.uploadRiderProfileImage
+);
+
+// DELETE /api/upload/menu-image — remove an image from Cloudinary by public_id
 router.delete(
   '/menu-image',
   ...staffWrite,

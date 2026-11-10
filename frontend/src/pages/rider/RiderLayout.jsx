@@ -141,6 +141,7 @@ export default function RiderLayout() {
         </div>
         <div className="rl-top-bar__rider">
           <div className="rl-top-bar__avatar" aria-label={`Logged in as ${user?.full_name || 'Rider'}`}>
+            {user?.profile_image_url && <img src={user.profile_image_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
             {initial}
           </div>
         </div>
@@ -157,7 +158,10 @@ export default function RiderLayout() {
         </div>
 
         <div className="rl-sidebar__rider-card">
-          <div className="rl-sidebar__avatar" aria-hidden="true">{initial}</div>
+          <div className="rl-sidebar__avatar" aria-hidden="true">
+            {user?.profile_image_url && <img src={user.profile_image_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+            {initial}
+          </div>
           <div className="rl-sidebar__rider-info">
             <span className="rl-sidebar__rider-name">{user?.full_name || 'Rider'}</span>
             <span className="rl-sidebar__rider-status">

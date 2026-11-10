@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ordersAPI, paymentsAPI } from '../../services/cashierApi';
 import { connectSocket } from '../../services/socket';
 import { currency, itemLabel } from '../../utils/format';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import Pagination from '../../components/Pagination';
 import '../../styles/OnlineOrdersPage.css';
 
@@ -797,6 +798,7 @@ export default function OnlineOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('incoming');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [page, setPage] = useState(1);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -804,15 +806,19 @@ export default function OnlineOrdersPage() {
   const [live, setLive] = useState(false);
   const { toasts, show: showToast } = useToast();
   const liveTimerRef = useRef(null);
+  const fetchInFlightRef = useRef(false);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async ({ silent = false } = {}) => {
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     try {
       const res = await ordersAPI.getOnline({ limit: 200 });
       setOrders(res.data?.orders || []);
     } catch {
-      showToast('Could not load online orders.', 'error');
+      if (!silent) showToast('Could not load online orders.', 'error');
     } finally {
+      fetchInFlightRef.current = false;
       setLoading(false);
     }
   }, [showToast]);
@@ -821,6 +827,22 @@ export default function OnlineOrdersPage() {
   // request resolves, but the rule treats the call as a synchronous update.
   // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  // Keep the list fresh even if a socket event is missed or the connection is
+  // temporarily unavailable. Refresh immediately when the tab becomes active.
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') fetchOrders({ silent: true });
+    };
+    const interval = window.setInterval(refreshIfVisible, 5000);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    window.addEventListener('focus', refreshIfVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+      window.removeEventListener('focus', refreshIfVisible);
+    };
+  }, [fetchOrders]);
 
   // ── Socket: live updates ───────────────────────────────────────────────────
   useEffect(() => {
@@ -842,7 +864,20 @@ export default function OnlineOrdersPage() {
       });
     };
 
-    const onConnect = () => { socket.emit('join', { room: 'staff' }); };
+    const onConnect = () => {
+      socket.emit('join', { room: 'staff' });
+      fetchOrders();
+    };
+
+    const onOnlineOrderNew = ({ orderNumber } = {}) => {
+      fetchOrders();
+      flashLive(orderNumber ? `New online order — ${orderNumber}` : 'New online order received');
+    };
+
+    const onPaymentPending = ({ orderNumber } = {}) => {
+      fetchOrders();
+      flashLive(orderNumber ? `GCash receipt submitted — ${orderNumber}` : 'New GCash receipt to verify');
+    };
 
     // order:status — kitchen moved the order forward
     const onOrderStatus = ({ orderId, status }) => {
@@ -896,6 +931,8 @@ export default function OnlineOrdersPage() {
     };
 
     socket.on('connect',              onConnect);
+    socket.on('online_order:new',     onOnlineOrderNew);
+    socket.on('payment:pending',      onPaymentPending);
     socket.on('order:status',         onOrderStatus);
     socket.on('order:ready',          onOrderReady);
     socket.on('payment:verified',     onPaymentVerified);
@@ -905,6 +942,8 @@ export default function OnlineOrdersPage() {
 
     return () => {
       socket.off('connect',             onConnect);
+      socket.off('online_order:new',    onOnlineOrderNew);
+      socket.off('payment:pending',     onPaymentPending);
       socket.off('order:status',        onOrderStatus);
       socket.off('order:ready',         onOrderReady);
       socket.off('payment:verified',    onPaymentVerified);
@@ -913,7 +952,7 @@ export default function OnlineOrdersPage() {
       socket.off('delivery:update',     onDeliveryUpdate);
       clearTimeout(liveTimerRef.current);
     };
-  }, [showToast]);
+  }, [fetchOrders, showToast]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const handleAccept = useCallback(async (order) => {
@@ -971,7 +1010,7 @@ export default function OnlineOrdersPage() {
     counts[t.key] = orders.filter(o => matchesTab(o, t)).length;
   });
 
-  const q = search.trim().toLowerCase();
+  const q = debouncedSearch.trim().toLowerCase();
   const filtered = orders.filter(o => {
     if (!matchesTab(o, activeTab)) return false;
     if (!q) return true;

@@ -1,10 +1,12 @@
 import { useState, useEffect, useReducer, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { kitchenAPI } from '../../services/api';
 import { getSocket, KITCHEN_EVENTS } from '../../services/socket';
 import KitchenHeader from './components/KitchenHeader';
 import OrderColumn from './components/OrderColumn';
 import OrderCard from './components/OrderCard';
 import ConnectionStatus from './components/ConnectionStatus';
+import StaffProfile from '../shared/StaffProfile';
 import '../../styles/KitchenPage.css';
 
 // ─── Reducers ────────────────────────────────────────────────────────────────
@@ -85,6 +87,8 @@ function KitchenSkeleton() {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function KitchenPage() {
+  const location = useLocation();
+  const isProfilePage = location.pathname === '/kitchen/profile';
   const [orders, dispatchOrders] = useReducer(ordersReducer, []);
   const [connected, setConnected] = useState(true);
   const [reconnecting, setReconnecting] = useState(false);
@@ -198,7 +202,9 @@ export default function KitchenPage() {
       />
 
       <main className="kp-main" id="main-content">
-        {pageLoading ? (
+        {isProfilePage ? (
+          <StaffProfile />
+        ) : pageLoading ? (
           <KitchenSkeleton />
         ) : error ? (
           <div className="kp-state kp-state--error" role="alert">

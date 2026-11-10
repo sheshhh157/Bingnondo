@@ -1,4 +1,5 @@
 import apiClient from './apiClient';
+import { cachedRequest, createCacheKey, invalidateApiCache, isCacheableRead } from './requestCache';
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 const BASE_URL = `${import.meta.env.VITE_API_URL || ''}/api`;
@@ -8,10 +9,16 @@ const tokenStorage = {
   getAccess:   () => localStorage.getItem('bingnondo_access_token'),
   getRefresh:  () => localStorage.getItem('bingnondo_refresh_token'),
   setTokens:   (access, refresh) => {
+    invalidateApiCache();
     localStorage.setItem('bingnondo_access_token', access);
     localStorage.setItem('bingnondo_refresh_token', refresh);
   },
-  clearTokens: () => localStorage.clear(),
+  clearTokens: () => {
+    invalidateApiCache();
+    localStorage.removeItem('bingnondo_access_token');
+    localStorage.removeItem('bingnondo_refresh_token');
+    localStorage.removeItem('bingnondo_user');
+  },
   saveUser:    (user) => localStorage.setItem('bingnondo_user', JSON.stringify(user)),
   getUser:     () => { try { return JSON.parse(localStorage.getItem('bingnondo_user')); } catch { return null; } },
 };
@@ -20,15 +27,18 @@ const tokenStorage = {
 let _isRefreshing = false;
 let _refreshQueue = [];
 
-async function apiRequest(endpoint, options = {}, retry = true) {
+async function performApiRequest(endpoint, options = {}, retry = true) {
   const accessToken = tokenStorage.getAccess();
+  const method = (options.method || 'GET').toUpperCase();
   const headers = {
     'Content-Type': 'application/json',
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     ...options.headers,
   };
 
-  const res = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
+  const fetchOptions = { ...options, headers };
+  if (method === 'GET') fetchOptions.cache = 'no-store';
+  const res = await fetch(`${BASE_URL}${endpoint}`, fetchOptions);
 
   if (res.status === 401 && retry) {
     const refreshToken = tokenStorage.getRefresh();
@@ -71,6 +81,21 @@ async function apiRequest(endpoint, options = {}, retry = true) {
   }
   // Wrap in { data } to match the shape the existing pages expect
   return { data };
+}
+
+function apiRequest(endpoint, options = {}, retry = true) {
+  const method = (options.method || 'GET').toUpperCase();
+  if (method === 'GET') {
+    if (!isCacheableRead(endpoint)) return performApiRequest(endpoint, options, retry);
+    const key = createCacheKey(`${BASE_URL}${endpoint}`, tokenStorage.getAccess());
+    return cachedRequest(key, () => performApiRequest(endpoint, options, retry));
+  }
+
+  invalidateApiCache();
+  return performApiRequest(endpoint, options, retry).then((result) => {
+    invalidateApiCache();
+    return result;
+  });
 }
 
 // ─── INVENTORY (§4.1) ─────────────────────────────────────────────────────────
@@ -176,6 +201,18 @@ export const uploadAPI = {
     return uploadRequest('/upload/menu-image', fd);
   },
 
+  uploadStaffProfileImage: (file) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return uploadRequest('/upload/profile-image', fd);
+  },
+
+  uploadRiderProfileImage: (file) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return uploadRequest('/upload/rider-profile-image', fd);
+  },
+
   /**
    * Delete a menu item photo from Cloudinary.
    * @param {string} public_id  — e.g. 'bingnondo/menu/abc123'
@@ -221,6 +258,23 @@ export const kitchenAPI = {
 
 // ─── ADMIN API ────────────────────────────────────────────────────────────────
 export const adminAPI = {
+  // ── Archive ────────────────────────────────────────────────────────────────
+  listArchivedRecords: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.set('page', params.page);
+    if (params.limit) query.set('limit', params.limit);
+    if (params.search) query.set('search', params.search);
+    if (params.type && params.type !== 'all') query.set('type', params.type);
+    const qs = query.toString();
+    return apiRequest(`/admin/archive${qs ? `?${qs}` : ''}`);
+  },
+
+  restoreArchivedRecord: (id) =>
+    apiRequest(`/admin/archive/${id}/restore`, { method: 'POST' }),
+
+  deleteArchivedRecord: (id) =>
+    apiRequest(`/admin/archive/${id}`, { method: 'DELETE' }),
+
   // ── Staff Accounts ──────────────────────────────────────────────────────────
   listStaffAccounts: (params = {}) => {
     const q = new URLSearchParams();

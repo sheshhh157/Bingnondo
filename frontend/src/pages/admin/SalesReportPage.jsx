@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ordersAPI } from '../../services/oversightApi';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import useLiveData from '../../hooks/useLiveData';
 import { currency, STATUS_LABEL, periodBounds, itemLabel } from '../../utils/format';
 import { toCsv, downloadCsv } from '../../utils/csv';
@@ -81,6 +82,7 @@ export default function SalesReportPage() {
   const [customEnd, setCustomEnd] = useState('');
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -103,7 +105,7 @@ export default function SalesReportPage() {
     [period, customStart, customEnd, now],
   );
 
-  const query = search.trim();
+  const query = debouncedSearch.trim();
   // 'all' is the select's "every method" option, not a method name — collapse it
   // to undefined so the API omits the filter entirely.
   const paymentParam = paymentFilter === 'all' ? undefined : paymentFilter;

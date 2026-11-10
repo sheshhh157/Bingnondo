@@ -63,9 +63,9 @@ const STATEMENTS = [
      ON rider_locations (updated_at DESC)`,
 
   // ── Delivery batching ─────────────────────────────────────────────────────
-  // A batch groups up to 5 delivery orders for a single rider trip.
+  // A batch groups up to 10 delivery orders for a single rider trip.
   // Timer starts when the first order is added (batch_started_at).
-  // Batch dispatches when: 5 orders collected OR 20-min timer expires.
+  // Batch dispatches when: 10 orders collected OR 20-min timer expires.
   // After dispatch, OSRM computes nearest-first route and sets stop_sequence.
   `CREATE TABLE IF NOT EXISTS delivery_batches (
      id              SERIAL PRIMARY KEY,
@@ -83,6 +83,42 @@ const STATEMENTS = [
   // Each delivery row gets a FK to its batch and an ordered stop position.
   `ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS batch_id       INTEGER REFERENCES delivery_batches(id) ON DELETE SET NULL`,
   `ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS stop_sequence  SMALLINT`,
+
+  // Soft-delete snapshots for admin-managed records. Archived entries are
+  // restorable for 30 days, then purged by the archive cleanup task.
+  `CREATE TABLE IF NOT EXISTS archived_records (
+     id           BIGSERIAL PRIMARY KEY,
+     entity_type  VARCHAR(40) NOT NULL,
+     entity_id    BIGINT NOT NULL,
+     display_name TEXT NOT NULL,
+     payload      JSONB NOT NULL,
+     archived_by INTEGER,
+     archived_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     expires_at  TIMESTAMPTZ NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '30 days')
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_archived_records_expires_at
+     ON archived_records (expires_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_archived_records_entity
+     ON archived_records (entity_type, entity_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_archived_records_entity
+     ON archived_records (entity_type, entity_id)`,
+  `INSERT INTO archived_records
+     (entity_type, entity_id, display_name, payload, archived_at, expires_at)
+   SELECT 'menu_item',
+          mi.id,
+          mi.name,
+          jsonb_build_object(
+            'is_available', mi.is_available,
+            'image_public_id', mi.image_public_id
+          ),
+          COALESCE(mi.deleted_at, CURRENT_TIMESTAMP),
+          COALESCE(mi.deleted_at, CURRENT_TIMESTAMP) + INTERVAL '30 days'
+     FROM menu_items mi
+    WHERE mi.is_deleted = TRUE
+      AND NOT EXISTS (
+        SELECT 1 FROM archived_records a
+         WHERE a.entity_type = 'menu_item' AND a.entity_id = mi.id
+      )`,
 ];
 
 async function ensureSchema() {

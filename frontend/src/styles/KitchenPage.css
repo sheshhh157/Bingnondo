@@ -306,6 +306,34 @@
   color: var(--k-text-muted);
 }
 
+.kp-header__avatar {
+  display: block;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border: 1px solid var(--k-border);
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.kp-header__profile {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--k-border);
+  border-radius: var(--k-r-sm);
+  background: transparent;
+  color: var(--k-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--k-dur);
+}
+.kp-header__profile:hover {
+  border-color: var(--k-amber-border);
+  background: var(--k-amber-dim);
+  color: var(--k-amber);
+}
+
 .kp-header__logout {
   display: flex;
   align-items: center;

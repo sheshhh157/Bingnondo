@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import {
   Spinner, TableSkeleton, Badge, Btn, Field, TextInput, PasswordInput,
   AppSelect, Modal, ConfirmModal, PageHeader, RowAction, Pagination,
@@ -424,6 +425,16 @@ function StaffRow({ account, isSelf, menuOpen, onToggleMenu, onCloseMenu, onEdit
       <tr className={isActive ? undefined : 'ap-row--inactive'}>
         <td className="ap-col--member">
           <div className="ap-member">
+            <div className="ap-member__avatar" aria-hidden="true">
+              <span>{(account.full_name || '?').trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</span>
+              {account.profile_image_url && (
+                <img
+                  src={account.profile_image_url}
+                  alt=""
+                  onError={e => { e.currentTarget.style.display = 'none'; }}
+                />
+              )}
+            </div>
             <div className="ap-member__info">
               <span className="ap-member__name-row">
                 <span className="ap-member__name" title={account.full_name}>{account.full_name}</span>
@@ -511,6 +522,7 @@ export default function StaffAccounts() {
   const [loading, setLoading]       = useState(true);
   const [page, setPage]             = useState(1);
   const [search, setSearch]         = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [filterRole, setFilterRole] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -541,16 +553,16 @@ export default function StaffAccounts() {
   useEffect(() => { load(); }, [load]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     return accounts.filter(a => {
       const matchQ     = !q || (a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q);
       const matchRole  = !filterRole || a.role === filterRole;
       const matchSt    = !filterStatus || a.status === filterStatus;
       return matchQ && matchRole && matchSt;
     });
-  }, [accounts, search, filterRole, filterStatus]);
+  }, [accounts, debouncedSearch, filterRole, filterStatus]);
 
-  const hasFilters = Boolean(search.trim() || filterRole || filterStatus);
+  const hasFilters = Boolean(debouncedSearch.trim() || filterRole || filterStatus);
 
   const filterFields = (
     <>
@@ -598,7 +610,7 @@ export default function StaffAccounts() {
     setDeleteLoading(true);
     try {
       await adminAPI.deleteStaffAccount(target.id);
-      toast.success(`${target.full_name} deleted.`);
+      toast.success(`${target.full_name} moved to the archive for 30 days.`);
       setAccounts(list => list.filter(a => a.id !== target.id));
       setDeleteTarget(null);
     } catch (err) {
@@ -742,8 +754,8 @@ export default function StaffAccounts() {
         onConfirm={handleDelete}
         loading={deleteLoading}
         title="Delete account"
-        message={`Permanently delete ${deleteTarget?.full_name}? This cannot be undone. Accounts with order or audit history can't be deleted — deactivate them instead. This action is logged.`}
-        confirmLabel="Delete"
+        message={`Move ${deleteTarget?.full_name} to the archive? It can be restored for 30 days. Accounts with order or audit history cannot be archived — deactivate them instead.`}
+        confirmLabel="Archive"
         variant="danger"
       />
     </>

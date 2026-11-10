@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict pbF3PLQXUMcwhGg3zImBfzesRwSgO0AN2t3A15IDSb4HdNO2EsxQutRfL8BZsgY
+\restrict PgdZ6teECf7XfW2jvCP7AJnZ3lQZrRgoO5H5cC3XtEBH6LwA23bepNgXIgEtUfl
 
 -- Dumped from database version 18.6
 -- Dumped by pg_dump version 18.6
@@ -275,7 +275,7 @@ ALTER TABLE public.customer_restrictions OWNER TO postgres;
 
 CREATE TABLE public.customers (
     id integer NOT NULL,
-    email character varying(255) NOT NULL,
+    email character varying(255),
     password_hash character varying(255) NOT NULL,
     email_verified boolean DEFAULT false,
     first_name character varying(50),
@@ -289,6 +289,7 @@ CREATE TABLE public.customers (
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     latitude numeric(10,7),
     longitude numeric(10,7),
+    CONSTRAINT customers_has_contact CHECK (((email IS NOT NULL) OR (mobile_number IS NOT NULL))),
     CONSTRAINT customers_status_check CHECK (((status)::text = ANY ((ARRAY['awaiting_verification'::character varying, 'active'::character varying, 'suspended'::character varying])::text[])))
 );
 
@@ -489,6 +490,26 @@ ALTER SEQUENCE public.esp32_devices_id_seq OWNER TO postgres;
 
 ALTER SEQUENCE public.esp32_devices_id_seq OWNED BY public.esp32_devices.id;
 
+
+--
+-- Name: esp32_wifi_configs; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.esp32_wifi_configs (
+    device_id integer NOT NULL,
+    ssid text NOT NULL,
+    password_ciphertext text NOT NULL,
+    server_url text NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    updated_by integer,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    applied_version integer DEFAULT 0 NOT NULL,
+    applied_at timestamp with time zone,
+    last_error text
+);
+
+
+ALTER TABLE public.esp32_wifi_configs OWNER TO postgres;
 
 --
 -- Name: inventory_item_categories; Type: TABLE; Schema: public; Owner: postgres
@@ -957,6 +978,7 @@ CREATE TABLE public.orders (
     delivery_address text,
     delivery_latitude numeric(10,7),
     delivery_longitude numeric(10,7),
+    delivery_fee numeric(10,2) DEFAULT 0,
     CONSTRAINT orders_order_type_check CHECK (((order_type)::text = ANY ((ARRAY['online'::character varying, 'counter'::character varying])::text[]))),
     CONSTRAINT orders_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'confirmed'::character varying, 'preparing'::character varying, 'ready'::character varying, 'out_for_delivery'::character varying, 'completed'::character varying, 'cancelled'::character varying])::text[])))
 );
@@ -1025,6 +1047,55 @@ ALTER SEQUENCE public.otp_verifications_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.otp_verifications_id_seq OWNED BY public.otp_verifications.id;
+
+
+--
+-- Name: payment_qr_codes; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.payment_qr_codes (
+    id integer NOT NULL,
+    name character varying(100) NOT NULL,
+    number character varying(50) NOT NULL,
+    image_url text NOT NULL,
+    image_public_id character varying(255),
+    is_active boolean DEFAULT true NOT NULL,
+    display_order integer DEFAULT 0 NOT NULL,
+    created_by integer,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+ALTER TABLE public.payment_qr_codes OWNER TO postgres;
+
+--
+-- Name: TABLE payment_qr_codes; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE public.payment_qr_codes IS 'Admin-managed e-wallet QR codes (GCash, Maya, etc.) shown to customers at checkout.';
+
+
+--
+-- Name: payment_qr_codes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.payment_qr_codes_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.payment_qr_codes_id_seq OWNER TO postgres;
+
+--
+-- Name: payment_qr_codes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.payment_qr_codes_id_seq OWNED BY public.payment_qr_codes.id;
 
 
 --
@@ -1121,14 +1192,38 @@ ALTER SEQUENCE public.payments_id_seq OWNED BY public.payments.id;
 --
 
 CREATE TABLE public.pending_registrations (
-    email character varying(255) NOT NULL,
+    email character varying(255),
     password_hash character varying(255) NOT NULL,
     expires_at timestamp without time zone NOT NULL,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    mobile_number character varying(20),
+    id integer NOT NULL
 );
 
 
 ALTER TABLE public.pending_registrations OWNER TO postgres;
+
+--
+-- Name: pending_registrations_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.pending_registrations_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.pending_registrations_id_seq OWNER TO postgres;
+
+--
+-- Name: pending_registrations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.pending_registrations_id_seq OWNED BY public.pending_registrations.id;
+
 
 --
 -- Name: rider_locations; Type: TABLE; Schema: public; Owner: postgres
@@ -1151,7 +1246,6 @@ ALTER TABLE public.rider_locations OWNER TO postgres;
 
 CREATE TABLE public.riders (
     id integer NOT NULL,
-    full_name character varying(100) NOT NULL,
     mobile_number character varying(20) NOT NULL,
     plate_number character varying(30),
     vehicle_type character varying(50),
@@ -1163,7 +1257,19 @@ CREATE TABLE public.riders (
     email character varying(150),
     password_hash text,
     last_login timestamp without time zone,
-    CONSTRAINT riders_status_check CHECK (((status)::text = ANY ((ARRAY['available'::character varying, 'on_delivery'::character varying, 'inactive'::character varying])::text[])))
+    first_name character varying(100) NOT NULL,
+    middle_name character varying(100),
+    last_name character varying(100) NOT NULL,
+    full_name character varying(300) GENERATED ALWAYS AS ((((TRIM(BOTH FROM first_name) || ' '::text) || COALESCE((TRIM(BOTH FROM middle_name) || ' '::text), ''::text)) || TRIM(BOTH FROM last_name))) STORED,
+    work_status character varying(10) DEFAULT NULL::character varying,
+    work_status_set_at timestamp without time zone,
+    admin_work_override character varying(10) DEFAULT NULL::character varying,
+    admin_work_override_at timestamp without time zone,
+    profile_image_url text,
+    profile_image_public_id text,
+    CONSTRAINT riders_admin_work_override_check CHECK (((admin_work_override IS NULL) OR ((admin_work_override)::text = ANY ((ARRAY['working'::character varying, 'off'::character varying])::text[])))),
+    CONSTRAINT riders_status_check CHECK (((status)::text = ANY ((ARRAY['available'::character varying, 'on_delivery'::character varying, 'inactive'::character varying])::text[]))),
+    CONSTRAINT riders_work_status_check CHECK (((work_status IS NULL) OR ((work_status)::text = ANY ((ARRAY['working'::character varying, 'off'::character varying])::text[]))))
 );
 
 
@@ -1197,7 +1303,6 @@ ALTER SEQUENCE public.riders_id_seq OWNED BY public.riders.id;
 
 CREATE TABLE public.staff_accounts (
     id integer NOT NULL,
-    full_name character varying(100) NOT NULL,
     email character varying(255) NOT NULL,
     password_hash character varying(255) NOT NULL,
     role character varying(20) NOT NULL,
@@ -1206,6 +1311,12 @@ CREATE TABLE public.staff_accounts (
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     notification_seen_at timestamp without time zone,
+    first_name character varying(100) NOT NULL,
+    middle_name character varying(100),
+    last_name character varying(100) NOT NULL,
+    full_name character varying(300) GENERATED ALWAYS AS ((((TRIM(BOTH FROM first_name) || ' '::text) || COALESCE((TRIM(BOTH FROM middle_name) || ' '::text), ''::text)) || TRIM(BOTH FROM last_name))) STORED,
+    profile_image_url text,
+    profile_image_public_id text,
     CONSTRAINT staff_accounts_role_check CHECK (((role)::text = ANY ((ARRAY['cashier'::character varying, 'kitchen_staff'::character varying, 'staff'::character varying, 'owner'::character varying, 'admin'::character varying])::text[]))),
     CONSTRAINT staff_accounts_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'deactivated'::character varying])::text[])))
 );
@@ -1593,10 +1704,24 @@ ALTER TABLE ONLY public.otp_verifications ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: payment_qr_codes id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payment_qr_codes ALTER COLUMN id SET DEFAULT nextval('public.payment_qr_codes_id_seq'::regclass);
+
+
+--
 -- Name: payments id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.payments ALTER COLUMN id SET DEFAULT nextval('public.payments_id_seq'::regclass);
+
+
+--
+-- Name: pending_registrations id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pending_registrations ALTER COLUMN id SET DEFAULT nextval('public.pending_registrations_id_seq'::regclass);
 
 
 --
@@ -1652,6 +1777,32 @@ COPY public.audit_log (id, actor_id, action, target_type, target_id, details, cr
 122	5	update_variant_group	variant_groups	1	{"new_name": "Hot/Cold", "old_name": "Hot/Cold", "max_options": 2}	2026-11-02 12:22:16.48616
 123	5	update_category_variants	menu_categories	8	{"category": "Drinks (Non- Caffeinated)", "group_ids": [1], "removed_group_ids": []}	2026-11-02 12:22:38.187192
 124	5	update_business_hours	business_hours	\N	{"days_updated": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]}	2026-11-04 17:12:06.570206
+167	5	create_payment_qr_code	payment_qr_codes	1	{"name": "GcaS ko", "number": "09123456789"}	2026-11-09 15:26:15.277296
+168	5	update_payment_qr_code	payment_qr_codes	1	{"name": "GcaS ko", "number": "09123456789", "is_active": false, "display_order": 0, "image_changed": false}	2026-11-09 15:26:24.171385
+169	5	update_payment_qr_code	payment_qr_codes	1	{"name": "GcaS ko", "number": "09123456789", "is_active": true, "display_order": 0, "image_changed": false}	2026-11-09 15:26:29.166797
+170	5	update_delivery_fee	system_settings	\N	{"amount": 69, "enabled": true}	2026-11-09 17:09:01.21219
+171	5	admin_work_override	rider	39	{"to": "off", "from": null, "rider_name": "juan juan"}	2026-11-09 19:42:09.367473
+172	5	admin_work_override	rider	39	{"to": "working", "from": "off", "rider_name": "juan juan"}	2026-11-09 19:42:18.89869
+173	5	admin_work_override	rider	39	{"to": "off", "from": "working", "rider_name": "juan juan"}	2026-11-09 19:42:21.39243
+174	5	admin_work_override	rider	39	{"to": null, "from": "off", "rider_name": "juan juan"}	2026-11-09 19:42:28.356596
+175	5	admin_work_override	rider	39	{"to": "off", "from": null, "rider_name": "juan juan"}	2026-11-09 19:42:30.003027
+176	5	admin_work_override	rider	39	{"to": null, "from": "off", "rider_name": "juan juan"}	2026-11-09 19:42:30.644883
+177	5	admin_work_override	rider	39	{"to": "working", "from": null, "rider_name": "juan juan"}	2026-11-09 19:42:33.545971
+178	5	admin_work_override	rider	39	{"to": "off", "from": "working", "rider_name": "juan juan"}	2026-11-09 19:42:34.577124
+179	5	update_rider_status	rider	39	{"to": "inactive", "from": "available", "rider_name": "juan juan"}	2026-11-09 19:44:26.456443
+180	5	update_rider_status	rider	39	{"to": "available", "from": "inactive", "rider_name": "juan juan"}	2026-11-09 19:44:31.849357
+181	5	admin_work_override	rider	39	{"to": "off", "from": "off", "rider_name": "juan juan"}	2026-11-09 19:47:47.923513
+182	5	admin_work_override	rider	39	{"to": "working", "from": "off", "rider_name": "juan juan"}	2026-11-09 19:47:56.030855
+183	5	admin_work_override	rider	39	{"to": "off", "from": "working", "rider_name": "juan juan"}	2026-11-09 19:47:58.299665
+184	5	update_delivery_fee	system_settings	\N	{"amount": 69, "enabled": true}	2026-11-09 22:00:07.41802
+185	5	update_business_hours	business_hours	\N	{"days_updated": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]}	2026-11-09 22:26:46.569809
+186	5	update_business_hours	business_hours	\N	{"days_updated": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]}	2026-11-09 22:27:44.912104
+187	5	update_business_hours	business_hours	\N	{"days_updated": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]}	2026-11-10 00:23:26.884871
+188	5	update_business_hours	business_hours	\N	{"days_updated": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]}	2026-11-10 00:23:40.659903
+189	5	admin_work_override	rider	39	{"to": "working", "from": "off", "rider_name": "juan juan"}	2026-11-10 11:28:09.510922
+190	5	admin_work_override	rider	39	{"to": null, "from": "working", "rider_name": "juan juan"}	2026-11-10 11:28:11.476129
+191	5	admin_work_override	rider	39	{"to": "working", "from": null, "rider_name": "juan juan"}	2026-11-10 11:28:12.191716
+192	5	admin_work_override	rider	39	{"to": "off", "from": "working", "rider_name": "juan juan"}	2026-11-10 11:31:39.290258
 \.
 
 
@@ -1660,13 +1811,13 @@ COPY public.audit_log (id, actor_id, action, target_type, target_id, details, cr
 --
 
 COPY public.business_hours (id, day_of_week, open_time, close_time, is_closed, updated_by, updated_at) FROM stdin;
-1	1	07:00:00	22:00:00	f	5	2026-11-04 17:12:06.570206
-2	2	07:00:00	22:00:00	f	5	2026-11-04 17:12:06.570206
-3	3	\N	\N	t	5	2026-11-04 17:12:06.570206
-4	4	08:00:00	22:00:00	f	5	2026-11-04 17:12:06.570206
-5	5	07:00:00	23:00:00	f	5	2026-11-04 17:12:06.570206
-6	6	08:00:00	23:00:00	f	5	2026-11-04 17:12:06.570206
-7	0	08:00:00	21:00:00	f	5	2026-11-04 17:12:06.570206
+1	1	07:00:00	20:00:00	f	5	2026-11-10 00:23:40.659903
+2	2	00:00:00	23:59:00	f	5	2026-11-10 00:23:40.659903
+3	3	\N	\N	t	5	2026-11-10 00:23:40.659903
+4	4	08:00:00	22:00:00	f	5	2026-11-10 00:23:40.659903
+5	5	07:00:00	23:00:00	f	5	2026-11-10 00:23:40.659903
+6	6	08:00:00	23:00:00	f	5	2026-11-10 00:23:40.659903
+7	0	08:00:00	21:00:00	f	5	2026-11-10 00:23:40.659903
 \.
 
 
@@ -1714,6 +1865,8 @@ COPY public.customer_notifications (id, customer_id, type, message, related_orde
 3	20	order_confirmed	Your order has been confirmed. We are on it!	132	f	2026-11-04 10:11:38.117049
 4	20	payment_received	Your GCash payment was verified. Your order is confirmed and the kitchen is on it!	128	f	2026-11-04 10:11:49.621688
 5	20	order_confirmed	Your order has been confirmed. We are on it!	133	f	2026-11-05 18:06:16.866787
+54	20	order_cancelled	Your order has been cancelled.	221	f	2026-11-10 00:32:26.476621
+55	20	order_confirmed	Your order has been confirmed. We are on it!	225	f	2026-11-10 11:56:53.029042
 \.
 
 
@@ -1739,7 +1892,8 @@ COPY public.customer_restrictions (customer_id, restriction_level, reason, updat
 --
 
 COPY public.customers (id, email, password_hash, email_verified, first_name, last_name, mobile_number, mobile_verified, address, profile_completed, status, created_at, updated_at, latitude, longitude) FROM stdin;
-20	carlnovero29@gmail.com	$2b$12$nn.JETH9HVcuQ7NTbhuNhe4a9FdqHfadyuJogzwcqHjkTHiL5ieLy	t	Carl Angelo	Novero	09817331308	f	Villa Josefina, Santa Cruz, Laguna, 4009, Philippines	t	active	2026-09-30 12:10:37.930605	2026-11-04 14:57:41.254678	14.2788196	121.4117173
+20	carlnovero29@gmail.com	$2b$12$nn.JETH9HVcuQ7NTbhuNhe4a9FdqHfadyuJogzwcqHjkTHiL5ieLy	t	Carl Angelo	Novero	09817331308	t	Villa Josefina, Santa Cruz, Laguna, 4009, Philippines	t	active	2026-09-30 12:10:37.930605	2026-11-09 16:24:15.969546	14.2788196	121.4117173
+134	\N	$2b$12$3/3lnSPEgCz7YJrvCNY3A.zbKkhTO/PxkJDkkg9WgqaUfWDQPHbNi	f	\N	\N	09709693223	t	\N	f	active	2026-11-09 20:03:42.49502	2026-11-09 20:03:42.49502	\N	\N
 \.
 
 
@@ -1756,13 +1910,15 @@ COPY public.dashboard_switch_config (id, scope, staff_id, target_dashboard, requ
 --
 
 COPY public.deliveries (id, order_id, delivery_preference, assigned_by, rider_name, rider_contact, lalamove_booking_id, status, assigned_at, delivered_at, rider_id, batch_id, stop_sequence) FROM stdin;
+63	133	own_delivery	\N	juan	09123456789	\N	delivered	2026-11-05 18:06:32.510989	2026-11-09 19:35:45.786927	39	2	1
+97	221	own_delivery	\N	\N	\N	\N	pending_assignment	\N	\N	\N	\N	\N
+98	222	own_delivery	\N	\N	\N	\N	pending_assignment	\N	\N	\N	\N	\N
 57	127	own_delivery	\N	\N	\N	\N	pending_assignment	\N	\N	\N	\N	\N
 59	129	own_delivery	\N	juan	09123456789	\N	delivered	2026-10-20 21:37:37.038053	2026-10-20 21:39:40.532541	39	\N	\N
 60	130	own_delivery	\N	juan	09123456789	\N	delivered	2026-11-03 14:29:24.330317	2026-11-03 15:09:35.970144	39	\N	\N
 61	131	own_delivery	\N	juan	09123456789	\N	out_for_delivery	2026-11-03 15:09:35.970144	\N	39	\N	\N
 62	132	own_delivery	\N	juan	09123456789	\N	delivered	2026-11-04 10:12:17.189783	2026-11-04 13:41:47.912304	39	1	1
 58	128	own_delivery	\N	juan	09123456789	\N	delivered	2026-11-04 10:12:58.155632	2026-11-05 18:05:49.569946	39	1	2
-63	133	own_delivery	\N	juan	09123456789	\N	out_for_delivery	2026-11-05 18:06:32.510989	\N	39	2	1
 \.
 
 
@@ -1772,7 +1928,7 @@ COPY public.deliveries (id, order_id, delivery_preference, assigned_by, rider_na
 
 COPY public.delivery_batches (id, rider_id, status, batch_started_at, dispatched_at, completed_at) FROM stdin;
 1	39	completed	2026-11-04 10:12:17.189783	2026-11-04 10:32:17.416828	2026-11-05 18:05:49.569946
-2	39	in_progress	2026-11-05 18:06:32.510989	2026-11-05 18:26:32.58134	\N
+2	39	completed	2026-11-05 18:06:32.510989	2026-11-05 18:26:32.58134	2026-11-09 19:35:45.786927
 \.
 
 
@@ -1782,6 +1938,14 @@ COPY public.delivery_batches (id, rider_id, status, batch_started_at, dispatched
 
 COPY public.esp32_devices (id, device_code, location_label, created_at, status, last_ping_at) FROM stdin;
 1	ESP32-KitchenA	Kitchen Counter A	2026-10-15 12:13:45.369529+08	online	2026-10-15 12:13:45.369529+08
+\.
+
+
+--
+-- Data for Name: esp32_wifi_configs; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.esp32_wifi_configs (device_id, ssid, password_ciphertext, server_url, version, updated_by, updated_at, applied_version, applied_at, last_error) FROM stdin;
 \.
 
 
@@ -1992,6 +2156,15 @@ COPY public.notifications (id, staff_id, target_role, type, reference_id, is_rea
 75	\N	\N	order_confirmed	133	f	2026-11-05 18:06:16.93431	20	Your order has been confirmed by Bingnondo Cafe.
 76	\N	\N	order_preparing	133	f	2026-11-05 18:06:31.001799	20	The kitchen is now preparing your order.
 77	\N	\N	order_ready	133	f	2026-11-05 18:06:32.54539	20	Your order is ready! A rider will pick it up shortly.
+80	\N	\N	order_pending	221	f	2026-11-10 00:27:56.070548	20	Your order has been placed! Waiting for confirmation.
+81	\N	\N	order_cancelled	221	f	2026-11-10 00:32:26.554738	20	Your order has been cancelled.
+82	\N	\N	order_pending	222	f	2026-11-10 00:32:53.726245	20	Your order has been placed! Waiting for confirmation.
+83	\N	\N	order_pending	223	f	2026-11-10 11:32:15.888167	20	Your order has been placed! Waiting for confirmation.
+84	\N	\N	order_pending	224	f	2026-11-10 11:38:12.55951	20	Your order has been placed! Waiting for confirmation.
+85	\N	\N	order_pending	225	f	2026-11-10 11:46:45.441345	20	Your order has been placed! Waiting for confirmation.
+86	\N	\N	order_confirmed	225	f	2026-11-10 11:56:53.022874	20	Your order has been confirmed by Bingnondo Cafe.
+87	\N	\N	order_preparing	225	f	2026-11-10 11:57:57.73303	20	The kitchen is now preparing your order.
+88	\N	\N	order_ready	225	f	2026-11-10 11:57:59.71754	20	Your order is ready! A rider will pick it up shortly.
 \.
 
 
@@ -2000,6 +2173,11 @@ COPY public.notifications (id, staff_id, target_role, type, reference_id, is_rea
 --
 
 COPY public.order_items (id, order_id, menu_item_id, quantity, unit_price, notes, variant_id, variant_name) FROM stdin;
+224	221	3	1	120.00	\N	\N	\N
+225	222	3	1	120.00	\N	\N	\N
+226	223	3	1	120.00	\N	\N	\N
+227	224	4	1	185.00	\N	\N	\N
+228	225	5	1	140.00	\N	\N	\N
 130	127	3	1	120.00	\N	\N	\N
 131	128	3	1	120.00	\N	\N	\N
 132	129	3	1	120.00	\N	\N	\N
@@ -2050,6 +2228,16 @@ COPY public.order_status_history (id, order_id, status, changed_by, changed_at) 
 159	133	preparing	12	2026-11-05 18:06:30.960195
 160	133	ready	12	2026-11-05 18:06:32.510989
 161	133	out_for_delivery	\N	2026-11-05 18:27:09.441649
+218	133	completed	\N	2026-11-09 19:35:45.786927
+219	221	pending	\N	2026-11-10 00:27:55.832074
+220	221	cancelled	2	2026-11-10 00:32:26.34846
+221	222	pending	\N	2026-11-10 00:32:53.636603
+222	223	pending	\N	2026-11-10 11:32:15.748756
+223	224	pending	\N	2026-11-10 11:38:12.466571
+224	225	pending	\N	2026-11-10 11:46:45.358027
+225	225	confirmed	2	2026-11-10 11:56:52.780837
+226	225	preparing	12	2026-11-10 11:57:57.702673
+227	225	ready	12	2026-11-10 11:57:59.705505
 \.
 
 
@@ -2057,14 +2245,19 @@ COPY public.order_status_history (id, order_id, status, changed_by, changed_at) 
 -- Data for Name: orders; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.orders (id, order_type, customer_id, cashier_id, status, order_channel, total_amount, special_request, created_at, updated_at, order_number, delivery_address, delivery_latitude, delivery_longitude) FROM stdin;
-127	online	20	\N	pending	mobile_app	120.00	\N	2026-10-19 15:25:47.252536	2026-10-19 15:25:47.252536	BNG-20261019-0001	hindi makamove on st. brgy. sinaktan	\N	\N
-129	online	20	\N	completed	mobile_app	120.00	\N	2026-10-20 21:31:20.075619	2026-10-20 21:39:40.532541	BNG-20261020-0001	P. Guevarra Road, Pagsawitan, Santa Cruz, Laguna, 4009, Philippines	14.2728240	121.4193703
-130	online	20	\N	completed	mobile_app	30.00	\N	2026-10-21 17:51:56.176648	2026-11-03 15:09:35.970144	BNG-20261021-0001	hindi makamove on st. brgy. sinaktan	\N	\N
-131	online	20	\N	out_for_delivery	mobile_app	120.00	\N	2026-11-03 15:08:03.583324	2026-11-03 15:10:04.818563	BNG-20261103-0001	Pedro Guevarra Avenue, Pagsawitan, Santa Cruz, Laguna, 4009, Philippines	14.2741348	121.4188842
-132	online	20	\N	completed	mobile_app	120.00	\N	2026-11-04 08:49:38.800818	2026-11-04 13:41:47.912304	BNG-20261104-0001	General Cailles Street, Barangay III, Santa Cruz, Laguna, 4009, Philippines	14.2818000	121.4149000
-128	online	20	\N	completed	mobile_app	120.00	\N	2026-10-19 15:44:52.333693	2026-11-05 18:05:49.569946	BNG-20261019-0002	hindi makamove on st. brgy. sinaktan	\N	\N
-133	online	20	\N	out_for_delivery	mobile_app	30.00	\N	2026-11-04 17:13:06.818007	2026-11-05 18:27:09.441649	BNG-20261104-0002	Villa Josefina, Santa Cruz, Laguna, 4009, Philippines	14.2788196	121.4117173
+COPY public.orders (id, order_type, customer_id, cashier_id, status, order_channel, total_amount, special_request, created_at, updated_at, order_number, delivery_address, delivery_latitude, delivery_longitude, delivery_fee) FROM stdin;
+133	online	20	\N	completed	mobile_app	30.00	\N	2026-11-04 17:13:06.818007	2026-11-09 19:35:45.786927	BNG-20261104-0002	Villa Josefina, Santa Cruz, Laguna, 4009, Philippines	14.2788196	121.4117173	0.00
+127	online	20	\N	pending	mobile_app	120.00	\N	2026-10-19 15:25:47.252536	2026-10-19 15:25:47.252536	BNG-20261019-0001	hindi makamove on st. brgy. sinaktan	\N	\N	0.00
+221	online	20	\N	cancelled	mobile_app	189.00	\N	2026-11-10 00:27:55.832074	2026-11-10 00:32:26.34846	BNG-20261109-0001	Villa Josefina, Santa Cruz, Laguna, 4009, Philippines	14.2788196	121.4117173	69.00
+222	online	20	\N	pending	mobile_app	189.00	\N	2026-11-10 00:32:53.636603	2026-11-10 00:32:53.636603	BNG-20261109-0002	Villa Josefina, Santa Cruz, Laguna, 4009, Philippines	14.2788196	121.4117173	69.00
+223	online	20	\N	pending	mobile_app	189.00	\N	2026-11-10 11:32:15.748756	2026-11-10 11:32:15.748756	BNG-20261110-0003	Villa Josefina, Santa Cruz, Laguna, 4009, Philippines	14.2788196	121.4117173	69.00
+224	online	20	\N	pending	mobile_app	254.00	\N	2026-11-10 11:38:12.466571	2026-11-10 11:38:12.466571	BNG-20261110-0004	Villa Josefina, Santa Cruz, Laguna, 4009, Philippines	14.2788196	121.4117173	69.00
+129	online	20	\N	completed	mobile_app	120.00	\N	2026-10-20 21:31:20.075619	2026-10-20 21:39:40.532541	BNG-20261020-0001	P. Guevarra Road, Pagsawitan, Santa Cruz, Laguna, 4009, Philippines	14.2728240	121.4193703	0.00
+225	online	20	\N	ready	mobile_app	140.00	\N	2026-11-10 11:46:45.358027	2026-11-10 11:57:59.705505	BNG-20261110-0005	\N	\N	\N	0.00
+130	online	20	\N	completed	mobile_app	30.00	\N	2026-10-21 17:51:56.176648	2026-11-03 15:09:35.970144	BNG-20261021-0001	hindi makamove on st. brgy. sinaktan	\N	\N	0.00
+131	online	20	\N	out_for_delivery	mobile_app	120.00	\N	2026-11-03 15:08:03.583324	2026-11-03 15:10:04.818563	BNG-20261103-0001	Pedro Guevarra Avenue, Pagsawitan, Santa Cruz, Laguna, 4009, Philippines	14.2741348	121.4188842	0.00
+132	online	20	\N	completed	mobile_app	120.00	\N	2026-11-04 08:49:38.800818	2026-11-04 13:41:47.912304	BNG-20261104-0001	General Cailles Street, Barangay III, Santa Cruz, Laguna, 4009, Philippines	14.2818000	121.4149000	0.00
+128	online	20	\N	completed	mobile_app	120.00	\N	2026-10-19 15:44:52.333693	2026-11-05 18:05:49.569946	BNG-20261019-0002	hindi makamove on st. brgy. sinaktan	\N	\N	0.00
 \.
 
 
@@ -2102,6 +2295,18 @@ COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verif
 27	carlnovero29@gmail.com	986261	password_reset	2026-09-30 13:04:15.78666	2026-09-30 12:54:43.027424	2026-09-30 12:54:15.78666	\N
 28	carlnovero29@gmail.com	892232	password_reset	2026-09-30 20:55:34.834299	2026-09-30 20:46:12.509272	2026-09-30 20:45:34.834299	\N
 29	carlnovero29@gmail.com	493079	password_reset	2026-09-30 21:25:22.688401	2026-09-30 21:16:06.981427	2026-09-30 21:15:22.688401	\N
+90	09817331308	704914	mobile_verification	2026-11-09 15:49:38.601417	2026-11-09 15:40:05.59602	2026-11-09 15:39:38.601417	\N
+91	09817331308	468674	mobile_verification	2026-11-09 16:34:05.354523	2026-11-09 16:24:15.966522	2026-11-09 16:24:05.354523	\N
+92	09709693223	657059	mobile_verification	2026-11-09 20:13:24.816261	2026-11-09 20:03:42.488817	2026-11-09 20:03:24.816261	\N
+\.
+
+
+--
+-- Data for Name: payment_qr_codes; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.payment_qr_codes (id, name, number, image_url, image_public_id, is_active, display_order, created_by, created_at, updated_at) FROM stdin;
+1	GcaS ko	09123456789	https://res.cloudinary.com/roumuyf1/image/upload/v1794209173/bingnondo/qr_codes/woaazowhh7fins3h2g6j.jpg	bingnondo/qr_codes/woaazowhh7fins3h2g6j	t	0	5	2026-11-09 15:26:15.277296	2026-11-09 15:26:29.166797
 \.
 
 
@@ -2110,6 +2315,11 @@ COPY public.otp_verifications (id, contact, otp_code, purpose, expires_at, verif
 --
 
 COPY public.payments (id, order_id, method, amount, paymongo_payment_id, status, paid_at, created_at, gcash_ref_number, receipt_image_url, receipt_uploaded_at, verified_by, verified_at, rejection_reason, gcash_amount_sent, rejected_at, resubmitted_at, rejection_count, previous_receipt_image_url, previous_rejection_reason) FROM stdin;
+177	221	cash_on_delivery	189.00	\N	pending	\N	2026-11-10 00:27:55.832074	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N	\N
+178	222	cash_on_delivery	189.00	\N	pending	\N	2026-11-10 00:32:53.636603	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N	\N
+179	223	cash_on_delivery	189.00	\N	pending	\N	2026-11-10 11:32:15.748756	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N	\N
+180	224	cash_on_delivery	254.00	\N	pending	\N	2026-11-10 11:38:12.466571	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N	\N
+181	225	cash_on_delivery	140.00	\N	pending	\N	2026-11-10 11:46:45.358027	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N	\N
 91	129	cash_on_delivery	120.00	\N	pending	\N	2026-10-20 21:31:20.075619	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N	\N
 92	130	cash_on_delivery	30.00	\N	pending	\N	2026-10-21 17:51:56.176648	\N	\N	\N	\N	\N	\N	\N	\N	\N	0	\N	\N
 89	127	gcash	120.00	\N	rejected	\N	2026-10-19 15:25:47.252536	0046175868012	https://res.cloudinary.com/roumuyf1/image/upload/v1792527207/bingnondo/gcash_receipts/gcash_undefined_1792527206874.jpg	2026-10-21 04:13:31.523508	\N	\N	Expired receipt	105.00	2026-10-21 21:18:52.589528	\N	1	\N	Expired receipt
@@ -2124,7 +2334,7 @@ COPY public.payments (id, order_id, method, amount, paymongo_payment_id, status,
 -- Data for Name: pending_registrations; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.pending_registrations (email, password_hash, expires_at, created_at) FROM stdin;
+COPY public.pending_registrations (email, password_hash, expires_at, created_at, mobile_number, id) FROM stdin;
 \.
 
 
@@ -2133,7 +2343,7 @@ COPY public.pending_registrations (email, password_hash, expires_at, created_at)
 --
 
 COPY public.rider_locations (rider_id, latitude, longitude, accuracy, updated_at) FROM stdin;
-39	14.1349504	121.4139715	149	2026-11-05 18:27:13.584632
+39	14.1349504	121.4139715	149	2026-11-06 09:44:14.484221
 \.
 
 
@@ -2141,8 +2351,8 @@ COPY public.rider_locations (rider_id, latitude, longitude, accuracy, updated_at
 -- Data for Name: riders; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.riders (id, full_name, mobile_number, plate_number, vehicle_type, notes, status, created_by, created_at, updated_at, email, password_hash, last_login) FROM stdin;
-39	juan	09123456789	juan@email.com	motorcycle	\N	on_delivery	5	2026-10-20 16:43:45.764962	2026-11-05 18:26:32.58134	juan@email.com	$2b$12$ITawvPhDHnWl1NCJljYm7Ou2lZbv0bzTbB5hujyA7z/jby3AtjDM.	2026-11-05 18:06:44.488776
+COPY public.riders (id, mobile_number, plate_number, vehicle_type, notes, status, created_by, created_at, updated_at, email, password_hash, last_login, first_name, middle_name, last_name, work_status, work_status_set_at, admin_work_override, admin_work_override_at, profile_image_url, profile_image_public_id) FROM stdin;
+39	09123456789	juan@email.com	motorcycle	\N	available	5	2026-10-20 16:43:45.764962	2026-11-10 11:31:39.290258	juan@email.com	$2b$12$ITawvPhDHnWl1NCJljYm7Ou2lZbv0bzTbB5hujyA7z/jby3AtjDM.	2026-11-10 01:12:21.8265	juan	\N	juan	off	2026-11-10 01:04:06.734241	off	2026-11-10 11:31:39.290258	https://res.cloudinary.com/roumuyf1/image/upload/v1794244329/bingnondo/rider_profiles/uaeqpvp0mxxan8akengc.png	bingnondo/rider_profiles/uaeqpvp0mxxan8akengc
 \.
 
 
@@ -2150,10 +2360,10 @@ COPY public.riders (id, full_name, mobile_number, plate_number, vehicle_type, no
 -- Data for Name: staff_accounts; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.staff_accounts (id, full_name, email, password_hash, role, status, created_by, created_at, updated_at, notification_seen_at) FROM stdin;
-5	System Admin	admin@bingnondo.com	$2b$12$OMGjTVN/nCjbfpyZDl9TXurgHB8nW6E1saDKRbM.amzVfM4Dp/gO6	admin	active	\N	2026-09-22 07:27:58.038776	2026-09-22 07:27:58.038776	\N
-2	Cashier One	cashier@bingnondo.com	$2b$12$Nb/ro88t7FLMsyCDbMEcbuD1z666oY7xwONE85l9EVvuKEkJj7MiW	cashier	active	\N	2026-09-22 07:27:56.909594	2026-09-22 07:27:56.909594	\N
-12	carl angelo	kitchen@bingnondo.com	$2b$12$w43ceh6xozgo1ccKmNtT2OU15hDyLKuVSrKaBgUZDNQMtKQ6z1dyW	kitchen_staff	active	5	2026-10-08 11:40:03.783637	2026-10-20 21:36:30.863269	\N
+COPY public.staff_accounts (id, email, password_hash, role, status, created_by, created_at, updated_at, notification_seen_at, first_name, middle_name, last_name, profile_image_url, profile_image_public_id) FROM stdin;
+12	kitchen@bingnondo.com	$2b$12$w43ceh6xozgo1ccKmNtT2OU15hDyLKuVSrKaBgUZDNQMtKQ6z1dyW	kitchen_staff	active	5	2026-10-08 11:40:03.783637	2026-10-20 21:36:30.863269	\N	carl	\N	angelo	\N	\N
+2	cashier@bingnondo.com	$2b$12$Nb/ro88t7FLMsyCDbMEcbuD1z666oY7xwONE85l9EVvuKEkJj7MiW	cashier	active	\N	2026-09-22 07:27:56.909594	2026-11-10 00:58:54.498031	\N	Cashier	\N	One	https://res.cloudinary.com/roumuyf1/image/upload/v1794243533/bingnondo/staff_profiles/nyr1egukbl1dp3wncvpv.jpg	bingnondo/staff_profiles/nyr1egukbl1dp3wncvpv
+5	admin@bingnondo.com	$2b$12$OMGjTVN/nCjbfpyZDl9TXurgHB8nW6E1saDKRbM.amzVfM4Dp/gO6	admin	active	\N	2026-09-22 07:27:58.038776	2026-11-10 01:03:00.587834	\N	System	\N	Admin	https://res.cloudinary.com/roumuyf1/image/upload/v1794243779/bingnondo/staff_profiles/ouujngu3snaejqtt03zy.jpg	bingnondo/staff_profiles/ouujngu3snaejqtt03zy
 \.
 
 
@@ -2186,6 +2396,9 @@ COPY public.support_chat_messages (id, chat_id, sender_type, sender_id, related_
 1	1	customer	20	\N	hi	2026-10-15 14:00:42.288068	f
 2	1	staff	2	\N	how can i help you??	2026-10-15 14:01:20.130199	f
 3	1	customer	20	\N	asan na order ko	2026-10-16 02:39:54.128283	f
+6	1	customer	20	127	hi	2026-11-10 00:34:03.365787	f
+7	1	customer	20	127	hi	2026-11-10 00:34:21.554936	f
+8	1	customer	20	127	yoww	2026-11-10 00:37:31.292603	f
 \.
 
 
@@ -2203,7 +2416,8 @@ COPY public.support_chats (id, customer_id, status, opened_at, locked_at) FROM s
 --
 
 COPY public.system_settings (key, value, updated_at) FROM stdin;
-notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "payments": true, "customers": true, "inventory": true, "deliveries": true}}	2026-10-20 16:25:14.453545
+notifications	{"categories": {"orders": true, "system": true, "kitchen": true, "payments": true, "customers": true, "inventory": true, "deliveries": true}}	2026-11-09 12:27:00.299315
+delivery_fee	{"amount": 69, "enabled": true}	2026-11-09 22:00:07.41802
 \.
 
 
@@ -2220,7 +2434,7 @@ COPY public.variant_groups (id, name, created_at, updated_at, max_options) FROM 
 -- Name: audit_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.audit_log_id_seq', 124, true);
+SELECT pg_catalog.setval('public.audit_log_id_seq', 192, true);
 
 
 --
@@ -2234,21 +2448,21 @@ SELECT pg_catalog.setval('public.business_hours_id_seq', 7, true);
 -- Name: chatbot_conversations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.chatbot_conversations_id_seq', 4, true);
+SELECT pg_catalog.setval('public.chatbot_conversations_id_seq', 7, true);
 
 
 --
 -- Name: chatbot_messages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.chatbot_messages_id_seq', 14, true);
+SELECT pg_catalog.setval('public.chatbot_messages_id_seq', 20, true);
 
 
 --
 -- Name: customer_notifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.customer_notifications_id_seq', 5, true);
+SELECT pg_catalog.setval('public.customer_notifications_id_seq', 55, true);
 
 
 --
@@ -2262,7 +2476,7 @@ SELECT pg_catalog.setval('public.customer_order_violations_id_seq', 1, true);
 -- Name: customers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.customers_id_seq', 20, true);
+SELECT pg_catalog.setval('public.customers_id_seq', 134, true);
 
 
 --
@@ -2276,7 +2490,7 @@ SELECT pg_catalog.setval('public.dashboard_switch_config_id_seq', 2, true);
 -- Name: deliveries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.deliveries_id_seq', 63, true);
+SELECT pg_catalog.setval('public.deliveries_id_seq', 98, true);
 
 
 --
@@ -2297,91 +2511,105 @@ SELECT pg_catalog.setval('public.esp32_devices_id_seq', 1, true);
 -- Name: inventory_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.inventory_items_id_seq', 23, true);
+SELECT pg_catalog.setval('public.inventory_items_id_seq', 37, true);
 
 
 --
 -- Name: inventory_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 19, true);
+SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 29, true);
 
 
 --
 -- Name: kitchen_alerts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.kitchen_alerts_id_seq', 12, true);
+SELECT pg_catalog.setval('public.kitchen_alerts_id_seq', 23, true);
 
 
 --
 -- Name: menu_categories_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.menu_categories_id_seq', 11, true);
+SELECT pg_catalog.setval('public.menu_categories_id_seq', 19, true);
 
 
 --
 -- Name: menu_item_reviews_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.menu_item_reviews_id_seq', 1, true);
+SELECT pg_catalog.setval('public.menu_item_reviews_id_seq', 9, true);
 
 
 --
 -- Name: menu_item_variants_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.menu_item_variants_id_seq', 4, true);
+SELECT pg_catalog.setval('public.menu_item_variants_id_seq', 24, true);
 
 
 --
 -- Name: menu_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.menu_items_id_seq', 115, true);
+SELECT pg_catalog.setval('public.menu_items_id_seq', 186, true);
 
 
 --
 -- Name: notifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.notifications_id_seq', 77, true);
+SELECT pg_catalog.setval('public.notifications_id_seq', 88, true);
 
 
 --
 -- Name: order_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.order_items_id_seq', 136, true);
+SELECT pg_catalog.setval('public.order_items_id_seq', 228, true);
 
 
 --
 -- Name: order_status_history_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.order_status_history_id_seq', 161, true);
+SELECT pg_catalog.setval('public.order_status_history_id_seq', 227, true);
 
 
 --
 -- Name: orders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.orders_id_seq', 133, true);
+SELECT pg_catalog.setval('public.orders_id_seq', 225, true);
 
 
 --
 -- Name: otp_verifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.otp_verifications_id_seq', 29, true);
+SELECT pg_catalog.setval('public.otp_verifications_id_seq', 92, true);
+
+
+--
+-- Name: payment_qr_codes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.payment_qr_codes_id_seq', 1, true);
 
 
 --
 -- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.payments_id_seq', 95, true);
+SELECT pg_catalog.setval('public.payments_id_seq', 181, true);
+
+
+--
+-- Name: pending_registrations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.pending_registrations_id_seq', 3, true);
 
 
 --
@@ -2409,21 +2637,21 @@ SELECT pg_catalog.setval('public.staff_dashboard_access_id_seq', 11, true);
 -- Name: support_chat_messages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.support_chat_messages_id_seq', 3, true);
+SELECT pg_catalog.setval('public.support_chat_messages_id_seq', 8, true);
 
 
 --
 -- Name: support_chats_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.support_chats_id_seq', 38, true);
+SELECT pg_catalog.setval('public.support_chats_id_seq', 82, true);
 
 
 --
 -- Name: variant_groups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.variant_groups_id_seq', 1, true);
+SELECT pg_catalog.setval('public.variant_groups_id_seq', 10, true);
 
 
 --
@@ -2491,14 +2719,6 @@ ALTER TABLE ONLY public.customer_restrictions
 
 
 --
--- Name: customers customers_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.customers
-    ADD CONSTRAINT customers_email_key UNIQUE (email);
-
-
---
 -- Name: customers customers_mobile_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -2552,6 +2772,14 @@ ALTER TABLE ONLY public.delivery_batches
 
 ALTER TABLE ONLY public.esp32_devices
     ADD CONSTRAINT esp32_devices_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: esp32_wifi_configs esp32_wifi_configs_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.esp32_wifi_configs
+    ADD CONSTRAINT esp32_wifi_configs_pkey PRIMARY KEY (device_id);
 
 
 --
@@ -2699,6 +2927,14 @@ ALTER TABLE ONLY public.otp_verifications
 
 
 --
+-- Name: payment_qr_codes payment_qr_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payment_qr_codes
+    ADD CONSTRAINT payment_qr_codes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: payments payments_order_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -2719,7 +2955,7 @@ ALTER TABLE ONLY public.payments
 --
 
 ALTER TABLE ONLY public.pending_registrations
-    ADD CONSTRAINT pending_registrations_pkey PRIMARY KEY (email);
+    ADD CONSTRAINT pending_registrations_pkey PRIMARY KEY (id);
 
 
 --
@@ -2848,6 +3084,20 @@ ALTER TABLE ONLY public.dashboard_switch_config
 
 ALTER TABLE ONLY public.variant_groups
     ADD CONSTRAINT variant_groups_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: customers_email_unique; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX customers_email_unique ON public.customers USING btree (email) WHERE (email IS NOT NULL);
+
+
+--
+-- Name: customers_mobile_unique; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX customers_mobile_unique ON public.customers USING btree (mobile_number) WHERE (mobile_number IS NOT NULL);
 
 
 --
@@ -3047,6 +3297,13 @@ CREATE INDEX idx_otp_contact_purpose ON public.otp_verifications USING btree (co
 
 
 --
+-- Name: idx_payment_qr_codes_active; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payment_qr_codes_active ON public.payment_qr_codes USING btree (is_active, display_order, id);
+
+
+--
 -- Name: idx_payments_gcash_pending; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -3089,6 +3346,13 @@ CREATE INDEX idx_riders_status ON public.riders USING btree (status);
 
 
 --
+-- Name: idx_riders_work_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_riders_work_status ON public.riders USING btree (work_status);
+
+
+--
 -- Name: idx_sda_staff_id; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -3114,6 +3378,20 @@ CREATE INDEX idx_violations_created ON public.customer_order_violations USING bt
 --
 
 CREATE INDEX idx_violations_customer ON public.customer_order_violations USING btree (customer_id);
+
+
+--
+-- Name: pending_registrations_email_key; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX pending_registrations_email_key ON public.pending_registrations USING btree (email) WHERE (email IS NOT NULL);
+
+
+--
+-- Name: pending_registrations_mobile_key; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX pending_registrations_mobile_key ON public.pending_registrations USING btree (mobile_number) WHERE (mobile_number IS NOT NULL);
 
 
 --
@@ -3286,6 +3564,22 @@ ALTER TABLE ONLY public.deliveries
 
 ALTER TABLE ONLY public.delivery_batches
     ADD CONSTRAINT delivery_batches_rider_id_fkey FOREIGN KEY (rider_id) REFERENCES public.riders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: esp32_wifi_configs esp32_wifi_configs_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.esp32_wifi_configs
+    ADD CONSTRAINT esp32_wifi_configs_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.esp32_devices(id) ON DELETE CASCADE;
+
+
+--
+-- Name: esp32_wifi_configs esp32_wifi_configs_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.esp32_wifi_configs
+    ADD CONSTRAINT esp32_wifi_configs_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.staff_accounts(id) ON DELETE SET NULL;
 
 
 --
@@ -3497,6 +3791,14 @@ ALTER TABLE ONLY public.orders
 
 
 --
+-- Name: payment_qr_codes payment_qr_codes_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payment_qr_codes
+    ADD CONSTRAINT payment_qr_codes_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.staff_accounts(id) ON DELETE SET NULL;
+
+
+--
 -- Name: payments payments_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -3588,5 +3890,5 @@ ALTER TABLE ONLY public.support_chats
 -- PostgreSQL database dump complete
 --
 
-\unrestrict pbF3PLQXUMcwhGg3zImBfzesRwSgO0AN2t3A15IDSb4HdNO2EsxQutRfL8BZsgY
+\unrestrict PgdZ6teECf7XfW2jvCP7AJnZ3lQZrRgoO5H5cC3XtEBH6LwA23bepNgXIgEtUfl
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import { adminAPI } from '../../services/api';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import {
   TableSkeleton, Btn, AppSelect, PageHeader, Pagination, TextInput,
 } from './adminShared';
@@ -127,7 +128,8 @@ export default function AuditLog() {
   // Client-side only: filters the rows already loaded on this page. Kept out of
   // `load` entirely, so it never changes the request or triggers extra fetches.
   const [search, setSearch]             = useState('');
-  const term = search.trim().toLowerCase();
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const term = debouncedSearch.trim().toLowerCase();
   const visible = term
     ? logs.filter((e) =>
         (e.actor_name || '').toLowerCase().includes(term) ||

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { staffMenuAPI, adminAPI, inventoryAPI, uploadAPI, reviewsAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import useMediaQuery from '../../hooks/useMediaQuery';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import { recipeUnitOptions, conversionFactor, unitLabel } from '../../utils/units';
 import {
@@ -200,6 +201,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   const [editQty, setEditQty]       = useState('');
   const [editUnit, setEditUnit]     = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const [filterCat, setFilterCat]     = useState('all');
   const searchRef = useRef(null);
 
@@ -234,8 +236,8 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   };
 
   const results = useMemo(
-    () => available.filter((inv) => matchesFilters(inv, searchQuery.trim().toLowerCase(), filterCat)),
-    [available, searchQuery, filterCat]
+    () => available.filter((inv) => matchesFilters(inv, debouncedSearchQuery.trim().toLowerCase(), filterCat)),
+    [available, debouncedSearchQuery, filterCat]
   );
 
   const selectedInv = inventoryItems.find((i) => i.id === Number(selId));
@@ -1155,15 +1157,14 @@ function ConfirmDialog({ item, onClose, onConfirm }) {
             <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
           </svg>
         </div>
-        <h3 id="mn-confirm-title" className="mn-confirm__title">Remove Menu Item</h3>
+        <h3 id="mn-confirm-title" className="mn-confirm__title">Archive Menu Item</h3>
         <p className="mn-confirm__msg">
-          Remove <strong>{item.name}</strong> from the menu?
-          It will no longer appear to customers but order history will be preserved.
+          Move <strong>{item.name}</strong> to the archive? It will be hidden from customers and can be restored for 30 days.
         </p>
         <div className="mn-confirm__actions">
           <button className="mn-btn mn-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
           <button className="mn-btn mn-btn--danger" onClick={handleConfirm} disabled={loading}>
-            {loading ? 'Removing…' : 'Remove'}
+            {loading ? 'Archiving…' : 'Archive'}
           </button>
         </div>
       </div>
@@ -1379,6 +1380,7 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [filterCat, setFilterCat] = useState('all');
   const [filterAvail, setFilterAvail] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
@@ -1428,18 +1430,18 @@ export default function MenuPage() {
 
   const filtered = useMemo(() => {
     let r = items;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase();
       r = r.filter((i) => i.name.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q));
     }
     if (filterCat !== 'all') r = r.filter((i) => String(i.category_id) === filterCat);
     if (filterAvail === 'available') r = r.filter((i) => i.is_available);
     if (filterAvail === 'unavailable') r = r.filter((i) => !i.is_available);
     return r;
-  }, [items, search, filterCat, filterAvail]);
+  }, [items, debouncedSearch, filterCat, filterAvail]);
 
   // Reset to page 1 when filters/search/viewMode/perPage change
-  useEffect(() => { setPage(1); }, [search, filterCat, filterAvail, viewMode, perPage]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, filterCat, filterAvail, viewMode, perPage]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage   = Math.min(page, totalPages);
@@ -1479,7 +1481,7 @@ export default function MenuPage() {
       await staffMenuAPI.remove(deleteTarget.id);
       setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
       setDeleteTarget(null);
-      showToast(`"${deleteTarget.name}" removed from the menu.`);
+      showToast(`"${deleteTarget.name}" moved to the archive for 30 days.`);
     } catch (err) {
       const msg = err?.response?.data?.message || 'Failed to remove item.';
       showToast(msg, 'error');
@@ -1594,8 +1596,8 @@ export default function MenuPage() {
             <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/>
             <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
           </svg>
-          <p>{search ? 'No items match your search.' : 'No menu items yet.'}</p>
-          {!search && (
+          <p>{debouncedSearch ? 'No items match your search.' : 'No menu items yet.'}</p>
+          {!debouncedSearch && (
             <button className="mn-btn mn-btn--primary" onClick={() => setModal({ mode: 'add' })}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Add first item

@@ -326,6 +326,7 @@ async function placeOrder(req, res, next) {
     if (dbMethod === 'gcash') {
       // Not paid yet — the order goes to the staff receipt queue, and reaches
       // the kitchen only once staff verifies the receipt.
+      socketHub.emitOnlineOrderNew(orderPayload);
       socketHub.emitPaymentPending({
         orderId: order.id,
         orderNumber: order.order_number,

@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { getCurrentBatch, getCurrentDelivery, updateDeliveryStatus } from '../../services/riderApi';
+import {
+  dispatchCurrentBatch,
+  getCurrentBatch,
+  getCurrentDelivery,
+  updateDeliveryStatus,
+} from '../../services/riderApi';
 import { useSocketEventContext } from '../../context/SocketContext';
 import { itemLabel } from '../../utils/format';
 import '../../styles/ActiveDelivery.css';
@@ -103,7 +108,7 @@ function ConfirmModal({ message, onConfirm, onCancel, loading }) {
 }
 
 // ── Batch waiting screen ───────────────────────────────────────────────────────
-function BatchWaitingScreen({ batch, onRefresh }) {
+function BatchWaitingScreen({ batch, onDispatch, loading }) {
   const [countdown, setCountdown] = useState(batch.timer_remaining_ms ?? 0);
 
   useEffect(() => {
@@ -115,7 +120,7 @@ function BatchWaitingScreen({ batch, onRefresh }) {
   }, [batch.timer_remaining_ms]);
 
   const stopCount  = batch.stops?.length ?? 0;
-  const maxStops   = 5;
+  const maxStops   = batch.max_orders ?? 10;
 
   return (
     <div className="ad-waiting-screen">
@@ -129,7 +134,7 @@ function BatchWaitingScreen({ batch, onRefresh }) {
       <h2 className="ad-waiting-screen__title">Collecting Orders</h2>
       <p className="ad-waiting-screen__sub">
         Waiting for more orders before dispatching your batch.
-        You will depart once {maxStops} orders are ready or the timer runs out.
+        Slide to dispatch when ready. The batch also dispatches automatically at {maxStops} orders or when the timer runs out.
       </p>
 
       {/* Timer ring */}
@@ -151,6 +156,17 @@ function BatchWaitingScreen({ batch, onRefresh }) {
         </div>
         <p className="ad-batch-timer__hint">Time until auto-dispatch</p>
       </div>
+
+      <p className="ad-waiting-screen__count">
+        <strong>{stopCount}</strong> of {maxStops} orders collected
+      </p>
+      <SlideAction
+        onConfirm={onDispatch}
+        loading={loading}
+        label="Slide to Dispatch Orders →"
+        loadingLabel="Dispatching…"
+        ariaLabel="Slide to dispatch collected orders"
+      />
 
       {/* Order slots */}
       <div className="ad-batch-slots">
@@ -174,16 +190,12 @@ function BatchWaitingScreen({ batch, onRefresh }) {
           );
         })}
       </div>
-
-      <p className="ad-waiting-screen__count">
-        <strong>{stopCount}</strong> of {maxStops} orders collected
-      </p>
     </div>
   );
 }
 
-// ── Slide-to-deliver button ────────────────────────────────────────────────────
-function SlideToDeliver({ onConfirm, loading }) {
+// ── Reusable slide action ──────────────────────────────────────────────────────
+function SlideAction({ onConfirm, loading, label, loadingLabel, ariaLabel }) {
   const trackRef   = useRef(null);
   const thumbRef   = useRef(null);
   const dragRef    = useRef({ dragging: false, startX: 0, currentX: 0 });
@@ -199,6 +211,23 @@ function SlideToDeliver({ onConfirm, loading }) {
     dragRef.current = { dragging: true, startX: clientX, currentX: clientX };
   };
 
+  const triggerAction = () => {
+    setFired(true);
+    setPct(100);
+    const result = onConfirm();
+    if (result && typeof result.then === 'function') {
+      result.then((succeeded) => {
+        if (succeeded === false) {
+          setFired(false);
+          setPct(0);
+        }
+      });
+    } else if (result === false) {
+      setFired(false);
+      setPct(0);
+    }
+  };
+
   const moveDrag = (clientX) => {
     if (!dragRef.current.dragging) return;
     dragRef.current.currentX = clientX;
@@ -208,9 +237,7 @@ function SlideToDeliver({ onConfirm, loading }) {
     setPct(p);
     if (p >= THRESHOLD) {
       dragRef.current.dragging = false;
-      setFired(true);
-      setPct(100);
-      onConfirm();
+      triggerAction();
     }
   };
 
@@ -239,22 +266,26 @@ function SlideToDeliver({ onConfirm, loading }) {
     };
   });
 
-  const thumbX = `calc(${pct}% * (1 - 52px / (100%)))`;
-
   return (
     <div
       ref={trackRef}
       className={`ad-slide-track${fired || loading ? ' ad-slide-track--done' : ''}`}
-      aria-label="Slide to mark as delivered"
+      aria-label={ariaLabel}
       role="button"
       tabIndex={0}
+      onKeyDown={(event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && !fired && !loading) {
+          event.preventDefault();
+          triggerAction();
+        }
+      }}
     >
       {/* Background fill */}
       <div className="ad-slide-fill" style={{ width: `${pct}%` }} />
 
       {/* Label */}
       <span className="ad-slide-label" style={{ opacity: fired || loading ? 0 : 1 - pct / 60 }}>
-        {loading ? 'Marking…' : 'Slide to Mark as Delivered →'}
+        {loading ? loadingLabel : label}
       </span>
 
       {/* Thumb */}
@@ -369,9 +400,12 @@ function StopFullView({ stop, onClose, onStatusClick, actionLoading }) {
               <IconCheck /> Delivered at {formatTime(stop.delivered_at)}
             </div>
           ) : isOutForDelivery ? (
-            <SlideToDeliver
+            <SlideAction
               onConfirm={() => onStatusClick(stop.delivery_id, 'delivered')}
               loading={actionLoading}
+              label="Slide to Mark as Delivered →"
+              loadingLabel="Marking…"
+              ariaLabel="Slide to mark as delivered"
             />
           ) : (
             <button
@@ -637,8 +671,7 @@ export default function ActiveDelivery() {
     if (skipConfirm || nextStatus === 'delivered') {
       // Delivered action: either via slide (skipConfirm=true) or direct call from fullview
       // The slide button itself is the confirm gesture — no modal needed
-      executeStatusChange(deliveryId, nextStatus);
-      return;
+      return executeStatusChange(deliveryId, nextStatus);
     }
     const messages = {
       out_for_delivery: 'Mark this stop as Out for Delivery?',
@@ -658,8 +691,10 @@ export default function ActiveDelivery() {
       // If full view is open, close it after delivered
       if (status === 'delivered') setFullView(null);
       await fetchBatch();
+      return true;
     } catch (err) {
       setError(err.response?.data?.message || 'Action failed. Please try again.');
+      return false;
     } finally {
       setActionLoad(false);
       setTimeout(() => setSuccess(''), 3500);
@@ -725,7 +760,25 @@ export default function ActiveDelivery() {
         <NoDelivery />
       ) : batch.status === 'waiting' ? (
         <div className={`ad-card${refreshing ? ' ad-card--busy' : ''}`}>
-          <BatchWaitingScreen batch={batch} onRefresh={fetchBatch} />
+          <BatchWaitingScreen
+            batch={batch}
+            onDispatch={async () => {
+              setActionLoad(true);
+              try {
+                await dispatchCurrentBatch();
+                setSuccess('Batch dispatched! You can start your delivery route.');
+                await fetchBatch();
+                return true;
+              } catch (err) {
+                setError(err.response?.data?.message || 'Could not dispatch the batch. Please try again.');
+                return false;
+              } finally {
+                setActionLoad(false);
+                setTimeout(() => setSuccess(''), 3500);
+              }
+            }}
+            loading={actionLoad}
+          />
         </div>
       ) : (
         <div className={`ad-card${refreshing ? ' ad-card--busy' : ''}`} aria-busy={refreshing}>

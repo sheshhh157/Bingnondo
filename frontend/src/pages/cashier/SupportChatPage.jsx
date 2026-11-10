@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supportChatAPI } from '../../services/api';
-import { getSocket } from '../../services/socket';
+import { connectSocket } from '../../services/socket';
 import { itemLabel } from '../../utils/format';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import Pagination from '../../components/Pagination';
 import '../../styles/SupportChatPage.css';
 
@@ -277,6 +278,7 @@ export default function SupportChatPage() {
   const [replyText,      setReplyText]      = useState('');
   const [sending,        setSending]        = useState(false);
   const [searchQuery,    setSearchQuery]    = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const [filterStatus,   setFilterStatus]   = useState('all');
   const [threadPage,     setThreadPage]     = useState(1);
   const [unreadIds,      setUnreadIds]      = useState(new Set());
@@ -285,18 +287,25 @@ export default function SupportChatPage() {
 
   const messagesEndRef  = useRef(null);
   const textareaRef     = useRef(null);
+  const activeThreadRef = useRef(activeThread);
+  const threadsFetchRef = useRef(false);
+  const messagesFetchRef = useRef(new Set());
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   // ── Fetch threads ────────────────────────────────────────────────────────────
-  const fetchThreads = useCallback(async () => {
+  const fetchThreads = useCallback(async ({ silent = false } = {}) => {
+    if (threadsFetchRef.current) return;
+    threadsFetchRef.current = true;
     try {
-      setError('');
+      if (!silent) setError('');
       const { data } = await supportChatAPI.getThreads();
       const raw = data.data || data.threads || data;
       setThreads(Array.isArray(raw) ? raw.map(normalizeThread) : []);
     } catch {
-      setError('Failed to load conversations.');
+      if (silent) console.error('[cashier.supportChat] could not refresh conversations.');
+      else setError('Failed to load conversations.');
     } finally {
+      threadsFetchRef.current = false;
       setThreadsLoading(false);
     }
   }, []);
@@ -304,21 +313,40 @@ export default function SupportChatPage() {
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
   // ── Fetch messages for active thread ────────────────────────────────────────
-  const fetchMessages = useCallback(async (chatId) => {
+  const fetchMessages = useCallback(async (chatId, { silent = false } = {}) => {
     if (!chatId) return;
-    setMessagesLoading(true);
+    const fetchKey = String(chatId);
+    if (messagesFetchRef.current.has(fetchKey)) return;
+    messagesFetchRef.current.add(fetchKey);
+    if (!silent) setMessagesLoading(true);
     try {
       const { data } = await supportChatAPI.getMessages(chatId);
       const msgs = data.data?.messages ?? data.messages ?? data;
-      setMessages(Array.isArray(msgs) ? msgs : []);
+      if (String(activeThreadRef.current?.id) === fetchKey) {
+        const nextMessages = Array.isArray(msgs) ? msgs : [];
+        setMessages((prev) => (
+          prev.length === nextMessages.length
+            && prev.every((item, index) => String(item.id) === String(nextMessages[index]?.id))
+            ? prev
+            : nextMessages
+        ));
+      }
       // Mark as read
-      setUnreadIds((prev) => { const n = new Set(prev); n.delete(chatId); return n; });
+      setUnreadIds((prev) => new Set(
+        [...prev].filter((unreadId) => String(unreadId) !== fetchKey)
+      ));
     } catch {
-      showToast('Failed to load messages.', 'error');
+      if (silent) console.error(`[cashier.supportChat] could not refresh messages for thread ${chatId}.`);
+      else showToast('Failed to load messages.', 'error');
     } finally {
-      setMessagesLoading(false);
+      messagesFetchRef.current.delete(fetchKey);
+      if (!silent) setMessagesLoading(false);
     }
   }, [showToast]);
+
+  useEffect(() => {
+    activeThreadRef.current = activeThread;
+  }, [activeThread]);
 
   useEffect(() => {
     if (activeThread) {
@@ -334,14 +362,30 @@ export default function SupportChatPage() {
 
   // ── Socket — real-time new messages ─────────────────────────────────────────
   useEffect(() => {
-    const socket = getSocket();
+    const socket = connectSocket('staff');
 
     const onNewMessage = (message) => {
       const chatId = message.chatId ?? message.chat_id;
+      if (!chatId) return;
+      const isActiveThread = String(chatId) === String(activeThreadRef.current?.id);
+      const senderType = message.senderType ?? message.sender_type;
+      const liveMessage = {
+        ...message,
+        id: message.messageId ?? message.id,
+        sender_type: senderType,
+        sender_name: senderType === 'staff'
+          ? 'Support'
+          : activeThreadRef.current?.customer_name ?? 'Customer',
+        sent_at: message.sentAt ?? message.sent_at,
+      };
       // If this chat is active — add to messages
-      if (chatId === activeThread?.id) {
-        setMessages((prev) => [...prev, message]);
-      } else {
+      if (isActiveThread) {
+        setMessages((prev) => (
+          prev.some((item) => String(item.id ?? item.messageId) === String(liveMessage.id))
+            ? prev
+            : [...prev, liveMessage]
+        ));
+      } else if (senderType === 'customer') {
         // Mark thread as unread
         setUnreadIds((prev) => new Set([...prev, chatId]));
       }
@@ -349,26 +393,60 @@ export default function SupportChatPage() {
       // Update thread preview
       setThreads((prev) =>
         prev.map((t) =>
-          t.id === chatId
-            ? { ...t, last_message: message.content, last_message_at: message.sentAt ?? message.sent_at }
+          String(t.id) === String(chatId)
+            ? {
+                ...t,
+                last_message: message.content,
+                last_message_at: message.sentAt ?? message.sent_at,
+                last_message_sender: senderType,
+              }
             : t
         )
       );
+      fetchThreads({ silent: true });
     };
 
     const onThreadLocked = ({ chatId }) => {
       setThreads((prev) =>
-        prev.map((t) => (t.id === chatId ? { ...t, status: 'locked' } : t))
+        prev.map((t) => (String(t.id) === String(chatId) ? { ...t, status: 'locked' } : t))
       );
     };
 
+    const onConnect = () => {
+      socket.emit('join', { room: 'staff' });
+      fetchThreads({ silent: true });
+      if (activeThreadRef.current?.id) {
+        fetchMessages(activeThreadRef.current.id, { silent: true });
+      }
+    };
+
+    socket.on('connect', onConnect);
     socket.on('support_chat:message', onNewMessage);
     socket.on('chat_thread_locked',   onThreadLocked);
     return () => {
+      socket.off('connect', onConnect);
       socket.off('support_chat:message', onNewMessage);
       socket.off('chat_thread_locked',   onThreadLocked);
     };
-  }, [activeThread]);
+  }, [fetchMessages, fetchThreads]);
+
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetchThreads({ silent: true });
+      if (activeThreadRef.current?.id) {
+        fetchMessages(activeThreadRef.current.id, { silent: true });
+      }
+    };
+    const interval = window.setInterval(refreshIfVisible, 5000);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    window.addEventListener('focus', refreshIfVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+      window.removeEventListener('focus', refreshIfVisible);
+    };
+  }, [fetchMessages, fetchThreads]);
 
   // ── Send reply ───────────────────────────────────────────────────────────────
   const handleSend = async () => {
@@ -383,7 +461,11 @@ export default function SupportChatPage() {
         related_order_id: null,
       });
       const newMsg = data.data || data.message || data;
-      setMessages((prev) => [...prev, newMsg]);
+      setMessages((prev) => (
+        prev.some((message) => String(message.id) === String(newMsg.id))
+          ? prev
+          : [...prev, newMsg]
+      ));
       setReplyText('');
       textareaRef.current?.focus();
     } catch {
@@ -409,7 +491,7 @@ export default function SupportChatPage() {
   // ── Filtered threads ─────────────────────────────────────────────────────────
   const filteredThreads = threads
     .filter((t) => {
-      const q = searchQuery.trim().toLowerCase();
+      const q = debouncedSearchQuery.trim().toLowerCase();
       const matchQ = !q || t.customer_name?.toLowerCase().includes(q) || t.last_message?.toLowerCase().includes(q);
       const matchF = filterStatus === 'all' || t.status === filterStatus;
       return matchQ && matchF;
@@ -512,7 +594,7 @@ export default function SupportChatPage() {
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
-                <p>{searchQuery ? 'No conversations match.' : 'No active conversations.'}</p>
+                <p>{debouncedSearchQuery ? 'No conversations match.' : 'No active conversations.'}</p>
               </div>
             ) : (
               pagedThreads.map((thread) => (
