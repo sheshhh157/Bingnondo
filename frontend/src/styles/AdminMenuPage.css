@@ -911,6 +911,24 @@
   margin: 0;
 }
 
+.mn-field__error {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-destructive);
+  margin: 0;
+}
+
+.mn-field__counter {
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  color: var(--color-muted-foreground);
+  margin: 0;
+  text-align: right;
+}
+
+.mn-field__counter--error { color: var(--color-destructive); }
+
 .mn-field__input {
   width: 100%;
   padding: 9px 12px;

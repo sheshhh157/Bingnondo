@@ -1,4 +1,5 @@
 const db = require('../../config/db');
+const { archiveRecord } = require('../admin/archive.service');
 
 // ─── Socket.io injection ──────────────────────────────────────────────────────
 let _io = null;
@@ -661,33 +662,47 @@ async function setAvailability(req, res, next) {
 // Cannot hard-delete because order_items.menu_item_id references this table,
 // and order history must be preserved.
 async function deleteMenuItem(req, res, next) {
+  const client = await db.getClient();
   try {
-    const result = await db.query(
+    await client.query('BEGIN');
+    const { rows: currentRows } = await client.query(
+      `SELECT * FROM menu_items
+        WHERE id = $1 AND is_deleted = FALSE
+        FOR UPDATE`,
+      [req.params.id]
+    );
+    if (!currentRows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Menu item not found.' });
+    }
+
+    const item = currentRows[0];
+    await archiveRecord(client, {
+      entityType: 'menu_item',
+      entityId: item.id,
+      displayName: item.name,
+      payload: { is_available: item.is_available, image_public_id: item.image_public_id },
+      actorId: req.user.sub,
+    });
+
+    const result = await client.query(
       `UPDATE menu_items
        SET is_deleted   = TRUE,
            is_available = FALSE,
            deleted_at   = NOW()
-       WHERE id = $1 AND is_deleted = FALSE
+       WHERE id = $1
        RETURNING id, name, image_public_id`,
       [req.params.id]
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Menu item not found.' });
-    }
-
-    // Clean up Cloudinary image (non-blocking — deletion failure shouldn't break the response)
-    const { image_public_id } = result.rows[0];
-    if (image_public_id) {
-      const { cloudinary } = require('../../config/cloudinary');
-      cloudinary.uploader.destroy(image_public_id).catch((err) => {
-        console.error('[cloudinary] Failed to delete image on item delete:', err.message);
-      });
-    }
+    await client.query('COMMIT');
 
     if (_io) _io.emit('menu_item_deleted', { id: result.rows[0].id });
-    res.json({ message: 'Menu item removed.', deleted: { id: result.rows[0].id, name: result.rows[0].name } });
+    res.json({ message: 'Menu item moved to the archive for 30 days.', deleted: { id: result.rows[0].id, name: result.rows[0].name } });
   } catch (err) {
+    await client.query('ROLLBACK');
     next(err);
+  } finally {
+    client.release();
   }
 }
 
@@ -723,19 +738,55 @@ async function createCategory(req, res, next) {
 // ─── DELETE /api/menu/categories/:id ─────────────────────────────────────────
 // Blocked if any items still use this category
 async function deleteCategory(req, res, next) {
+  const client = await db.getClient();
   try {
     const { id } = req.params;
-    const inUse = await db.query('SELECT COUNT(*) FROM menu_items WHERE category_id = $1', [id]);
+    await client.query('BEGIN');
+    const { rows: categoryRows } = await client.query(
+      'SELECT * FROM menu_categories WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+    if (!categoryRows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Category not found.' });
+    }
+
+    const category = categoryRows[0];
+    const inUse = await client.query('SELECT COUNT(*) FROM menu_items WHERE category_id = $1', [id]);
     if (parseInt(inUse.rows[0].count, 10) > 0) {
+      await client.query('ROLLBACK');
       return res.status(409).json({
         message: 'Cannot delete a category that still has menu items. Reassign or remove the items first.',
       });
     }
-    const result = await db.query('DELETE FROM menu_categories WHERE id = $1 RETURNING id, name', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ message: 'Category not found.' });
-    res.json({ message: 'Category deleted.', deleted: result.rows[0] });
+
+    const { rows: variantLinks } = await client.query(
+      'SELECT category_id, variant_group_id FROM menu_category_variant_groups WHERE category_id = $1',
+      [id]
+    );
+    const { rows: inventoryLinks } = await client.query(
+      'SELECT inventory_item_id, category_id FROM inventory_item_categories WHERE category_id = $1',
+      [id]
+    );
+    await archiveRecord(client, {
+      entityType: 'menu_category',
+      entityId: category.id,
+      displayName: category.name,
+      payload: {
+        record: category,
+        variant_links: variantLinks.map((row) => [row.category_id, row.variant_group_id]),
+        inventory_links: inventoryLinks.map((row) => [row.inventory_item_id, row.category_id]),
+      },
+      actorId: req.user.sub,
+    });
+    await client.query('DELETE FROM menu_categories WHERE id = $1', [id]);
+    await client.query('COMMIT');
+    res.json({ message: 'Category moved to the archive for 30 days.', deleted: { id: category.id, name: category.name } });
   } catch (err) {
+    await client.query('ROLLBACK');
     next(err);
+  } finally {
+    client.release();
   }
 }
 

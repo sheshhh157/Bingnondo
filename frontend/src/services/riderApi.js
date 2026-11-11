@@ -14,7 +14,7 @@
  *   POST   /api/auth/login                   → shared login (staff + rider)
  */
 
-import { get, patch } from './apiClient';
+import { get, patch, post } from './apiClient';
 
 // ── Active Delivery ────────────────────────────────────────────────────────────
 
@@ -92,8 +92,8 @@ export const getDeliveryHistory = (params = {}) => {
  * Response shape:
  * {
  *   rider: {
- *     id, full_name, email, mobile_number,
- *     plate_number, vehicle_type, status, last_login
+ *     id, first_name, middle_name, last_name, full_name, email, mobile_number,
+ *     plate_number, vehicle_type, status, last_login, profile_image_url
  *   }
  * }
  */
@@ -102,9 +102,59 @@ export const getRiderProfile = () => get('/api/rider/profile');
 /**
  * PATCH /api/rider/profile
  * Update editable profile fields.
- * payload: { plate_number?, vehicle_type?, mobile_number? }
+ * payload: { first_name?, middle_name?, last_name?, plate_number?, vehicle_type?, mobile_number? }
  */
 export const updateRiderProfile = (payload) => patch('/api/rider/profile', payload);
+
+// ── Batch ──────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/rider/batch/current
+ * Returns the rider's active batch (waiting or in_progress) with all stops,
+ * timer remaining, and per-stop delivery info including destination coordinates.
+ */
+export const getCurrentBatch = () => get('/api/rider/batch/current');
+export const dispatchCurrentBatch = () => post('/api/rider/batch/dispatch');
+
+// ── Live Location ──────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/rider/location
+ * Sends the rider's current GPS coordinates to the backend.
+ * The backend upserts to rider_locations and broadcasts via Socket.io.
+ *
+ * payload: { latitude, longitude, accuracy? }
+ */
+export const updateRiderLocation = (payload) => post('/api/rider/location', payload);
+
+/**
+ * GET /api/rider/location/:riderId
+ * Returns the last known location for a specific rider.
+ */
+export const getRiderLocation = (riderId) => get(`/api/rider/location/${riderId}`);
+
+// ── Daily Work Status ──────────────────────────────────────────────────────────
+
+/**
+ * GET /api/rider/work-status
+ * Returns the rider's work status for today.
+ *
+ * Response shape:
+ * {
+ *   needs_prompt:        boolean,          // true → show the slide prompt
+ *   work_status:         'working' | 'off' | null,
+ *   overridden_by_admin: boolean,
+ * }
+ */
+export const getWorkStatus = () => get('/api/rider/work-status');
+
+/**
+ * POST /api/rider/work-status
+ * Rider answers the daily prompt. One-shot per day (resets at 12:00 AM).
+ *
+ * payload: { status: 'working' | 'off' }
+ */
+export const setWorkStatus = (status) => post('/api/rider/work-status', { status });
 
 export default {
   getCurrentDelivery,
@@ -112,4 +162,10 @@ export default {
   getDeliveryHistory,
   getRiderProfile,
   updateRiderProfile,
+  updateRiderLocation,
+  getRiderLocation,
+  getCurrentBatch,
+  dispatchCurrentBatch,
+  getWorkStatus,
+  setWorkStatus,
 };

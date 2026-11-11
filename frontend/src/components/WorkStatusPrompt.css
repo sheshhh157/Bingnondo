@@ -1,0 +1,258 @@
+/* ─── WorkStatusPrompt.css ───────────────────────────────────────────────────
+ * Daily work-status check-in overlay for riders.
+ * Color system matches RiderLayout: orange primary, navy text.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --wsp-working: #16A34A;   /* green  — on duty  */
+  --wsp-off:     #DC2626;   /* red    — off duty */
+  --wsp-primary: #EA580C;   /* orange — brand    */
+  --wsp-bg:      #F1F5F9;
+  --wsp-surface: #FFFFFF;
+  --wsp-border:  #CBD5E1;
+  --wsp-text:    #0F172A;
+  --wsp-muted:   #64748B;
+  --wsp-radius:  16px;
+}
+
+/* ── Backdrop ──────────────────────────────────────────────────────────────── */
+.wsp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: wsp-fade-in 0.25s ease;
+}
+
+@keyframes wsp-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Card ──────────────────────────────────────────────────────────────────── */
+.wsp-card {
+  background: var(--wsp-surface);
+  border-radius: var(--wsp-radius);
+  padding: 36px 32px 28px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.30);
+  animation: wsp-slide-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+@keyframes wsp-slide-up {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+.wsp-header {
+  text-align: center;
+  margin-bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.wsp-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--wsp-primary);
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  box-shadow: 0 2px 8px rgba(234,88,12,0.30);
+}
+
+.wsp-greeting {
+  font-size: 0.95rem;
+  color: var(--wsp-muted);
+  margin: 0;
+}
+
+.wsp-question {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--wsp-text);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.wsp-hint {
+  font-size: 0.82rem;
+  color: var(--wsp-muted);
+  margin: 0;
+  max-width: 280px;
+}
+
+/* ── Direction Labels ──────────────────────────────────────────────────────── */
+.wsp-labels {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 4px;
+  margin-bottom: 10px;
+}
+
+.wsp-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.wsp-label--off {
+  color: var(--wsp-off);
+}
+
+.wsp-label--working {
+  color: var(--wsp-working);
+}
+
+/* ── Slide Track ───────────────────────────────────────────────────────────── */
+.wsp-track {
+  position: relative;
+  width: 100%;
+  height: 72px;
+  border-radius: 36px;
+  background: var(--wsp-bg);
+  border: 2px solid var(--wsp-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.wsp-track:focus-visible {
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.35);
+  border-color: var(--wsp-primary);
+}
+
+.wsp-track--left {
+  border-color: var(--wsp-off);
+}
+
+.wsp-track--right {
+  border-color: var(--wsp-working);
+}
+
+.wsp-track--loading {
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+/* progress fill */
+.wsp-track__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition: width 0.05s linear, background 0.15s;
+  opacity: 0.18;
+}
+
+/* center divider line */
+.wsp-track__divider {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  bottom: 18%;
+  width: 1.5px;
+  background: var(--wsp-border);
+  transform: translateX(-50%);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* ── Thumb ─────────────────────────────────────────────────────────────────── */
+.wsp-thumb {
+  position: relative;
+  z-index: 2;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--wsp-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 12px rgba(234, 88, 12, 0.40);
+  will-change: transform;
+  flex-shrink: 0;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.wsp-thumb--off {
+  background: var(--wsp-off);
+  box-shadow: 0 3px 12px rgba(220, 38, 38, 0.40);
+}
+
+.wsp-thumb--working {
+  background: var(--wsp-working);
+  box-shadow: 0 3px 12px rgba(22, 163, 74, 0.40);
+}
+
+.wsp-thumb--loading {
+  background: var(--wsp-muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* spinner animation */
+.wsp-spinner {
+  animation: wsp-spin 0.9s linear infinite;
+}
+
+@keyframes wsp-spin {
+  from { transform: rotate(0deg);   }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Keyboard hint ─────────────────────────────────────────────────────────── */
+.wsp-kbd-hint {
+  margin-top: 14px;
+  font-size: 0.75rem;
+  color: var(--wsp-muted);
+  text-align: center;
+}
+
+/* ── Mobile adjustments ────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .wsp-card {
+    padding: 28px 20px 24px;
+    border-radius: 20px;
+  }
+
+  .wsp-question {
+    font-size: 1.3rem;
+  }
+
+  .wsp-track {
+    height: 68px;
+  }
+
+  .wsp-kbd-hint {
+    display: none;
+  }
+}

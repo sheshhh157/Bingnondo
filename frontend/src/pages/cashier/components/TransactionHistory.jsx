@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'rea
 import { createPortal } from 'react-dom';
 import { ordersAPI } from '../../../services/cashierApi';
 import { currency, itemLabel } from '../../../utils/format';
+import useDebouncedValue from '../../../hooks/useDebouncedValue';
 import Pagination from '../../../components/Pagination';
 import '../../../styles/TransactionHistory.css';
 
@@ -333,6 +334,7 @@ export default function TransactionHistory() {
 
   const [range, setRange] = useState('today');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [payFilter, setPayFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortCol, setSortCol] = useState('created_at');
@@ -385,13 +387,13 @@ export default function TransactionHistory() {
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
     setPage(1);
-  }, [range, search, payFilter, statusFilter, sortCol, sortDir, pageSize]);
+  }, [range, debouncedSearch, payFilter, statusFilter, sortCol, sortDir, pageSize]);
 
   const processed = useMemo(() => {
     let list = [...orders];
 
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase();
       list = list.filter((o) => {
         const num = String(o.order_number || o.id).toLowerCase();
         const items = (o.items || [])
@@ -438,7 +440,7 @@ export default function TransactionHistory() {
     });
 
     return list;
-  }, [orders, search, payFilter, statusFilter, sortCol, sortDir]);
+  }, [orders, debouncedSearch, payFilter, statusFilter, sortCol, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(processed.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -453,7 +455,7 @@ export default function TransactionHistory() {
     (sortCol !== 'created_at' || sortDir !== 'desc' ? 1 : 0) +
     (pageSize !== 10 ? 1 : 0);
 
-  const anyFilterActive = Boolean(search.trim()) || badgeCount > 0;
+  const anyFilterActive = Boolean(debouncedSearch.trim()) || badgeCount > 0;
 
   const chips = [];
   if (range !== 'today') chips.push({ key: 'range', label: 'This Week', clear: () => setRange('today') });

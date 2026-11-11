@@ -2,6 +2,13 @@ const db = require('../../config/db');
 const { emitOrderStatus, emitDeliveryUpdate } = require('../../sockets');
 const { canTransition } = require('../orders/status-transitions');
 const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('./assignment');
+const {
+  getRiderActiveBatch,
+  completeBatchStop,
+  dispatchBatch,
+  clearBatchTimer,
+} = require('./batch');
+const socketHub = require('../../sockets');
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 function orderNumber(id) {
@@ -35,9 +42,13 @@ exports.getCurrentDelivery = async (req, res) => {
           o.total_amount,
           o.special_request,
           o.created_at        AS order_placed_at,
+          o.delivery_latitude,
+          o.delivery_longitude,
           c.first_name,
           c.last_name,
           c.mobile_number     AS customer_mobile,
+          c.latitude          AS customer_latitude,
+          c.longitude         AS customer_longitude,
           COALESCE(o.delivery_address, c.address) AS delivery_address
        FROM deliveries d
        JOIN orders     o ON o.id = d.order_id
@@ -64,6 +75,16 @@ exports.getCurrentDelivery = async (req, res) => {
       [row.order_id]
     );
 
+    // Resolve destination coordinates:
+    // Prefer the order's pinned delivery coords; fall back to the customer's
+    // saved home coordinates. Both can be null for older orders.
+    const destLat = row.delivery_latitude != null
+      ? parseFloat(row.delivery_latitude)
+      : (row.customer_latitude != null ? parseFloat(row.customer_latitude) : null);
+    const destLng = row.delivery_longitude != null
+      ? parseFloat(row.delivery_longitude)
+      : (row.customer_longitude != null ? parseFloat(row.customer_longitude) : null);
+
     // Flatten to the shape ActiveDelivery.jsx reads
     return res.status(200).json({
       delivery: {
@@ -77,6 +98,9 @@ exports.getCurrentDelivery = async (req, res) => {
         delivery_address: row.delivery_address ?? '—',
         total_amount:     parseFloat(row.total_amount),
         special_request:  row.special_request ?? null,
+        // Navigation coordinates
+        destination_latitude:  destLat,
+        destination_longitude: destLng,
         items: itemsRes.rows.map((i) => ({
           name:         i.name,
           variant_name: i.variant_name ?? null,
@@ -89,6 +113,85 @@ exports.getCurrentDelivery = async (req, res) => {
   } catch (err) {
     console.error('[rider.getCurrentDelivery]', err);
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/rider/batch/current
+//
+// Returns the rider's active batch (waiting or in_progress) with all stops.
+// Frontend (ActiveDelivery.jsx) uses this as the primary data source.
+// Falls back to single-delivery shape for backwards compatibility.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.getCurrentBatch = async (req, res) => {
+  try {
+    const riderId = req.user.sub;
+    const batch = await getRiderActiveBatch(riderId);
+    return res.status(200).json({ batch: batch || null });
+  } catch (err) {
+    console.error('[rider.getCurrentBatch]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/rider/batch/dispatch
+//
+// Manually dispatch the rider's current waiting batch. The timer and full-batch
+// paths remain automatic; this lets a rider leave earlier when ready.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.dispatchCurrentBatch = async (req, res) => {
+  const client = await db.getClient();
+  let batchId;
+  const riderId = req.user.sub;
+
+  try {
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      `SELECT id
+         FROM delivery_batches
+        WHERE rider_id = $1 AND status = 'waiting'
+        ORDER BY batch_started_at ASC
+        LIMIT 1
+        FOR UPDATE`,
+      [riderId]
+    );
+
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'There is no waiting batch to dispatch.' });
+    }
+
+    batchId = rows[0].id;
+    const batch = await dispatchBatch(client, batchId);
+    if (!batch) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'The batch has no orders to dispatch.' });
+    }
+
+    await client.query(
+      `UPDATE deliveries
+          SET status = 'assigned', assigned_at = COALESCE(assigned_at, NOW())
+        WHERE batch_id = $1 AND status IN ('pending_assignment', 'assigned')`,
+      [batchId]
+    );
+    await client.query(
+      `UPDATE riders SET status = 'on_delivery', updated_at = NOW() WHERE id = $1`,
+      [riderId]
+    );
+
+    await client.query('COMMIT');
+
+    clearBatchTimer(riderId);
+    socketHub.emitBatchDispatched({ riderId, batchId });
+    return res.status(200).json({ message: 'Batch dispatched.', batch_id: batchId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[rider.dispatchCurrentBatch]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  } finally {
+    client.release();
   }
 };
 
@@ -194,16 +297,21 @@ exports.updateDeliveryStatus = async (req, res) => {
       // a. Complete the linked order
       await syncOrderStatus('completed');
 
-      // b. Free the rider
-      await client.query(
-        `UPDATE riders
-            SET status = 'available', updated_at = NOW()
-          WHERE id = $1`,
-        [riderId]
-      );
+      // b. Check if entire batch is complete
+      const { batchComplete } = await completeBatchStop(client, deliveryId);
 
-      // c. Hand the oldest waiting delivery to this now-free rider.
-      assigned = await autoAssignPendingDeliveries(client);
+      if (batchComplete) {
+        // All stops delivered — free the rider and pick up new work
+        await client.query(
+          `UPDATE riders
+              SET status = 'available', updated_at = NOW()
+            WHERE id = $1`,
+          [riderId]
+        );
+        // c. Hand the oldest waiting delivery to this now-free rider.
+        assigned = await autoAssignPendingDeliveries(client);
+      }
+      // If batch not complete, rider stays 'on_delivery' for the next stop
     }
 
     await client.query('COMMIT');
@@ -243,9 +351,13 @@ exports.updateDeliveryStatus = async (req, res) => {
             o.total_amount,
             o.special_request,
             o.created_at    AS order_placed_at,
+            o.delivery_latitude,
+            o.delivery_longitude,
             c.first_name,
             c.last_name,
             c.mobile_number AS customer_mobile,
+            c.latitude      AS customer_latitude,
+            c.longitude     AS customer_longitude,
             COALESCE(o.delivery_address, c.address) AS delivery_address
            FROM deliveries d
            JOIN orders     o ON o.id = d.order_id
@@ -263,6 +375,14 @@ exports.updateDeliveryStatus = async (req, res) => {
             WHERE oi.order_id = $1`,
           [r.order_id]
         );
+
+        const dLat = r.delivery_latitude != null
+          ? parseFloat(r.delivery_latitude)
+          : (r.customer_latitude != null ? parseFloat(r.customer_latitude) : null);
+        const dLng = r.delivery_longitude != null
+          ? parseFloat(r.delivery_longitude)
+          : (r.customer_longitude != null ? parseFloat(r.customer_longitude) : null);
+
         updatedDelivery = {
           id:               r.id,
           order_id:         r.order_id,
@@ -274,6 +394,8 @@ exports.updateDeliveryStatus = async (req, res) => {
           delivery_address: r.delivery_address ?? '—',
           total_amount:     parseFloat(r.total_amount),
           special_request:  r.special_request ?? null,
+          destination_latitude:  dLat,
+          destination_longitude: dLng,
           items: itemsRes.rows.map((i) => ({
             name:         i.name,
             variant_name: i.variant_name ?? null,
@@ -411,8 +533,8 @@ exports.getProfile = async (req, res) => {
     const riderId = req.user.sub;
 
     const { rows } = await db.query(
-      `SELECT id, full_name, email, mobile_number,
-              plate_number, vehicle_type, status, last_login
+      `SELECT id, first_name, middle_name, last_name, full_name, email, mobile_number,
+              plate_number, vehicle_type, status, last_login, profile_image_url
          FROM riders WHERE id = $1`,
       [riderId]
     );
@@ -431,17 +553,39 @@ exports.getProfile = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // BONUS — PATCH /api/rider/profile  (used by RiderProfile.jsx)
 //
-// Editable fields: plate_number, vehicle_type, mobile_number
+// Editable fields: name, plate_number, vehicle_type, mobile_number
 // ─────────────────────────────────────────────────────────────────────────────
 exports.updateProfile = async (req, res) => {
   try {
     const riderId = req.user.sub;
-    const { plate_number, vehicle_type, mobile_number } = req.body;
+    const { first_name, middle_name, last_name, plate_number, vehicle_type, mobile_number } = req.body;
 
     // Build dynamic SET clause — only update fields that were sent
     const fields = [];
     const values = [];
     let idx = 1;
+
+    if (first_name !== undefined) {
+      if (typeof first_name !== 'string' || !first_name.trim() || first_name.trim().length > 100 || /\d/.test(first_name)) {
+        return res.status(400).json({ message: 'Enter a valid first name (up to 100 characters, no numbers).' });
+      }
+      fields.push(`first_name = $${idx++}`);
+      values.push(first_name.trim());
+    }
+    if (middle_name !== undefined) {
+      if (middle_name !== null && (typeof middle_name !== 'string' || middle_name.trim().length > 100 || /\d/.test(middle_name))) {
+        return res.status(400).json({ message: 'Enter a valid middle name (up to 100 characters, no numbers).' });
+      }
+      fields.push(`middle_name = $${idx++}`);
+      values.push(typeof middle_name === 'string' ? middle_name.trim() || null : null);
+    }
+    if (last_name !== undefined) {
+      if (typeof last_name !== 'string' || !last_name.trim() || last_name.trim().length > 100 || /\d/.test(last_name)) {
+        return res.status(400).json({ message: 'Enter a valid last name (up to 100 characters, no numbers).' });
+      }
+      fields.push(`last_name = $${idx++}`);
+      values.push(last_name.trim());
+    }
 
     if (plate_number !== undefined) {
       fields.push(`plate_number = $${idx++}`);
@@ -470,8 +614,8 @@ exports.updateProfile = async (req, res) => {
       `UPDATE riders
           SET ${fields.join(', ')}
         WHERE id = $${idx}
-       RETURNING id, full_name, email, mobile_number,
-                 plate_number, vehicle_type, status, last_login`,
+       RETURNING id, first_name, middle_name, last_name, full_name, email, mobile_number,
+                 plate_number, vehicle_type, status, last_login, profile_image_url`,
       values
     );
 
@@ -489,6 +633,264 @@ exports.updateProfile = async (req, res) => {
       return res.status(409).json({ message: 'That mobile number is already in use.' });
     }
     console.error('[rider.updateProfile]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/rider/location
+//
+// Accepts the rider's current GPS fix and upserts it into rider_locations.
+// Also broadcasts via Socket.io so the admin dashboard and customer tracking
+// can update in real time without polling.
+//
+// payload: { latitude, longitude, accuracy? }
+// ─────────────────────────────────────────────────────────────────────────────
+const { emitRiderLocation } = require('../../sockets');
+
+exports.updateLocation = async (req, res) => {
+  try {
+    const riderId  = req.user.sub;
+    const { latitude, longitude, accuracy } = req.body;
+
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+
+    if (!Number.isFinite(lat) || lat < -90  || lat > 90 ||
+        !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({ message: 'Invalid latitude or longitude.' });
+    }
+
+    // Only update when the rider has an active delivery
+    const { rows: deliveryRows } = await db.query(
+      `SELECT id, order_id FROM deliveries
+        WHERE rider_id = $1
+          AND status NOT IN ('delivered', 'cancelled')
+        ORDER BY assigned_at DESC LIMIT 1`,
+      [riderId]
+    );
+
+    if (deliveryRows.length === 0) {
+      // No active delivery — silently discard the update
+      return res.status(200).json({ message: 'No active delivery; location not stored.' });
+    }
+
+    const { order_id: orderId } = deliveryRows[0];
+
+    // Upsert: one row per rider, overwrite on conflict
+    await db.query(
+      `INSERT INTO rider_locations (rider_id, latitude, longitude, accuracy, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (rider_id)
+       DO UPDATE SET latitude   = EXCLUDED.latitude,
+                     longitude  = EXCLUDED.longitude,
+                     accuracy   = EXCLUDED.accuracy,
+                     updated_at = NOW()`,
+      [riderId, lat, lng, accuracy != null ? parseFloat(accuracy) : null]
+    );
+
+    // Broadcast to staff/manager and the order's tracking room
+    emitRiderLocation({ riderId, orderId, latitude: lat, longitude: lng, accuracy: accuracy ?? null });
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[rider.updateLocation]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/rider/location/:riderId
+//
+// Returns the last known location for the given rider.
+// Only staff / admin / rider themselves may call this.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.getRiderLocation = async (req, res) => {
+  try {
+    const requesterId = req.user.sub;
+    const riderIdParam = parseInt(req.params.riderId, 10);
+
+    // Riders may only read their own location
+    if (req.user.type === 'rider' && requesterId !== riderIdParam) {
+      return res.status(403).json({ message: "You don't have permission to access this." });
+    }
+
+    const { rows } = await db.query(
+      `SELECT rider_id, latitude, longitude, accuracy, updated_at
+         FROM rider_locations
+        WHERE rider_id = $1`,
+      [riderIdParam]
+    );
+
+    if (rows.length === 0) {
+      return res.status(200).json({ location: null });
+    }
+
+    const loc = rows[0];
+    return res.status(200).json({
+      location: {
+        rider_id:  loc.rider_id,
+        latitude:  parseFloat(loc.latitude),
+        longitude: parseFloat(loc.longitude),
+        accuracy:  loc.accuracy != null ? parseFloat(loc.accuracy) : null,
+        updated_at: loc.updated_at,
+      },
+    });
+  } catch (err) {
+    console.error('[rider.getRiderLocation]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WORK STATUS — daily check-in
+//
+// Logic:
+//   - work_status + work_status_set_at stored on riders row.
+//   - "Same day" is compared in Asia/Manila (UTC+8) so midnight resets happen
+//     at 12:00 AM local time regardless of server TZ.
+//   - admin_work_override wins over rider's own choice.
+//     If admin override exists for today, skip the prompt entirely.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true if the given timestamp is from today (Asia/Manila).
+ */
+function isTodayManila(ts) {
+  if (!ts) return false;
+  const manilaOffset = 8 * 60; // minutes
+  const now    = new Date();
+  const tsDate = new Date(ts);
+
+  const toManila = (d) => {
+    const utcMs = d.getTime() + d.getTimezoneOffset() * 60000;
+    return new Date(utcMs + manilaOffset * 60000);
+  };
+
+  const nowManila = toManila(now);
+  const tsManila  = toManila(tsDate);
+
+  return (
+    nowManila.getFullYear() === tsManila.getFullYear() &&
+    nowManila.getMonth()    === tsManila.getMonth()    &&
+    nowManila.getDate()     === tsManila.getDate()
+  );
+}
+
+// ─── GET /api/rider/work-status ───────────────────────────────────────────────
+// Returns whether the rider needs to answer today's prompt.
+// Response:
+//   { needs_prompt: bool, work_status: 'working'|'off'|null, overridden_by_admin: bool }
+exports.getWorkStatus = async (req, res) => {
+  try {
+    const riderId = req.user.sub;
+
+    const { rows } = await db.query(
+      `SELECT work_status, work_status_set_at,
+              admin_work_override, admin_work_override_at
+         FROM riders
+        WHERE id = $1`,
+      [riderId]
+    );
+
+    if (!rows[0]) return res.status(404).json({ message: 'Rider not found.' });
+
+    const r = rows[0];
+
+    // Admin override active today?
+    const adminOverrideToday = r.admin_work_override !== null &&
+                               isTodayManila(r.admin_work_override_at);
+
+    if (adminOverrideToday) {
+      return res.json({
+        needs_prompt:        false,
+        work_status:         r.admin_work_override,
+        overridden_by_admin: true,
+      });
+    }
+
+    // Rider already answered today?
+    const answeredToday = r.work_status !== null &&
+                          isTodayManila(r.work_status_set_at);
+
+    return res.json({
+      needs_prompt:        !answeredToday,
+      work_status:         answeredToday ? r.work_status : null,
+      overridden_by_admin: false,
+    });
+  } catch (err) {
+    console.error('[rider.getWorkStatus]', err);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+// ─── POST /api/rider/work-status ──────────────────────────────────────────────
+// Rider answers the daily prompt. One-shot per day.
+// Body: { status: 'working' | 'off' }
+exports.setWorkStatus = async (req, res) => {
+  try {
+    const riderId = req.user.sub;
+    const { status } = req.body;
+
+    if (!['working', 'off'].includes(status)) {
+      return res.status(400).json({ message: "status must be 'working' or 'off'." });
+    }
+
+    // Guard: allow only if no answer yet today (and no admin override)
+    const { rows: current } = await db.query(
+      `SELECT work_status, work_status_set_at,
+              admin_work_override, admin_work_override_at
+         FROM riders WHERE id = $1`,
+      [riderId]
+    );
+
+    if (!current[0]) return res.status(404).json({ message: 'Rider not found.' });
+
+    const r = current[0];
+
+    // Admin override active today — rider cannot change it
+    if (r.admin_work_override !== null && isTodayManila(r.admin_work_override_at)) {
+      return res.status(409).json({
+        message: 'Your availability for today has been set by admin and cannot be changed.',
+        work_status:         r.admin_work_override,
+        overridden_by_admin: true,
+      });
+    }
+
+    // Already answered today
+    if (r.work_status !== null && isTodayManila(r.work_status_set_at)) {
+      return res.status(409).json({
+        message: 'You have already set your availability for today.',
+        work_status: r.work_status,
+      });
+    }
+
+    // Persist the choice
+    const { rows: updated } = await db.query(
+      `UPDATE riders
+          SET work_status        = $1,
+              work_status_set_at = NOW(),
+              updated_at         = NOW()
+        WHERE id = $2
+        RETURNING work_status, work_status_set_at`,
+      [status, riderId]
+    );
+
+    // If rider chose to work, reflect that in their operational status too
+    if (status === 'working') {
+      await db.query(
+        `UPDATE riders SET status = 'available', updated_at = NOW()
+          WHERE id = $1 AND status = 'inactive'`,
+        [riderId]
+      );
+    }
+
+    return res.json({
+      work_status:         updated[0].work_status,
+      work_status_set_at:  updated[0].work_status_set_at,
+      overridden_by_admin: false,
+    });
+  } catch (err) {
+    console.error('[rider.setWorkStatus]', err);
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 };

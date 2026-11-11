@@ -5,7 +5,6 @@ import { ordersAPI, kitchenAPI, inventoryAPI, MANAGER_ORDER_LIMITS } from '../..
 import useLiveData from '../../hooks/useLiveData';
 import { currency, stockStatus, stockBadgeVariant, stockStatusText, dayKey, lastDaysBounds, itemLabel } from '../../utils/format';
 import { keyEvent, orderUpsert, orderStatus, queueUpsert, stockPatch, stockCounts, splitByChannel } from './oversightData';
-import NotificationBell from './NotificationBell';
 import Badge from '../../components/Badge';
 import CardPanel from '../../components/CardPanel';
 import ErrorBanner from '../../components/ErrorBanner';
@@ -303,7 +302,7 @@ export default function AdminOverview() {
 
   return (
     <div className="ap-page ap-page--wide ao-page">
-      <PageHeader title="Overview" sub="Store at a glance" action={<NotificationBell />} />
+      <PageHeader title="Overview" sub="Store at a glance" />
 
       {error && (
         <ErrorBanner>

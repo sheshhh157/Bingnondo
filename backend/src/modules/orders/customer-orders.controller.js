@@ -35,6 +35,7 @@ const { __internal } = require('./orders.controller');
 const { _resolveOrderItems } = __internal;
 const { createCustomerNotification } = require('../customer/customer-notifications');
 const { unlockThreadForCustomer, maybeLockThreadForCustomer } = require('../support-chat/support-chat.controller');
+const { readDeliveryFee } = require('../../config/deliveryFee');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -202,6 +203,18 @@ async function placeOrder(req, res, next) {
     }
     const { validated, totalAmount } = resolved;
 
+    // Delivery fee is configured in System Settings. It only applies to online
+    // orders (this handler); counter orders are created elsewhere.
+    let deliveryFee = 0;
+    try {
+      const feeConfig = await readDeliveryFee(client);
+      if (feeConfig.enabled) deliveryFee = feeConfig.amount;
+    } catch (feeErr) {
+      // Never block checkout because the fee setting could not be read.
+      console.error('[placeOrder] delivery fee lookup failed:', feeErr.message);
+    }
+    const orderTotal = Math.round((totalAmount + deliveryFee) * 100) / 100;
+
     // GCash without a receipt cannot be verified later, so require one.
     const receiptUrl = body.gcash_receipt_temp_url ? String(body.gcash_receipt_temp_url) : null;
     if (dbMethod === 'gcash' && !receiptUrl) {
@@ -228,7 +241,7 @@ async function placeOrder(req, res, next) {
        RETURNING *`,
       [
         customerId,
-        totalAmount,
+        orderTotal,
         body.notes ? String(body.notes).trim() : null,
         deliveryAddress,
         body.delivery_latitude ?? null,
@@ -277,7 +290,7 @@ async function placeOrder(req, res, next) {
       [
         order.id,
         dbMethod,
-        totalAmount,
+        orderTotal,
         paymentStatus,
         body.gcash_ref_number ? String(body.gcash_ref_number).trim() : null,
         body.gcash_amount_sent !== undefined && body.gcash_amount_sent !== null && body.gcash_amount_sent !== ''
@@ -313,6 +326,7 @@ async function placeOrder(req, res, next) {
     if (dbMethod === 'gcash') {
       // Not paid yet — the order goes to the staff receipt queue, and reaches
       // the kitchen only once staff verifies the receipt.
+      socketHub.emitOnlineOrderNew(orderPayload);
       socketHub.emitPaymentPending({
         orderId: order.id,
         orderNumber: order.order_number,
@@ -623,6 +637,42 @@ async function cancelMyOrder(req, res, next) {
   }
 }
 
+// ─── GET /api/orders/checkout-config (customer) ──────────────────────────────
+// Everything the checkout screen needs that is managed in System Settings:
+// the current delivery fee and the active payment QR codes.
+async function getCheckoutConfig(req, res, next) {
+  try {
+    let deliveryFee = { enabled: false, amount: 0 };
+    try {
+      deliveryFee = await readDeliveryFee();
+    } catch (err) {
+      console.error('[getCheckoutConfig] delivery fee lookup failed:', err.message);
+    }
+
+    let qrCodes = [];
+    try {
+      const { rows } = await db.query(
+        `SELECT id, name, number, image_url
+           FROM payment_qr_codes
+          WHERE is_active = TRUE
+          ORDER BY display_order ASC, id ASC`
+      );
+      qrCodes = rows;
+    } catch (err) {
+      // The QR table may not exist yet on older databases — checkout must
+      // still work with the fee alone.
+      console.error('[getCheckoutConfig] QR codes unavailable:', err.message);
+    }
+
+    return res.status(200).json({
+      delivery_fee: deliveryFee,
+      payment_qr_codes: qrCodes,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   placeOrder,
   listMyOrders,
@@ -630,6 +680,7 @@ module.exports = {
   getMyOrderTimeline,
   getMyOrderStatus,
   cancelMyOrder,
+  getCheckoutConfig,
   // Exposed for tests
   __internal: { orderNumber, toAppPaymentMethod, TIMELINE_STEPS },
 };

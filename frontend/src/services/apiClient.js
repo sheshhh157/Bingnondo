@@ -12,6 +12,8 @@
  *   - auth:expired event dispatch so AuthContext can redirect to /login
  */
 
+import { cachedRequest, createCacheKey, invalidateApiCache, isCacheableRead } from './requestCache';
+
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const TOKEN_KEY   = 'bingnondo_access_token';
@@ -20,10 +22,12 @@ const REFRESH_KEY = 'bingnondo_refresh_token';
 export function getToken()        { return localStorage.getItem(TOKEN_KEY); }
 export function getRefreshToken() { return localStorage.getItem(REFRESH_KEY); }
 export function setTokens(access, refresh) {
+  invalidateApiCache();
   localStorage.setItem(TOKEN_KEY, access);
   if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
 }
 export function clearTokens() {
+  invalidateApiCache();
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
 }
@@ -52,7 +56,7 @@ async function silentRefresh() {
   return body.accessToken;
 }
 
-async function request(method, path, body = null, retry = true) {
+async function performRequest(method, path, body = null, retry = true) {
   const token = getToken();
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -60,6 +64,7 @@ async function request(method, path, body = null, retry = true) {
   const options = { method, headers };
   if (body !== null) options.body = JSON.stringify(body);
 
+  if (method === 'GET') options.cache = 'no-store';
   const res = await fetch(`${BASE_URL}${path}`, options);
 
   if (res.status === 401 && retry) {
@@ -94,6 +99,20 @@ async function request(method, path, body = null, retry = true) {
   }
 
   return data;
+}
+
+function request(method, path, body = null, retry = true) {
+  if (method === 'GET') {
+    if (!isCacheableRead(path)) return performRequest(method, path, body, retry);
+    const key = createCacheKey(`${BASE_URL}${path}`, getToken());
+    return cachedRequest(key, () => performRequest(method, path, body, retry));
+  }
+
+  invalidateApiCache();
+  return performRequest(method, path, body, retry).then((result) => {
+    invalidateApiCache();
+    return result;
+  });
 }
 
 export const get   = (path)       => request('GET',    path);
@@ -132,6 +151,10 @@ export const authClient = {
     clearTokens();
   },
   me: () => get('/api/auth/me'),
+  profile: () => get('/api/auth/profile'),
+  updateProfile: (payload) => patch('/api/auth/profile', payload),
+  changePassword: ({ current_password, new_password }) =>
+    post('/api/auth/change-password', { current_password, new_password }),
 };
 
 export default { get, post, put, patch, del, authClient };

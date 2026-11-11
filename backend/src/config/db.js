@@ -1,22 +1,13 @@
 const { Pool } = require('pg');
+const getDatabaseOptions = require('./databaseOptions');
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  // If DATABASE_URL is not set, fall back to individual env vars:
-  host:     process.env.DB_HOST     || 'localhost',
-  port:     parseInt(process.env.DB_PORT || '5432', 10),
-  database: process.env.DB_NAME     || 'bingnondo_db',
-  user:     process.env.DB_USER     || 'postgres',
-  password: process.env.DB_PASSWORD || '',
+  ...getDatabaseOptions(),
   // Connection pool settings
   max:             10,   // max simultaneous connections
   idleTimeoutMillis: 30000,
   allowExitOnIdle: true,
   connectionTimeoutMillis: 2000,
-  // SSL: enable for production (Railway/Render require it)
-  ssl: process.env.NODE_ENV === 'production'
-    ? { rejectUnauthorized: false }
-    : false,
 });
 
 // Test connection on startup

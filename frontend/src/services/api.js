@@ -1,4 +1,5 @@
 import apiClient from './apiClient';
+import { cachedRequest, createCacheKey, invalidateApiCache, isCacheableRead } from './requestCache';
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 const BASE_URL = `${import.meta.env.VITE_API_URL || ''}/api`;
@@ -8,10 +9,16 @@ const tokenStorage = {
   getAccess:   () => localStorage.getItem('bingnondo_access_token'),
   getRefresh:  () => localStorage.getItem('bingnondo_refresh_token'),
   setTokens:   (access, refresh) => {
+    invalidateApiCache();
     localStorage.setItem('bingnondo_access_token', access);
     localStorage.setItem('bingnondo_refresh_token', refresh);
   },
-  clearTokens: () => localStorage.clear(),
+  clearTokens: () => {
+    invalidateApiCache();
+    localStorage.removeItem('bingnondo_access_token');
+    localStorage.removeItem('bingnondo_refresh_token');
+    localStorage.removeItem('bingnondo_user');
+  },
   saveUser:    (user) => localStorage.setItem('bingnondo_user', JSON.stringify(user)),
   getUser:     () => { try { return JSON.parse(localStorage.getItem('bingnondo_user')); } catch { return null; } },
 };
@@ -20,15 +27,18 @@ const tokenStorage = {
 let _isRefreshing = false;
 let _refreshQueue = [];
 
-async function apiRequest(endpoint, options = {}, retry = true) {
+async function performApiRequest(endpoint, options = {}, retry = true) {
   const accessToken = tokenStorage.getAccess();
+  const method = (options.method || 'GET').toUpperCase();
   const headers = {
     'Content-Type': 'application/json',
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     ...options.headers,
   };
 
-  const res = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
+  const fetchOptions = { ...options, headers };
+  if (method === 'GET') fetchOptions.cache = 'no-store';
+  const res = await fetch(`${BASE_URL}${endpoint}`, fetchOptions);
 
   if (res.status === 401 && retry) {
     const refreshToken = tokenStorage.getRefresh();
@@ -71,6 +81,21 @@ async function apiRequest(endpoint, options = {}, retry = true) {
   }
   // Wrap in { data } to match the shape the existing pages expect
   return { data };
+}
+
+function apiRequest(endpoint, options = {}, retry = true) {
+  const method = (options.method || 'GET').toUpperCase();
+  if (method === 'GET') {
+    if (!isCacheableRead(endpoint)) return performApiRequest(endpoint, options, retry);
+    const key = createCacheKey(`${BASE_URL}${endpoint}`, tokenStorage.getAccess());
+    return cachedRequest(key, () => performApiRequest(endpoint, options, retry));
+  }
+
+  invalidateApiCache();
+  return performApiRequest(endpoint, options, retry).then((result) => {
+    invalidateApiCache();
+    return result;
+  });
 }
 
 // ─── INVENTORY (§4.1) ─────────────────────────────────────────────────────────
@@ -176,12 +201,45 @@ export const uploadAPI = {
     return uploadRequest('/upload/menu-image', fd);
   },
 
+  uploadStaffProfileImage: (file) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return uploadRequest('/upload/profile-image', fd);
+  },
+
+  uploadRiderProfileImage: (file) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return uploadRequest('/upload/rider-profile-image', fd);
+  },
+
   /**
    * Delete a menu item photo from Cloudinary.
    * @param {string} public_id  — e.g. 'bingnondo/menu/abc123'
    */
   deleteMenuImage: (public_id) =>
     apiRequest('/upload/menu-image', {
+      method: 'DELETE',
+      body: JSON.stringify({ public_id }),
+    }),
+
+  /**
+   * Upload a payment QR code image to Cloudinary (admin only).
+   * @param {File} file
+   * @returns {{ data: { url: string, public_id: string } }}
+   */
+  uploadQrImage: (file) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return uploadRequest('/upload/qr-code', fd);
+  },
+
+  /**
+   * Delete a payment QR code image from Cloudinary.
+   * @param {string} public_id  — e.g. 'bingnondo/qr_codes/abc123'
+   */
+  deleteQrImage: (public_id) =>
+    apiRequest('/upload/qr-code', {
       method: 'DELETE',
       body: JSON.stringify({ public_id }),
     }),
@@ -200,6 +258,23 @@ export const kitchenAPI = {
 
 // ─── ADMIN API ────────────────────────────────────────────────────────────────
 export const adminAPI = {
+  // ── Archive ────────────────────────────────────────────────────────────────
+  listArchivedRecords: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.set('page', params.page);
+    if (params.limit) query.set('limit', params.limit);
+    if (params.search) query.set('search', params.search);
+    if (params.type && params.type !== 'all') query.set('type', params.type);
+    const qs = query.toString();
+    return apiRequest(`/admin/archive${qs ? `?${qs}` : ''}`);
+  },
+
+  restoreArchivedRecord: (id) =>
+    apiRequest(`/admin/archive/${id}/restore`, { method: 'POST' }),
+
+  deleteArchivedRecord: (id) =>
+    apiRequest(`/admin/archive/${id}`, { method: 'DELETE' }),
+
   // ── Staff Accounts ──────────────────────────────────────────────────────────
   listStaffAccounts: (params = {}) => {
     const q = new URLSearchParams();
@@ -346,6 +421,37 @@ updateVariantGroup: (id, name, maxOptions) =>
       body: JSON.stringify({ categories }),
     }),
 
+  // ── Delivery Fee ─────────────────────────────────────────────────────────────
+  getDeliveryFee: () =>
+    apiRequest('/admin/system-settings/delivery-fee'),
+
+  saveDeliveryFee: (data) =>
+    apiRequest('/admin/system-settings/delivery-fee', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: data.enabled, amount: data.amount }),
+    }),
+
+  // ── Payment QR Codes ─────────────────────────────────────────────────────────
+  listPaymentQrCodes: () =>
+    apiRequest('/admin/system-settings/qr-codes'),
+
+  createPaymentQrCode: (data) =>
+    apiRequest('/admin/system-settings/qr-codes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updatePaymentQrCode: (id, data) =>
+    apiRequest(`/admin/system-settings/qr-codes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deletePaymentQrCode: (id) =>
+    apiRequest(`/admin/system-settings/qr-codes/${id}`, {
+      method: 'DELETE',
+    }),
+
   // ── Customer Restrictions ────────────────────────────────────────────────────
   listCustomerRestrictions: (params = {}) => {
     const q = new URLSearchParams();
@@ -358,6 +464,19 @@ updateVariantGroup: (id, name, maxOptions) =>
     const qs = q.toString();
     return apiRequest(`/admin/customer-restrictions${qs ? `?${qs}` : ''}`);
   },
+
+  createCustomerAccount: (data) =>
+    apiRequest('/admin/customer-restrictions', {
+      method: 'POST',
+      body: JSON.stringify({
+        first_name:    data.first_name,
+        last_name:     data.last_name,
+        email:         data.email,
+        mobile_number: data.mobile_number,
+        password:      data.temp_password,   // backend expects 'password'
+        address:       data.address || undefined,
+      }),
+    }),
 
   getCustomerViolations: (customerId) =>
     apiRequest(`/admin/customer-restrictions/${customerId}/violations`),
@@ -433,7 +552,9 @@ export const adminRidersAPI = {
    *  created with a NULL hash that can never sign in.
    */
   create: (payload) => apiClient.post('/api/admin/riders', {
-    full_name:     payload.full_name,
+    first_name:    payload.first_name,
+    middle_name:   payload.middle_name,
+    last_name:     payload.last_name,
     mobile_number: payload.mobile_number,
     email:         payload.email,
     plate_number:  payload.plate_number,
@@ -447,7 +568,9 @@ export const adminRidersAPI = {
    *  update contract (use resetPassword instead) and is dropped here.
    */
   update: (id, payload) => apiClient.put(`/api/admin/riders/${id}`, {
-    full_name:     payload.full_name,
+    first_name:    payload.first_name,
+    middle_name:   payload.middle_name,
+    last_name:     payload.last_name,
     mobile_number: payload.mobile_number,
     email:         payload.email,
     plate_number:  payload.plate_number,
@@ -465,6 +588,13 @@ export const adminRidersAPI = {
 
   /** DELETE /api/admin/riders/:id — permanently remove a rider */
   remove: (id) => apiClient.del(`/api/admin/riders/${id}`),
+
+  /** PATCH /api/admin/riders/:id/work-override — set or clear today's work override
+   *  override: 'working' | 'off' | null
+   *  null clears the override (rider will be prompted on next login after midnight)
+   */
+  setWorkOverride: (id, override) =>
+    apiClient.patch(`/api/admin/riders/${id}/work-override`, { override }),
 };
 
 // ─── ADMIN DELIVERIES API ─────────────────────────────────────────────────────

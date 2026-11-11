@@ -56,4 +56,65 @@ const uploadReceipt = multer({
   },
 });
 
-module.exports = { cloudinary, upload, uploadReceipt };
+// ─── Multer storage: payment QR codes ────────────────────────────────────────
+// QR codes need to stay sharp, so no resizing — only format/quality tuning.
+const qrStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder:          'bingnondo/qr_codes',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [
+      { quality: 'auto:good', fetch_format: 'auto' },
+    ],
+  },
+});
+
+const uploadQr = multer({
+  storage: qrStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed.'));
+    }
+    cb(null, true);
+  },
+});
+
+function createProfileImageStorage(folder) {
+  return new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder,
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+      transformation: [
+        { width: 512, height: 512, crop: 'fill', gravity: 'face', quality: 'auto:good', fetch_format: 'auto' },
+      ],
+    },
+  });
+}
+
+function createProfileImageUpload(folder) {
+  return multer({
+    storage: createProfileImageStorage(folder),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowed.includes(file.mimetype)) {
+        return cb(new Error('Profile photo must be JPG, PNG, or WEBP.'));
+      }
+      cb(null, true);
+    },
+  });
+}
+
+const uploadProfileImage = createProfileImageUpload('bingnondo/staff_profiles');
+const uploadRiderProfileImage = createProfileImageUpload('bingnondo/rider_profiles');
+
+module.exports = {
+  cloudinary,
+  upload,
+  uploadReceipt,
+  uploadQr,
+  uploadProfileImage,
+  uploadRiderProfileImage,
+};

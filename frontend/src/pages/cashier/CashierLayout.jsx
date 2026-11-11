@@ -1,12 +1,16 @@
-import { useState, useEffect, useRef, Fragment } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import CashierPage from './CashierPage';
 import InventoryPage from '../shared/InventoryPage';
+import StaffProfile from '../shared/StaffProfile';
 import SupportChatPage from './SupportChatPage';
 import logo from '../../assets/logo.png';
 import CashierHeader from './components/CashierHeader';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { NAV_GROUPS } from './cashierNav';
+import { ordersAPI } from '../../services/cashierApi';
+import { supportChatAPI } from '../../services/api';
+import { connectSocket } from '../../services/socket';
 import '../../styles/CashierLayout.css';
 
 // Cashier destinations rendered inside CashierPage (shared red header + tabs).
@@ -18,6 +22,7 @@ function StaffPageContent({ pageId }) {
   switch (pageId) {
     case 'inventory': return <InventoryPage />;
     case 'chat':      return <SupportChatPage />;
+    case 'profile':   return <StaffProfile />;
     default:          return null;
   }
 }
@@ -26,34 +31,47 @@ function StaffPageContent({ pageId }) {
 const PAGE_META = {
   inventory: { title: 'Inventory',    sub: 'Track stock & reorder thresholds' },
   chat:      { title: 'Support Chat', sub: 'Customer conversations' },
+  profile:   { title: 'My Profile', sub: 'Your account information' },
 };
 
 // ─── Main layout ──────────────────────────────────────────────────────────────
 // ─── Sidebar nav list ─────────────────────────────────────────────────────────
-function SidebarNavList({ items, sidebarOpen, view, onNav }) {
-  return items.map(({ id, label, sub, icon }) => (
-    <button
-      key={id}
-      title={!sidebarOpen ? label : undefined}
-      className={`cl-nav__link${view === id ? ' cl-nav__link--active' : ''}${!sidebarOpen ? ' cl-nav__link--collapsed' : ''}`}
-      onClick={() => onNav(id)}
-      aria-current={view === id ? 'page' : undefined}
-      aria-label={!sidebarOpen ? label : undefined}
-    >
-      <span className={`cl-nav__icon${view === id ? ' cl-nav__icon--active' : ''}`}>{icon}</span>
-      {sidebarOpen && (
-        <span className="cl-nav__labels">
-          <span className="cl-nav__label">{label}</span>
-          <span className="cl-nav__sub">{sub}</span>
-        </span>
-      )}
-      {sidebarOpen && view === id && <span className="cl-nav__pip" aria-hidden="true" />}
-    </button>
-  ));
+function SidebarNavList({ items, sidebarOpen, view, onNav, indicators }) {
+  return items.map(({ id, label, sub, icon }) => {
+    const count = indicators[id] || 0;
+    const badge = count > 9 ? '9+' : count;
+    const attentionLabel = id === 'chat' ? 'unread messages' : 'orders need attention';
+    const accessibleLabel = count ? `${label}, ${count} ${attentionLabel}` : label;
+
+    return (
+      <button
+        key={id}
+        title={!sidebarOpen ? accessibleLabel : undefined}
+        className={`cl-nav__link${view === id ? ' cl-nav__link--active' : ''}${!sidebarOpen ? ' cl-nav__link--collapsed' : ''}`}
+        onClick={() => onNav(id)}
+        aria-current={view === id ? 'page' : undefined}
+        aria-label={!sidebarOpen ? accessibleLabel : undefined}
+      >
+        <span className={`cl-nav__icon${view === id ? ' cl-nav__icon--active' : ''}`}>{icon}</span>
+        {sidebarOpen && (
+          <span className="cl-nav__labels">
+            <span className="cl-nav__label">{label}</span>
+            <span className="cl-nav__sub">{sub}</span>
+          </span>
+        )}
+        {count > 0 && (
+          <span className="cl-nav__badge" aria-label={`${count} ${attentionLabel}`}>
+            {badge}
+          </span>
+        )}
+        {sidebarOpen && view === id && <span className="cl-nav__pip" aria-hidden="true" />}
+      </button>
+    );
+  });
 }
 
 // ─── Sidebar content (desktop only) ───────────────────────────────────────────
-function SidebarContent({ sidebarOpen, view, onNav, user, onLogout }) {
+function SidebarContent({ sidebarOpen, view, onNav, user, onLogout, indicators }) {
   return (
     <>
       {/* Brand */}
@@ -72,7 +90,7 @@ function SidebarContent({ sidebarOpen, view, onNav, user, onLogout }) {
             {sidebarOpen
               ? <span className={`cl-nav__group-label${i > 0 ? ' cl-nav__group-label--spaced' : ''}`}>{group.label}</span>
               : i > 0 && <div className="cl-nav__divider" aria-hidden="true" />}
-            <SidebarNavList items={group.items} sidebarOpen={sidebarOpen} view={view} onNav={onNav} />
+            <SidebarNavList items={group.items} sidebarOpen={sidebarOpen} view={view} onNav={onNav} indicators={indicators} />
           </Fragment>
         ))}
       </nav>
@@ -81,7 +99,9 @@ function SidebarContent({ sidebarOpen, view, onNav, user, onLogout }) {
       <div className="cl-user">
         <div className={`cl-user__card${!sidebarOpen ? ' cl-user__card--collapsed' : ''}`}>
           <div className="cl-user__avatar" aria-hidden="true">
-            {user?.full_name?.[0]?.toUpperCase() || 'C'}
+            {user?.profile_image_url
+              ? <img src={user.profile_image_url} alt="" />
+              : user?.full_name?.[0]?.toUpperCase() || 'C'}
           </div>
           {sidebarOpen && (
             <div className="cl-user__info">
@@ -111,6 +131,11 @@ function SidebarContent({ sidebarOpen, view, onNav, user, onLogout }) {
 export default function CashierLayout() {
   const { user, logout } = useAuth();
   const [view,        setView]        = useState('order');  // order | history | online | inventory | chat
+  const [indicators, setIndicators] = useState({ online: 0, chat: 0 });
+  const seenStorageKey = `bingnondo_cashier_seen_${user?.id ?? 'staff'}`;
+  const seenEventsRef = useRef(new Set());
+  const indicatorEventsRef = useRef({ online: [], chat: [] });
+  const viewRef = useRef(view);
   // Start collapsed on tablets/small laptops so the content area gets the
   // room it needs; the header toggle can still expand it.
   const [sidebarOpen, setSidebarOpen] = useState(
@@ -185,8 +210,139 @@ export default function CashierLayout() {
 
   const isCashierView = CASHIER_VIEW_IDS.includes(view);
 
-  const handleNav = (id) => { setView(id); setDrawerOpen(false); };
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  const rememberSeenEvents = useCallback((events) => {
+    let changed = false;
+    for (const event of events) {
+      if (!seenEventsRef.current.has(event.key)) {
+        seenEventsRef.current.add(event.key);
+        changed = true;
+      }
+    }
+    if (changed) {
+      while (seenEventsRef.current.size > 500) {
+        seenEventsRef.current.delete(seenEventsRef.current.values().next().value);
+      }
+      try {
+        window.localStorage.setItem(seenStorageKey, JSON.stringify([...seenEventsRef.current]));
+      } catch (err) {
+        console.error('[cashier.sidebarIndicators] could not save viewed items:', err);
+      }
+    }
+  }, [seenStorageKey]);
+
+  const handleNav = (id) => {
+    if (id === 'online' || id === 'chat') {
+      rememberSeenEvents(indicatorEventsRef.current[id]);
+      setIndicators((current) => ({ ...current, [id]: 0 }));
+    }
+    setView(id);
+    setDrawerOpen(false);
+  };
   const toggleSidebar = () => setSidebarOpen((v) => !v);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(seenStorageKey) || '[]');
+      seenEventsRef.current = new Set(Array.isArray(saved) ? saved : []);
+    } catch (err) {
+      console.error('[cashier.sidebarIndicators] could not restore viewed items:', err);
+      seenEventsRef.current = new Set();
+    }
+  }, [seenStorageKey]);
+
+  const refreshIndicators = useCallback(async () => {
+    const [ordersResult, threadsResult] = await Promise.allSettled([
+      ordersAPI.getOnline({ limit: 200 }),
+      supportChatAPI.getThreads(),
+    ]);
+
+    if (ordersResult.status === 'fulfilled') {
+      const orders = ordersResult.value.data?.orders || [];
+      const onlineEvents = orders.flatMap((order) => {
+        if (['completed', 'cancelled'].includes(order.status)) return [];
+        const events = [];
+        if (order.status === 'pending') {
+          events.push({ key: `online:new:${order.id}:${order.created_at}` });
+        }
+        if (order.status === 'ready') {
+          events.push({ key: `online:ready:${order.id}:${order.updated_at || order.created_at}` });
+        }
+        if (order.payment_method === 'gcash'
+          && ['pending', 'awaiting_verification'].includes(order.payment_status)) {
+          events.push({
+            key: `online:verify:${order.id}:${order.resubmitted_at || order.receipt_uploaded_at || order.created_at}`,
+          });
+        }
+        return events;
+      });
+      indicatorEventsRef.current.online = onlineEvents;
+      if (viewRef.current === 'online') rememberSeenEvents(onlineEvents);
+      const unseen = onlineEvents.filter((event) => !seenEventsRef.current.has(event.key)).length;
+      setIndicators((current) => ({ ...current, online: unseen }));
+    } else {
+      console.error('[cashier.sidebarIndicators] online orders:', ordersResult.reason);
+    }
+
+    if (threadsResult.status === 'fulfilled') {
+      const data = threadsResult.value.data;
+      const threads = data.data || data.threads || data;
+      const chatEvents = Array.isArray(threads)
+        ? threads
+          .filter((thread) => Number(thread.unread_count) > 0 && thread.last_message_sender === 'customer')
+          .map((thread) => ({
+            key: `chat:${thread.chat_id ?? thread.id}:${thread.last_message_at}`,
+          }))
+        : [];
+      indicatorEventsRef.current.chat = chatEvents;
+      if (viewRef.current === 'chat') rememberSeenEvents(chatEvents);
+      const unreadMessages = chatEvents.filter((event) => !seenEventsRef.current.has(event.key)).length;
+      setIndicators((current) => ({ ...current, chat: unreadMessages }));
+    } else {
+      console.error('[cashier.sidebarIndicators] support chat:', threadsResult.reason);
+    }
+  }, [rememberSeenEvents]);
+
+  useEffect(() => {
+    let active = true;
+    let refreshPending = false;
+    const refresh = async () => {
+      if (!active || refreshPending) return;
+      refreshPending = true;
+      try {
+        await refreshIndicators();
+      } finally {
+        refreshPending = false;
+      }
+    };
+
+    const socket = connectSocket('staff');
+    const joinStaffRoom = () => socket.emit('join', { room: 'staff' });
+    socket.on('connect', joinStaffRoom);
+    const refreshOnEvent = () => { refresh(); };
+    const events = [
+      'online_order:new',
+      'order:status',
+      'payment:pending',
+      'payment:verified',
+      'payment:rejected',
+      'payment:resubmitted',
+      'support_chat:message',
+    ];
+    events.forEach((event) => socket.on(event, refreshOnEvent));
+
+    refresh();
+    const interval = window.setInterval(refresh, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      socket.off('connect', joinStaffRoom);
+      events.forEach((event) => socket.off(event, refreshOnEvent));
+    };
+  }, [refreshIndicators]);
 
   return (
     <div className={`cl-root${sidebarOpen ? '' : ' cl-root--collapsed'}`}>
@@ -198,6 +354,7 @@ export default function CashierLayout() {
           onNav={handleNav}
           user={user}
           onLogout={() => setLogoutOpen(true)}
+          indicators={indicators}
         />
       </aside>
 
@@ -253,6 +410,7 @@ export default function CashierLayout() {
               onNav={handleNav}
               user={user}
               onLogout={() => setLogoutOpen(true)}
+              indicators={indicators}
             />
           </div>
         </div>

@@ -1,13 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../../services/api';
 import {
-  Spinner, TableSkeleton, Btn, Field, TextInput, AppSelect, Modal,
+  Spinner, TableSkeleton, Btn, Field, TextInput, PasswordInput, AppSelect, Modal,
   PageHeader, RowAction, Pagination,
 } from './adminShared';
 import { useAdminToast } from './useAdminToast';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { formatDate } from './format';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
+import {
+  LIMITS,
+  sanitizePersonName, sanitizeEmail, sanitizePhone,
+  validatePersonName, validateEmail, validatePhMobile, validatePassword,
+} from '../../utils/validation';
 import '../../styles/AdminPage.css';
 
 // ── Restriction level badge ─────────────────────────────────────────
@@ -364,6 +369,142 @@ const ReinstateIcon = () => (
     <polyline points="16 11 18 13 22 9" />
   </svg>
 );
+const PlusIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+// ── Create user (mobile app) account modal ─────────────────────────
+function CreateCustomerModal({ open, onClose, onCreated, toast }) {
+  const EMPTY = {
+    first_name: '', last_name: '', email: '', mobile_number: '',
+    address: '', temp_password: '',
+  };
+  const [form, setForm]       = useState(EMPTY);
+  const [touched, setTouched] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const liveErrors = {
+    first_name:    validatePersonName(form.first_name, { label: 'First name', max: 50 }),
+    last_name:     validatePersonName(form.last_name,  { label: 'Last name',  max: 50 }),
+    email:         validateEmail(form.email),
+    mobile_number: validatePhMobile(form.mobile_number),
+    temp_password: validatePassword(form.temp_password),
+  };
+
+  const set = (k, v) => {
+    setForm(f => ({ ...f, [k]: v }));
+    setTouched(t => ({ ...t, [k]: true }));
+  };
+
+  const handleFirstChange  = (e) => set('first_name', sanitizePersonName(e.target.value, 50));
+  const handleLastChange   = (e) => set('last_name',  sanitizePersonName(e.target.value, 50));
+  const handleEmailChange  = (e) => set('email', sanitizeEmail(e.target.value));
+  const handleMobileChange = (e) => set('mobile_number', sanitizePhone(e.target.value, LIMITS.mobile));
+  const handlePassChange   = (e) => set('temp_password', e.target.value.slice(0, LIMITS.password));
+
+  function hasErrors() {
+    return !!(liveErrors.first_name || liveErrors.last_name || liveErrors.email ||
+              liveErrors.mobile_number || liveErrors.temp_password);
+  }
+
+  async function submit() {
+    setTouched({ first_name: true, last_name: true, email: true, mobile_number: true, temp_password: true });
+    if (hasErrors()) return;
+    setLoading(true);
+    try {
+      await adminAPI.createCustomerAccount({
+        first_name:    form.first_name.trim(),
+        last_name:     form.last_name.trim(),
+        email:         form.email.trim(),
+        mobile_number: form.mobile_number.trim(),
+        address:       form.address.trim() || undefined,
+        temp_password: form.temp_password,
+      });
+      toast.success(`User account created for ${form.first_name.trim()} ${form.last_name.trim()}.`);
+      onCreated();
+      onClose();
+      setForm(EMPTY);
+      setTouched({});
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to create account.');
+    } finally { setLoading(false); }
+  }
+
+  const err = (k) => (touched[k] ? liveErrors[k] : '');
+
+  return (
+    <Modal open={open} onClose={onClose} title="Create user account">
+      <form onSubmit={e => { e.preventDefault(); submit(); }}>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
+          <Field label="First name" id="cu-first" error={err('first_name')}>
+            <TextInput id="cu-first" value={form.first_name}
+              onChange={handleFirstChange}
+              onBlur={() => setTouched(t => ({ ...t, first_name: true }))}
+              placeholder="e.g. Maria"
+              error={err('first_name')}
+              maxLength={50}
+              autoFocus />
+          </Field>
+          <Field label="Last name" id="cu-last" error={err('last_name')}>
+            <TextInput id="cu-last" value={form.last_name}
+              onChange={handleLastChange}
+              onBlur={() => setTouched(t => ({ ...t, last_name: true }))}
+              placeholder="e.g. Santos"
+              error={err('last_name')}
+              maxLength={50} />
+          </Field>
+        </div>
+
+        <Field label="Email address" id="cu-email" error={err('email')}>
+          <TextInput id="cu-email" value={form.email}
+            onChange={handleEmailChange}
+            onBlur={() => setTouched(t => ({ ...t, email: true }))}
+            placeholder="user@example.com"
+            error={err('email')}
+            maxLength={LIMITS.email} />
+        </Field>
+
+        <Field label="Mobile number" id="cu-mobile" error={err('mobile_number')}
+          hint="e.g. 0917 123 4567">
+          <TextInput id="cu-mobile" value={form.mobile_number}
+            onChange={handleMobileChange}
+            onBlur={() => setTouched(t => ({ ...t, mobile_number: true }))}
+            placeholder="0917 123 4567"
+            error={err('mobile_number')}
+            maxLength={LIMITS.mobile} />
+        </Field>
+
+        <Field label="Address" id="cu-address" hint="Optional — the user can complete this in the app.">
+          <TextInput id="cu-address" value={form.address}
+            onChange={e => set('address', e.target.value.slice(0, LIMITS.textarea))}
+            placeholder="House no., street, barangay, city"
+            maxLength={LIMITS.textarea} />
+        </Field>
+
+        <Field label="Temporary password" id="cu-pass" error={err('temp_password')}
+          hint={`Min. 8 characters · max ${LIMITS.password}`}>
+          <PasswordInput id="cu-pass" value={form.temp_password}
+            onChange={handlePassChange}
+            onBlur={() => setTouched(t => ({ ...t, temp_password: true }))}
+            placeholder="Min. 8 characters"
+            error={err('temp_password')}
+            autoComplete="new-password" />
+        </Field>
+        <p className="ap-field-hint">
+          The account is created verified and active. Share this temporary password with the user so they can sign in to the mobile app.
+        </p>
+
+        <div className="ap-modal__footer">
+          <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
+          <Btn variant="primary" type="submit" loading={loading}>Create account</Btn>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 
 // ── Customer restriction row ────────────────────────────────────────
 function CustomerRow({ customer, onViewViolations, onOverride, onAccountStatus }) {
@@ -508,6 +649,7 @@ export default function CustomerRestrictions() {
   const [viewViol, setViewViol]         = useState(null);   // customer for violation modal
   const [override, setOverride]         = useState(null);   // customer for override modal
   const [accountModal, setAccountModal] = useState(null);   // customer for suspend/reinstate modal
+  const [createOpen, setCreateOpen]     = useState(false);  // create user account modal
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -566,6 +708,7 @@ export default function CustomerRestrictions() {
           title="User Accounts"
           chip={`${summary?.flagged ?? 0} flagged`}
           sub="All registered user accounts. Restriction overrides and account suspensions are logged to the audit trail."
+          action={<Btn variant="primary" onClick={() => setCreateOpen(true)} icon={<PlusIcon />}>New account</Btn>}
         />
 
         {/* Stats */}
@@ -613,6 +756,11 @@ export default function CustomerRestrictions() {
                   ? 'No user accounts match the current filters.'
                   : 'No user accounts yet.'}
               </div>
+              {!(filterLevel || filterAccount || search) && (
+                <Btn variant="primary" size="sm" onClick={() => setCreateOpen(true)} icon={<PlusIcon />} style={{ marginTop: 12 }}>
+                  New account
+                </Btn>
+              )}
             </div>
           ) : (
             <div className={`ap-table-wrap${busy ? ' is-busy' : ''}`} aria-busy={busy}>
@@ -675,6 +823,14 @@ export default function CustomerRestrictions() {
         onClose={() => setAccountModal(null)}
         customer={accountModal}
         onSuccess={() => load(true)}
+        toast={toast}
+      />
+
+      {/* Create user account modal */}
+      <CreateCustomerModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => load(true)}
         toast={toast}
       />
 

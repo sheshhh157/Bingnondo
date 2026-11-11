@@ -12,6 +12,11 @@ router.use(authenticateToken, requireRoles('admin'));
 //   Query: page, limit, search, restriction_level
 router.get('/', ctrl.listCustomerRestrictions);
 
+// POST /api/admin/customer-restrictions
+//   Create a mobile-app (customer) account on the user's behalf.
+//   Body: { first_name, last_name, email, mobile_number, password, address? }
+router.post('/', ctrl.createCustomerAccount);
+
 // GET  /api/admin/customer-restrictions/:customer_id/violations
 //   Full violation history for one customer (newest first).
 router.get('/:customer_id/violations', ctrl.getCustomerViolations);

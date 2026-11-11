@@ -1,5 +1,18 @@
 # Bingnondo
 
+## Database connection
+
+The backend accepts a PostgreSQL connection string or individual database
+settings. For Supabase, copy `backend/.env.example` to `backend/.env`, paste the
+connection string from **Project Settings → Database** into `DATABASE_URL`, and
+leave `DATABASE_SSL=true`. Use the Session pooler URL if your host does not
+support IPv6. Replace the placeholder password with the database password from
+Supabase; do not use a Supabase anon/service-role API key as the database URL,
+and do not commit `backend/.env`.
+
+If `DATABASE_URL` is empty, the backend and database scripts use the `DB_HOST`,
+`DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` values instead.
+
 ## Password reset emails
 
 Staff, rider, and admin accounts can reset their own password from the login

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { DashboardIcon, SalesIcon, KitchenIcon, StocksIcon, MenuIcon } from './oversightIcons';
+import NotificationBell from './NotificationBell';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import logo from '../../assets/logo.png';
 import '../../styles/AdminLayout.css';
@@ -91,6 +92,17 @@ const NAV_GROUPS = [
     label: 'System',
     items: [
       {
+        to: '/admin/profile',
+        label: 'My Profile',
+        sub: 'Your account information',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+        ),
+      },
+      {
         to: '/admin/settings',
         label: 'System Settings',
         sub: 'Devices & config',
@@ -112,6 +124,18 @@ const NAV_GROUPS = [
             <line x1="16" y1="13" x2="8" y2="13"/>
             <line x1="16" y1="17" x2="8" y2="17"/>
             <polyline points="10 9 9 9 8 9"/>
+          </svg>
+        ),
+      },
+      {
+        to: '/admin/archive',
+        label: 'Archive',
+        sub: 'Deleted records · 30-day recovery',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 4h18v4H3z"/>
+            <path d="M5 8v12h14V8"/>
+            <path d="M10 12h4"/>
           </svg>
         ),
       },
@@ -184,7 +208,9 @@ function SidebarInner({ user, onLogout, onNav }) {
       <div className="al-user">
         <div className="al-user__card">
           <div className="al-user__avatar" aria-hidden="true">
-            {user?.full_name?.[0]?.toUpperCase() || 'A'}
+            {user?.profile_image_url
+              ? <img src={user.profile_image_url} alt="" />
+              : user?.full_name?.[0]?.toUpperCase() || 'A'}
           </div>
           <div className="al-user__info">
             <span className="al-user__name">{user?.full_name || 'Admin'}</span>
@@ -341,6 +367,8 @@ export default function AdminLayout() {
           <Outlet />
         </div>
       </main>
+
+      <NotificationBell />
 
       <ConfirmDialog
         open={logoutOpen}

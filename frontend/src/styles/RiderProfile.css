@@ -64,6 +64,7 @@
   box-shadow: var(--rl-shadow-sm);
 }
 .rp-avatar {
+  position: relative;
   width: 60px;
   height: 60px;
   border-radius: 50%;
@@ -77,7 +78,22 @@
   justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(234,88,12,0.25);
+  overflow: hidden;
 }
+.rp-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.rp-avatar-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+.rp-photo-input { display: none; }
+.rp-photo-button {
+  padding: 3px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--rl-primary);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rp-photo-button:disabled { opacity: 0.6; cursor: wait; }
 .rp-avatar-card__info {
   display: flex;
   flex-direction: column;

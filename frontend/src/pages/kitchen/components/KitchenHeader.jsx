@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import logo1 from '../../../assets/logo2.png';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 // Live wall clock. Kept in its own component so the `new Date()` read happens
 // once per tick instead of on every header render.
@@ -26,7 +27,10 @@ function Clock() {
 
 export default function KitchenHeader({ counterCount, onlineCount }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const isProfilePage = location.pathname === '/kitchen/profile';
 
   return (
     <header className="kp-header" role="banner">
@@ -70,9 +74,20 @@ export default function KitchenHeader({ counterCount, onlineCount }) {
         <Clock />
 
         <div className="kp-header__user">
+          {user?.profile_image_url && (
+            <img className="kp-header__avatar" src={user.profile_image_url} alt="" />
+          )}
           <span className="kp-header__username">
             {user?.full_name || user?.name || 'Kitchen'}
           </span>
+          <button
+            className="kp-header__profile"
+            onClick={() => navigate(isProfilePage ? '/kitchen' : '/kitchen/profile')}
+            aria-label={isProfilePage ? 'Back to kitchen queue' : 'Open profile'}
+            title={isProfilePage ? 'Kitchen queue' : 'My profile'}
+          >
+            {isProfilePage ? 'Queue' : 'Profile'}
+          </button>
           <button
             className="kp-header__logout"
             onClick={() => setLogoutOpen(true)}

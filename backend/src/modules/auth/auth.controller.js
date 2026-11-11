@@ -432,8 +432,141 @@ exports.me = async (req, res) => {
   }
 };
 
+exports.getStaffProfile = async (req, res) => {
+  if (req.user.type !== 'staff') {
+    return res.status(403).json({ message: "You don't have permission to view this profile." });
+  }
+  try {
+    const { rows } = await db.query(
+      `SELECT id, first_name, middle_name, last_name, full_name, email, role,
+              status, created_at, updated_at, profile_image_url
+         FROM staff_accounts
+        WHERE id = $1`,
+      [req.user.sub]
+    );
+    if (!rows[0]) return res.status(404).json({ message: 'Staff account not found.' });
+    return res.json({ profile: { ...rows[0], type: 'staff' } });
+  } catch (err) {
+    console.error('[getStaffProfile]', err);
+    return res.status(500).json({ message: 'Could not load your profile.' });
+  }
+};
+
+exports.updateStaffProfile = async (req, res) => {
+  if (req.user.type !== 'staff') {
+    return res.status(403).json({ message: "You don't have permission to update this profile." });
+  }
+
+  const allowedFields = new Set(['first_name', 'middle_name', 'last_name', 'email']);
+  const submittedFields = Object.keys(req.body || {});
+  if (submittedFields.some((field) => !allowedFields.has(field))) {
+    return res.status(400).json({ message: 'Only your name and email can be updated here.' });
+  }
+
+  const { first_name, middle_name, last_name, email } = req.body || {};
+  if ([first_name, last_name, email].some((value) =>
+    value !== undefined && typeof value !== 'string'
+  ) || (middle_name !== undefined && middle_name !== null && typeof middle_name !== 'string')) {
+    return res.status(400).json({ message: 'Profile fields must be text values.' });
+  }
+  const nextFirst = first_name === undefined ? undefined : String(first_name).trim();
+  const nextMiddle = middle_name === undefined ? undefined : (String(middle_name).trim() || null);
+  const nextLast = last_name === undefined ? undefined : String(last_name).trim();
+  const nextEmail = email === undefined ? undefined : String(email).toLowerCase().trim();
+
+  if (nextFirst !== undefined && (!nextFirst || nextFirst.length > 100 || /\d/.test(nextFirst))) {
+    return res.status(400).json({ message: 'Enter a valid first name (up to 100 characters, no numbers).' });
+  }
+  if (nextMiddle && (nextMiddle.length > 100 || /\d/.test(nextMiddle))) {
+    return res.status(400).json({ message: 'Enter a valid middle name (up to 100 characters, no numbers).' });
+  }
+  if (nextLast !== undefined && (!nextLast || nextLast.length > 100 || /\d/.test(nextLast))) {
+    return res.status(400).json({ message: 'Enter a valid last name (up to 100 characters, no numbers).' });
+  }
+  if (nextEmail !== undefined && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail) || nextEmail.length > 254)) {
+    return res.status(400).json({ message: 'Enter a valid email address.' });
+  }
+  if (submittedFields.length === 0) {
+    return res.status(400).json({ message: 'Provide at least one profile field to update.' });
+  }
+
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: currentRows } = await client.query(
+      `SELECT id, first_name, middle_name, last_name, full_name, email, role
+         FROM staff_accounts
+        WHERE id = $1
+        FOR UPDATE`,
+      [req.user.sub]
+    );
+    const current = currentRows[0];
+    if (!current) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Staff account not found.' });
+    }
+
+    const updatedEmail = nextEmail ?? current.email;
+    if (updatedEmail !== current.email) {
+      const { rows: duplicates } = await client.query(
+        'SELECT id FROM staff_accounts WHERE email = $1 AND id <> $2',
+        [updatedEmail, current.id]
+      );
+      if (duplicates.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'An account with this email already exists.' });
+      }
+    }
+
+    const updatedFirst = nextFirst ?? current.first_name;
+    const updatedMiddle = nextMiddle === undefined ? current.middle_name : nextMiddle;
+    const updatedLast = nextLast ?? current.last_name;
+    const updatedName = [updatedFirst, updatedMiddle, updatedLast].filter(Boolean).join(' ');
+    if (updatedName !== current.full_name) {
+      const { rows: duplicates } = await client.query(
+        `SELECT id FROM staff_accounts
+          WHERE id <> $2
+            AND lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
+              = lower(regexp_replace(btrim($1), '[[:space:]]+', ' ', 'g'))`,
+        [updatedName, current.id]
+      );
+      if (duplicates.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'That name is already in use by another account.' });
+      }
+    }
+
+    const { rows } = await client.query(
+      `UPDATE staff_accounts
+          SET first_name = $1,
+              middle_name = $2,
+              last_name = $3,
+              email = $4,
+              updated_at = NOW()
+        WHERE id = $5
+        RETURNING id, first_name, middle_name, last_name, full_name, email, role,
+                  status, created_at, updated_at, profile_image_url`,
+      [updatedFirst, updatedMiddle, updatedLast, updatedEmail, current.id]
+    );
+    const updated = rows[0];
+    await writeAuditLog(client, current.id, 'update_own_staff_profile', 'staff_accounts', current.id, {
+      before: { full_name: current.full_name, email: current.email },
+      after: { full_name: updated.full_name, email: updated.email },
+    });
+    await client.query('COMMIT');
+
+    return res.json({ message: 'Profile updated successfully.', profile: { ...updated, type: 'staff' } });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[updateStaffProfile]', err);
+    return res.status(500).json({ message: 'Could not update your profile.' });
+  } finally {
+    client.release();
+  }
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
-// CHANGE PASSWORD (signed-in customer)
+// CHANGE PASSWORD (signed-in staff or customer)
 // POST /api/auth/change-password
 // Body: { current_password, new_password }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -456,34 +589,32 @@ exports.changePassword = async (req, res) => {
       return res.status(400).json({ message: 'Your new password must be different from the current one.' });
     }
 
-    // Only customer accounts use this endpoint today; staff change their
-    // password through the admin console.
-    if (type !== 'customer') {
+    if (!['customer', 'staff'].includes(type)) {
       return res.status(403).json({ message: "You don't have permission to perform this action." });
     }
 
+    const table = type === 'staff' ? 'staff_accounts' : 'customers';
     const { rows } = await db.query(
-      'SELECT id, email, password_hash FROM customers WHERE id = $1',
+      `SELECT id, email, password_hash FROM ${table} WHERE id = $1`,
       [sub]
     );
     if (rows.length === 0) {
       return res.status(404).json({ message: 'Account not found.' });
     }
-    const customer = rows[0];
+    const account = rows[0];
 
-    const match = await bcrypt.compare(currentPassword, customer.password_hash);
+    const match = await bcrypt.compare(currentPassword, account.password_hash);
     if (!match) {
       return res.status(401).json({ message: 'Your current password is incorrect.' });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     await db.query(
-      'UPDATE customers SET password_hash = $1, updated_at = NOW() WHERE id = $2',
-      [passwordHash, customer.id]
+      `UPDATE ${table} SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+      [passwordHash, account.id]
     );
 
-    // Alert the owner (detached — never affects the result).
-    sendPasswordChangedEmail(customer.email).catch((err) =>
+    sendPasswordChangedEmail(account.email).catch((err) =>
       console.error('[changePassword] password-changed email failed:', err.message)
     );
 

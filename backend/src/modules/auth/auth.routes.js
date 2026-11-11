@@ -26,6 +26,8 @@ router.post('/change-password', authenticateToken, authController.changePassword
 router.post('/refresh', authController.refreshToken);
 router.post('/logout',  authenticateToken, authController.logout);
 router.get('/me',       authenticateToken, authController.me);
+router.get('/profile', authenticateToken, authController.getStaffProfile);
+router.patch('/profile', authenticateToken, authController.updateStaffProfile);
 
 
 

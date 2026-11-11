@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const db = require('../../config/db');
+const { archiveRecord } = require('./archive.service');
 const { autoAssignPendingDeliveries, emitAssignedDeliveries } = require('../rider/assignment');
 
 const BCRYPT_ROUNDS = 12;
@@ -57,13 +58,21 @@ exports.listRiders = async (req, res) => {
     const { rows } = await db.query(
       `SELECT
          r.id,
+         r.first_name,
+         r.middle_name,
+         r.last_name,
          r.full_name,
+         r.profile_image_url,
          r.mobile_number,
          r.email,
          r.plate_number,
          r.vehicle_type,
          r.notes,
          r.status,
+         r.work_status,
+         r.work_status_set_at,
+         r.admin_work_override,
+         r.admin_work_override_at,
          r.last_login,
          r.created_at,
          r.updated_at,
@@ -107,12 +116,16 @@ exports.getRider = async (req, res) => {
 
 // ─── POST /api/admin/riders ───────────────────────────────────────────────────
 // Create a new rider account.
-// Body: { full_name, mobile_number, email?, plate_number?, vehicle_type?, notes?, password }
+// Body: { first_name, middle_name?, last_name, mobile_number, email?,
+//         plate_number?, vehicle_type?, notes?, password }
+// (full_name is a generated column — do not pass it; the DB computes it)
 exports.createRider = async (req, res) => {
   const client = await db.getClient();
   try {
     const {
-      full_name,
+      first_name,
+      middle_name,
+      last_name,
       mobile_number,
       email,
       plate_number,
@@ -121,56 +134,57 @@ exports.createRider = async (req, res) => {
       password,
     } = req.body;
 
-    if (!full_name?.trim()) {
-      return res.status(400).json({ message: 'full_name is required.' });
-    }
-    if (!mobile_number?.trim()) {
-      return res.status(400).json({ message: 'mobile_number is required.' });
+    const cleanFirst  = String(first_name  ?? '').trim();
+    const cleanMiddle = String(middle_name ?? '').trim() || null;
+    const cleanLast   = String(last_name   ?? '').trim();
+
+    if (!cleanFirst) return res.status(400).json({ message: 'first_name is required.' });
+    if (!cleanLast)  return res.status(400).json({ message: 'last_name is required.' });
+    if (!mobile_number?.trim()) return res.status(400).json({ message: 'mobile_number is required.' });
+
+    if (/\d/.test(cleanFirst) || /\d/.test(cleanLast) || (cleanMiddle && /\d/.test(cleanMiddle))) {
+      return res.status(400).json({ message: 'Name fields must not contain numbers.' });
     }
 
-    // Check uniqueness
+    const composedName = [cleanFirst, cleanMiddle, cleanLast].filter(Boolean).join(' ');
+
+    // Mobile / email uniqueness
     const { rows: existing } = await client.query(
       `SELECT id FROM riders WHERE mobile_number = $1 OR (email IS NOT NULL AND email = $2)`,
       [mobile_number.trim(), email?.trim() || null]
     );
     if (existing.length > 0) {
-      return res.status(409).json({
-        message: 'A rider with this mobile number or email already exists.',
-      });
+      return res.status(409).json({ message: 'A rider with this mobile number or email already exists.' });
     }
 
-    // Full name must be unique among riders (case/whitespace-insensitive)
+    // Full name uniqueness (checked on the generated column)
     const { rows: nameTaken } = await client.query(
       `SELECT id FROM riders
         WHERE lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
             = lower(regexp_replace(btrim($1),        '[[:space:]]+', ' ', 'g'))`,
-      [full_name]
+      [composedName]
     );
     if (nameTaken.length > 0) {
       return res.status(409).json({ message: 'That name is already in use by another rider.' });
     }
 
-    // A rider cannot sign in without a password and there is no self-service
-    // setup flow, so a missing one must fail loudly rather than creating a
-    // locked-out account with a NULL hash.
-    if (!password) {
-      return res.status(400).json({ message: 'Password is required.' });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
-    }
+    if (!password) return res.status(400).json({ message: 'Password is required.' });
+    if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     await client.query('BEGIN');
 
     const { rows } = await client.query(
       `INSERT INTO riders
-         (full_name, mobile_number, email, password_hash,
+         (first_name, middle_name, last_name, mobile_number, email, password_hash,
           plate_number, vehicle_type, notes, status, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'available', $8)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'available', $10)
        RETURNING *`,
       [
-        full_name.trim(),
+        cleanFirst,
+        cleanMiddle,
+        cleanLast,
         mobile_number.trim(),
         email?.trim() || null,
         passwordHash,
@@ -203,20 +217,33 @@ exports.createRider = async (req, res) => {
 
 // ─── PUT /api/admin/riders/:id ────────────────────────────────────────────────
 // Update rider info (name, contact, vehicle, notes). Does NOT change status.
+// Body: { first_name?, middle_name?, last_name?, mobile_number?, email?,
+//         plate_number?, vehicle_type?, notes? }
 exports.updateRider = async (req, res) => {
   const client = await db.getClient();
   try {
     const riderId = parseInt(req.params.id, 10);
-    const { full_name, mobile_number, email, plate_number, vehicle_type, notes } = req.body;
+    const { first_name, middle_name, last_name, mobile_number, email, plate_number, vehicle_type, notes } = req.body;
 
-    // Fetch current for audit diff
     const { rows: current } = await client.query(
       `SELECT * FROM riders WHERE id = $1`,
       [riderId]
     );
     if (!current[0]) return res.status(404).json({ message: 'Rider not found.' });
 
-    // Check mobile/email uniqueness if changed
+    const nextFirst  = first_name  !== undefined ? String(first_name).trim()  : null;
+    const nextMiddle = middle_name !== undefined
+                         ? (String(middle_name).trim() || null)
+                         : undefined;
+    const nextLast   = last_name   !== undefined ? String(last_name).trim()   : null;
+
+    if (nextFirst  !== null && nextFirst  === '') return res.status(400).json({ message: 'First name cannot be empty.' });
+    if (nextLast   !== null && nextLast   === '') return res.status(400).json({ message: 'Last name cannot be empty.' });
+    if (nextFirst  !== null && /\d/.test(nextFirst))  return res.status(400).json({ message: 'First name must not contain numbers.' });
+    if (nextLast   !== null && /\d/.test(nextLast))   return res.status(400).json({ message: 'Last name must not contain numbers.' });
+    if (nextMiddle && /\d/.test(nextMiddle))           return res.status(400).json({ message: 'Middle name must not contain numbers.' });
+
+    // Mobile uniqueness
     if (mobile_number?.trim() && mobile_number.trim() !== current[0].mobile_number) {
       const { rows: dup } = await client.query(
         `SELECT id FROM riders WHERE mobile_number = $1 AND id <> $2`,
@@ -224,6 +251,8 @@ exports.updateRider = async (req, res) => {
       );
       if (dup.length) return res.status(409).json({ message: 'Mobile number already in use.' });
     }
+
+    // Email uniqueness
     if (email?.trim() && email.trim() !== current[0].email) {
       const { rows: dup } = await client.query(
         `SELECT id FROM riders WHERE email = $1 AND id <> $2`,
@@ -232,33 +261,44 @@ exports.updateRider = async (req, res) => {
       if (dup.length) return res.status(409).json({ message: 'Email already in use.' });
     }
 
-    // Full name must stay unique among riders, ignoring this rider.
-    if (full_name?.trim() && full_name.trim() !== current[0].full_name) {
-      const { rows: dup } = await client.query(
-        `SELECT id FROM riders
-          WHERE id <> $2
-            AND lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
-              = lower(regexp_replace(btrim($1),        '[[:space:]]+', ' ', 'g'))`,
-        [full_name.trim(), riderId]
-      );
-      if (dup.length) return res.status(409).json({ message: 'That name is already in use by another rider.' });
+    // Full name uniqueness — build composed name from what will be stored.
+    const composedFirst  = nextFirst  ?? current[0].first_name;
+    const composedMiddle = nextMiddle !== undefined ? nextMiddle : current[0].middle_name;
+    const composedLast   = nextLast   ?? current[0].last_name;
+    const composedName   = [composedFirst, composedMiddle, composedLast].filter(Boolean).join(' ');
+
+    if (nextFirst !== null || nextMiddle !== undefined || nextLast !== null) {
+      if (composedName.toLowerCase() !== current[0].full_name.toLowerCase()) {
+        const { rows: dup } = await client.query(
+          `SELECT id FROM riders
+            WHERE id <> $2
+              AND lower(regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g'))
+                = lower(regexp_replace(btrim($1),        '[[:space:]]+', ' ', 'g'))`,
+          [composedName, riderId]
+        );
+        if (dup.length) return res.status(409).json({ message: 'That name is already in use by another rider.' });
+      }
     }
 
     await client.query('BEGIN');
 
     const { rows } = await client.query(
       `UPDATE riders SET
-         full_name     = COALESCE($1, full_name),
-         mobile_number = COALESCE($2, mobile_number),
-         email         = COALESCE($3, email),
-         plate_number  = COALESCE($4, plate_number),
-         vehicle_type  = COALESCE($5, vehicle_type),
-         notes         = COALESCE($6, notes),
+         first_name    = COALESCE($1, first_name),
+         middle_name   = CASE WHEN $2::text IS NOT NULL THEN $2 ELSE middle_name END,
+         last_name     = COALESCE($3, last_name),
+         mobile_number = COALESCE($4, mobile_number),
+         email         = COALESCE($5, email),
+         plate_number  = COALESCE($6, plate_number),
+         vehicle_type  = COALESCE($7, vehicle_type),
+         notes         = COALESCE($8, notes),
          updated_at    = NOW()
-       WHERE id = $7
+       WHERE id = $9
        RETURNING *`,
       [
-        full_name?.trim() || null,
+        nextFirst,
+        nextMiddle ?? null,
+        nextLast,
         mobile_number?.trim() || null,
         email?.trim() || null,
         plate_number?.trim() || null,
@@ -409,6 +449,66 @@ exports.resetRiderPassword = async (req, res) => {
   }
 };
 
+// ─── PATCH /api/admin/riders/:id/work-override ───────────────────────────────
+// Admin sets or clears the daily work override for a rider.
+// Body: { override: 'working' | 'off' | null }
+//   'working' → force rider available today
+//   'off'     → force rider off today
+//   null      → clear override (rider will be prompted again at next 12 AM)
+//
+// Note: clearing override mid-day lets the rider see the prompt on next login.
+// The override is automatically cleared by the same 12 AM reset the rider uses.
+exports.setAdminWorkOverride = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const riderId  = parseInt(req.params.id, 10);
+    const { override } = req.body;
+
+    if (override !== null && !['working', 'off'].includes(override)) {
+      return res.status(400).json({ message: "override must be 'working', 'off', or null." });
+    }
+
+    const { rows: current } = await client.query(
+      `SELECT id, full_name, status, admin_work_override FROM riders WHERE id = $1`,
+      [riderId]
+    );
+    if (!current[0]) return res.status(404).json({ message: 'Rider not found.' });
+
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      `UPDATE riders
+          SET admin_work_override    = $1,
+              admin_work_override_at = CASE WHEN $1::varchar IS NULL THEN NULL ELSE NOW() END,
+              updated_at             = NOW()
+        WHERE id = $2
+        RETURNING id, full_name, status, work_status, admin_work_override, admin_work_override_at`,
+      [override, riderId]
+    );
+
+    await writeAuditLog(client, req.user.sub, 'admin_work_override', 'rider', riderId, {
+      rider_name: current[0].full_name,
+      from:       current[0].admin_work_override,
+      to:         override,
+    });
+
+    await client.query('COMMIT');
+
+    res.json({
+      id:                    rows[0].id,
+      full_name:             rows[0].full_name,
+      admin_work_override:   rows[0].admin_work_override,
+      admin_work_override_at: rows[0].admin_work_override_at,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[admin.riders] setAdminWorkOverride:', err);
+    res.status(500).json({ message: 'Failed to update work override.' });
+  } finally {
+    client.release();
+  }
+};
+
 // ─── DELETE /api/admin/riders/:id ─────────────────────────────────────────────
 // Permanently remove a rider.
 //
@@ -426,13 +526,14 @@ exports.deleteRider = async (req, res) => {
       return res.status(400).json({ message: 'Invalid rider ID.' });
     }
 
-    const { rows: current } = await client.query(
-      `SELECT id, full_name, mobile_number, email, status FROM riders WHERE id = $1`,
+    const { rows: currentRows } = await client.query(
+      `SELECT to_jsonb(r) AS record FROM riders r WHERE r.id = $1`,
       [riderId]
     );
-    if (!current[0]) return res.status(404).json({ message: 'Rider not found.' });
+    const current = currentRows[0]?.record;
+    if (!current) return res.status(404).json({ message: 'Rider not found.' });
 
-    if (current[0].status === 'on_delivery') {
+    if (current.status === 'on_delivery') {
       return res.status(409).json({
         message: 'Cannot delete a rider who is currently on a delivery. Wait until they complete it, or deactivate them.',
       });
@@ -440,6 +541,13 @@ exports.deleteRider = async (req, res) => {
 
     await client.query('BEGIN');
 
+    await archiveRecord(client, {
+      entityType: 'rider',
+      entityId: riderId,
+      displayName: current.full_name,
+      payload: { record: current },
+      actorId: req.user.sub,
+    });
     const { rows } = await client.query(
       `DELETE FROM riders WHERE id = $1 RETURNING id`,
       [riderId]
@@ -449,15 +557,15 @@ exports.deleteRider = async (req, res) => {
       return res.status(404).json({ message: 'Rider not found.' });
     }
 
-    await writeAuditLog(client, req.user.sub, 'delete_rider', 'rider', riderId, {
-      full_name: current[0].full_name,
-      mobile_number: current[0].mobile_number,
-      email: current[0].email,
+    await writeAuditLog(client, req.user.sub, 'archive_rider', 'rider', riderId, {
+      full_name: current.full_name,
+      mobile_number: current.mobile_number,
+      email: current.email,
     });
 
     await client.query('COMMIT');
 
-    res.json({ message: 'Rider deleted successfully.' });
+    res.json({ message: 'Rider moved to the archive for 30 days.' });
   } catch (err) {
     await client.query('ROLLBACK');
     if (err && err.code === '23503') {

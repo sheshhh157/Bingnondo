@@ -9,6 +9,11 @@ import { useAdminToast } from './useAdminToast';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import DeliveriesTab from './DeliveriesTab';
+import {
+  LIMITS,
+  sanitizePersonName, sanitizePhone, sanitizePlate, sanitizeEmail,
+  validatePersonName, validateEmail, validatePhMobile, validatePassword,
+} from '../../utils/validation';
 import '../../styles/AdminPage.css';
 import '../../styles/RidersPage.css';
 
@@ -28,15 +33,35 @@ const STATUS_OPTIONS = [
   { value: 'inactive',   label: 'Inactive'    },
 ];
 
-// ── name uniqueness ───────────────────────────────────────────────────────────
-// Compared case- and whitespace-insensitively, e.g. "Juan  Cruz" == "juan cruz".
-const normalizeName = (name) => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+function isTodayManila(timestamp) {
+  if (!timestamp) return false;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return false;
 
-function isNameTaken(name, riders, selfId) {
-  const normalized = normalizeName(name);
-  if (!normalized) return false;
-  return riders.some((r) => r.id !== selfId && normalizeName(r.full_name) === normalized);
+  const toManila = (value) => {
+    const utcMs = value.getTime() + value.getTimezoneOffset() * 60000;
+    return new Date(utcMs + 8 * 60 * 60000);
+  };
+  const today = toManila(new Date());
+  const target = toManila(date);
+  return today.getFullYear() === target.getFullYear()
+    && today.getMonth() === target.getMonth()
+    && today.getDate() === target.getDate();
 }
+
+function getEffectiveWorkStatus(rider) {
+  if (rider.admin_work_override != null && isTodayManila(rider.admin_work_override_at)) {
+    return rider.admin_work_override;
+  }
+  if (rider.work_status != null && isTodayManila(rider.work_status_set_at)) {
+    return rider.work_status;
+  }
+  return null;
+}
+
+// (name uniqueness handled by validatePersonName from validation.js)
+// full_name is a generated column in the DB — the frontend never composes it.
+// We send first_name, middle_name (optional), last_name separately.
 
 // ── Vehicle Icon SVG ──────────────────────────────────────────────────────────
 function VehicleIcon({ type, size = 20 }) {
@@ -89,8 +114,21 @@ function RiderStatusBadge({ status }) {
   );
 }
 
+function RiderDutyBadge({ rider }) {
+  const workStatus = getEffectiveWorkStatus(rider);
+  const map = {
+    working: { cls: 'rd-duty-badge--working', label: 'Naka-duty' },
+    off: { cls: 'rd-duty-badge--off', label: 'Hindi naka-duty' },
+  };
+  const { cls, label } = map[workStatus] || {
+    cls: 'rd-duty-badge--unset',
+    label: 'Wala pang sagot',
+  };
+  return <span className={`rd-duty-badge ${cls}`}>{label}</span>;
+}
+
 // ── Rider Avatar ──────────────────────────────────────────────────────────────
-function RiderAvatar({ name, status }) {
+function RiderAvatar({ name, status, imageUrl }) {
   const initials = (name || '?')
     .split(' ')
     .slice(0, 2)
@@ -100,6 +138,13 @@ function RiderAvatar({ name, status }) {
   return (
     <div className={`rd-avatar rd-avatar--${status || 'inactive'}`} aria-hidden="true">
       {initials}
+      {imageUrl && (
+        <img
+          src={imageUrl}
+          alt=""
+          onError={e => { e.currentTarget.style.display = 'none'; }}
+        />
+      )}
     </div>
   );
 }
@@ -156,31 +201,67 @@ function StatsBar({ riders }) {
 // ── Rider Form Modal ──────────────────────────────────────────────────────────
 function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders = [] }) {
   const isEdit = Boolean(initial);
-  // Initialised from `initial` on mount; the parent remounts this modal via
-  // `key` whenever the open/edit target changes, so no reset effect is needed.
-  const [form, setForm]   = useState(() => initial
-    ? { full_name: initial.full_name || '', mobile_number: initial.mobile_number || '', email: initial.email || '', plate_number: initial.plate_number || '', vehicle_type: initial.vehicle_type || 'motorcycle', notes: initial.notes || '', temp_password: '' }
-    : { full_name: '', mobile_number: '', email: '', plate_number: '', vehicle_type: 'motorcycle', notes: '', temp_password: '' });
-  const [errors, setErrors] = useState({});
 
-  const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setErrors(e => ({ ...e, [k]: '' })); };
+  const [form, setForm] = useState(() => ({
+    // DB now returns first_name / middle_name / last_name directly — no splitting needed.
+    first_name:    initial?.first_name    || '',
+    middle_name:   initial?.middle_name   || '',
+    last_name:     initial?.last_name     || '',
+    mobile_number: initial?.mobile_number || '',
+    email:         initial?.email         || '',
+    plate_number:  initial?.plate_number  || '',
+    vehicle_type:  initial?.vehicle_type  || 'motorcycle',
+    notes:         initial?.notes         || '',
+    temp_password: '',
+  }));
 
-  const validate = () => {
-    const e = {};
-    if (!form.full_name.trim())         e.full_name      = 'Full name is required.';
-    else if (isNameTaken(form.full_name, riders, initial?.id)) e.full_name = 'This name is already in use.';
-    if (!form.mobile_number.trim())     e.mobile_number  = 'Mobile number is required.';
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email format.';
-    if (!isEdit && !form.temp_password) e.temp_password  = 'Temporary password is required.';
-    if (!isEdit && form.temp_password && form.temp_password.length < 8) e.temp_password = 'Password must be at least 8 characters.';
-    return e;
+  const [touched, setTouched] = useState({});
+
+  // Compose locally only for the real-time duplicate UI check.
+  const composedName = [form.first_name, form.middle_name, form.last_name]
+    .map(s => s.trim()).filter(Boolean).join(' ');
+
+  // Real-time errors — derived, never stored.
+  const liveErrors = {
+    first_name:    validatePersonName(form.first_name,  { label: 'First name' }),
+    middle_name:   form.middle_name.trim()
+                     ? validatePersonName(form.middle_name, { label: 'Middle name', required: false })
+                     : '',
+    last_name:     validatePersonName(form.last_name,   { label: 'Last name' }),
+    duplicate:     composedName && riders.some(
+                     (r) => r.id !== initial?.id &&
+                       r.full_name?.trim().toLowerCase() === composedName.toLowerCase()
+                   ) ? 'This name is already in use.' : '',
+    mobile_number: validatePhMobile(form.mobile_number, { required: true }),
+    email:         form.email ? validateEmail(form.email, { required: false }) : '',
+    temp_password: !isEdit ? validatePassword(form.temp_password) : '',
   };
+
+  const touch = (k) => setTouched(t => ({ ...t, [k]: true }));
+  const set   = (k, v) => { setForm(p => ({ ...p, [k]: v })); touch(k); };
+
+  const handleFirstChange  = (e) => set('first_name',    sanitizePersonName(e.target.value, LIMITS.personName));
+  const handleMiddleChange = (e) => set('middle_name',   sanitizePersonName(e.target.value, LIMITS.personName));
+  const handleLastChange   = (e) => set('last_name',     sanitizePersonName(e.target.value, LIMITS.personName));
+  const handleMobileChange = (e) => set('mobile_number', sanitizePhone(e.target.value, LIMITS.mobile));
+  const handleEmailChange  = (e) => set('email',         sanitizeEmail(e.target.value, LIMITS.riderEmail));
+  const handlePlateChange  = (e) => set('plate_number',  sanitizePlate(e.target.value, LIMITS.plate));
+  const handlePassChange   = (e) => set('temp_password', e.target.value.slice(0, LIMITS.password));
 
   const handleSubmit = () => {
-    const e = validate();
-    if (Object.keys(e).length) { setErrors(e); return; }
+    const allKeys = isEdit
+      ? ['first_name', 'middle_name', 'last_name', 'mobile_number', 'email']
+      : ['first_name', 'middle_name', 'last_name', 'mobile_number', 'email', 'temp_password'];
+    setTouched(Object.fromEntries(allKeys.map(k => [k, true])));
+    const hasErrors = !!(liveErrors.first_name || liveErrors.middle_name || liveErrors.last_name ||
+                         liveErrors.duplicate || liveErrors.mobile_number || liveErrors.email || liveErrors.temp_password);
+    if (hasErrors) return;
+    // Backend now expects first_name / middle_name / last_name separately.
     onSave(form);
   };
+
+  const err    = (k) => (touched[k] ? liveErrors[k] : '');
+  const dupErr = (touched.first_name || touched.last_name) ? liveErrors.duplicate : '';
 
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Rider' : 'Add New Rider'} width={540}>
@@ -204,74 +285,122 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders
           </div>
         </Field>
 
-        <div className="rd-form-grid">
-          <Field label="Full Name *" id="rd-name" error={errors.full_name}>
+        {/* Name fields */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
+          <Field label="First Name *" id="rd-first" error={err('first_name')}>
             <TextInput
-              id="rd-name"
-              placeholder="e.g. Juan Dela Cruz"
-              value={form.full_name}
-              onChange={e => set('full_name', e.target.value)}
-              error={errors.full_name}
+              id="rd-first"
+              placeholder="e.g. Juan"
+              value={form.first_name}
+              onChange={handleFirstChange}
+              onBlur={() => touch('first_name')}
+              error={err('first_name')}
+              maxLength={LIMITS.personName}
               autoComplete="off"
               autoFocus
             />
           </Field>
+          <Field label="Last Name *" id="rd-last" error={err('last_name')}>
+            <TextInput
+              id="rd-last"
+              placeholder="e.g. Dela Cruz"
+              value={form.last_name}
+              onChange={handleLastChange}
+              onBlur={() => touch('last_name')}
+              error={err('last_name')}
+              maxLength={LIMITS.personName}
+              autoComplete="off"
+            />
+          </Field>
+        </div>
 
-          <Field label="Mobile Number *" id="rd-mobile" error={errors.mobile_number}>
+        <Field label="Middle Name" id="rd-middle" error={err('middle_name')} hint="Optional">
+          <TextInput
+            id="rd-middle"
+            placeholder="e.g. Santos"
+            value={form.middle_name}
+            onChange={handleMiddleChange}
+            onBlur={() => touch('middle_name')}
+            error={err('middle_name')}
+            maxLength={LIMITS.personName}
+            autoComplete="off"
+          />
+        </Field>
+
+        {dupErr && (
+          <p className="ap-field-error" role="alert"
+            style={{ marginTop: -8, marginBottom: 10, fontSize: '0.75rem', color: 'var(--color-danger)' }}>
+            {dupErr}
+          </p>
+        )}
+
+        <div className="rd-form-grid">
+          <Field label="Mobile Number *" id="rd-mobile" error={err('mobile_number')}
+            hint="Format: 09XX XXX XXXX or +639XX XXX XXXX">
             <TextInput
               id="rd-mobile"
               placeholder="+63 9XX XXX XXXX"
               value={form.mobile_number}
-              onChange={e => set('mobile_number', e.target.value)}
-              error={errors.mobile_number}
+              onChange={handleMobileChange}
+              onBlur={() => touch('mobile_number')}
+              error={err('mobile_number')}
+              maxLength={LIMITS.mobile}
               autoComplete="off"
             />
           </Field>
 
-          <Field label="Email Address" id="rd-email" error={errors.email} hint="Used for login — leave blank if rider won't use the app.">
+          <Field label="Email Address" id="rd-email" error={err('email')}
+            hint="Used for login — leave blank if rider won't use the app.">
             <TextInput
               id="rd-email"
-              type="email"
               placeholder="rider@email.com"
               value={form.email}
-              onChange={e => set('email', e.target.value)}
-              error={errors.email}
+              onChange={handleEmailChange}
+              onBlur={() => touch('email')}
+              error={err('email')}
+              maxLength={LIMITS.riderEmail}
               autoComplete="off"
             />
           </Field>
 
-          <Field label="Plate Number" id="rd-plate" hint="Optional — for reference only.">
+          <Field label="Plate Number" id="rd-plate"
+            hint={`Alphanumeric only · max ${LIMITS.plate} chars (auto-uppercase)`}>
             <TextInput
               id="rd-plate"
               placeholder="e.g. ABC 1234"
               value={form.plate_number}
-              onChange={e => set('plate_number', e.target.value)}
+              onChange={handlePlateChange}
+              maxLength={LIMITS.plate}
               style={{ textTransform: 'uppercase' }}
               autoComplete="off"
             />
           </Field>
         </div>
 
-        <Field label="Notes" id="rd-notes" hint="Internal notes visible only to Admin.">
+        <Field label="Notes" id="rd-notes"
+          hint={`Internal notes visible only to Admin · max ${LIMITS.note} chars`}>
           <textarea
             id="rd-notes"
             className="ap-input"
             rows={2}
             placeholder="Any relevant notes…"
             value={form.notes}
-            onChange={e => set('notes', e.target.value)}
+            onChange={e => setForm(p => ({ ...p, notes: e.target.value.slice(0, LIMITS.note) }))}
+            maxLength={LIMITS.note}
             style={{ resize: 'vertical' }}
           />
         </Field>
 
         {!isEdit && (
-          <Field label="Temporary Password *" id="rd-pass" error={errors.temp_password} hint="Rider uses this on first login. Min. 8 characters.">
+          <Field label="Temporary Password *" id="rd-pass" error={err('temp_password')}
+            hint={`Rider uses this on first login · min. 8 · max ${LIMITS.password} chars`}>
             <PasswordInput
               id="rd-pass"
               placeholder="Minimum 8 characters"
               value={form.temp_password}
-              onChange={e => set('temp_password', e.target.value)}
-              error={errors.temp_password}
+              onChange={handlePassChange}
+              onBlur={() => touch('temp_password')}
+              error={err('temp_password')}
               autoComplete="new-password"
             />
           </Field>
@@ -292,12 +421,14 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders
 
 // ── Reset Password Modal ──────────────────────────────────────────────────────
 function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
-  const [pw, setPw]     = useState('');
-  const [err, setErr]   = useState('');
+  const [pw, setPw]           = useState('');
+  const [touched, setTouched] = useState(false);
+
+  const liveError = validatePassword(pw);
 
   const handleSave = () => {
-    if (!pw) { setErr('Password is required.'); return; }
-    if (pw.length < 8) { setErr('Must be at least 8 characters.'); return; }
+    setTouched(true);
+    if (liveError) return;
     onSave(pw);
   };
 
@@ -305,19 +436,21 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
     <Modal open={open} onClose={onClose} title="Reset Rider Password" width={420}>
       <form onSubmit={e => { e.preventDefault(); handleSave(); }}>
         <div className="rd-reset-rider">
-          <RiderAvatar name={rider?.full_name} status={rider?.status} />
+          <RiderAvatar name={rider?.full_name} status={rider?.status} imageUrl={rider?.profile_image_url} />
           <div>
             <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-foreground)' }}>{rider?.full_name}</div>
             <div style={{ fontSize: '0.6875rem', color: 'var(--color-muted-foreground)', marginTop: 2 }}>{rider?.mobile_number}</div>
           </div>
         </div>
-        <Field label="New Password" id="rd-reset-pw" error={err} hint="Min. 8 characters. Rider must use this on next login.">
+        <Field label="New Password" id="rd-reset-pw" error={touched ? liveError : ''}
+          hint={`Min. 8 characters · max ${LIMITS.password} · Rider must use this on next login.`}>
           <PasswordInput
             id="rd-reset-pw"
             placeholder="New password"
             value={pw}
-            onChange={e => { setPw(e.target.value); setErr(''); }}
-            error={err}
+            onChange={e => { setPw(e.target.value.slice(0, LIMITS.password)); setTouched(true); }}
+            onBlur={() => setTouched(true)}
+            error={touched ? liveError : ''}
             autoComplete="new-password"
             autoFocus
           />
@@ -332,7 +465,7 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
 }
 
 // ── Rider Detail Drawer ───────────────────────────────────────────────────────
-function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onResetPassword, onDelete }) {
+function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onResetPassword, onDelete, onWorkOverride }) {
   if (!rider) return null;
 
   const created = rider.created_at
@@ -341,6 +474,9 @@ function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onRes
   const lastLogin = rider.last_login
     ? new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(rider.last_login))
     : 'Never';
+
+  const overrideIsToday = isTodayManila(rider.admin_work_override_at);
+  const activeOverride = overrideIsToday ? rider.admin_work_override : null;
 
   return createPortal(
     <>
@@ -356,7 +492,7 @@ function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onRes
 
         <div className="rd-drawer__profile">
           <div className="rd-drawer__avatar-wrap">
-            <RiderAvatar name={rider.full_name} status={rider.status} />
+            <RiderAvatar name={rider.full_name} status={rider.status} imageUrl={rider.profile_image_url} />
             <div className={`rd-drawer__status-ring rd-drawer__status-ring--${rider.status}`} aria-hidden="true" />
           </div>
           <div className="rd-drawer__name">{rider.full_name}</div>
@@ -413,6 +549,41 @@ function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onRes
             <div className="rd-drawer__notes-label">Notes</div>
             <div className="rd-drawer__notes-body">{rider.notes}</div>
           </div>
+        )}
+
+        {/* ── Today's Work Override ─────────────────────────────────────── */}
+        <div className="rd-drawer__section-label">Today's Availability Override</div>
+        <div className="rd-override-row">
+          <button
+            className={`rd-override-btn rd-override-btn--working${activeOverride === 'working' ? ' rd-override-btn--active' : ''}`}
+            onClick={() => onWorkOverride(rider, activeOverride === 'working' ? null : 'working')}
+            aria-pressed={activeOverride === 'working'}
+            title="Force rider available today"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            {activeOverride === 'working' ? 'On Duty (Override)' : 'Set On Duty'}
+          </button>
+          <button
+            className={`rd-override-btn rd-override-btn--off${activeOverride === 'off' ? ' rd-override-btn--active' : ''}`}
+            onClick={() => onWorkOverride(rider, activeOverride === 'off' ? null : 'off')}
+            aria-pressed={activeOverride === 'off'}
+            title="Force rider off today"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            {activeOverride === 'off' ? 'Off Duty (Override)' : 'Set Off Duty'}
+          </button>
+        </div>
+        {activeOverride && (
+          <p className="rd-override-note">
+            Override active today. Resets at 12:00 AM.
+            <button className="rd-override-clear" onClick={() => onWorkOverride(rider, null)}>
+              Clear override
+            </button>
+          </p>
         )}
 
         <div className="rd-drawer__actions">
@@ -477,7 +648,7 @@ function RiderRow({ rider, onSelect, isSelected }) {
     >
       <td>
         <div className="ap-member">
-          <RiderAvatar name={rider.full_name} status={rider.status} />
+          <RiderAvatar name={rider.full_name} status={rider.status} imageUrl={rider.profile_image_url} />
           <div className="ap-member__info">
             <span className="ap-member__name" title={rider.full_name}>{rider.full_name}</span>
             <span className="ap-member__email" title={rider.mobile_number}>{rider.mobile_number}</span>
@@ -499,6 +670,7 @@ function RiderRow({ rider, onSelect, isSelected }) {
         </span>
       </td>
       <td><RiderStatusBadge status={rider.status} /></td>
+      <td><RiderDutyBadge rider={rider} /></td>
       <td className="rd-table__sel-indicator" aria-hidden="true">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
       </td>
@@ -579,6 +751,8 @@ function RidersTab() {
   const [deleteOpen,   setDeleteOpen]   = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteSaving, setDeleteSaving] = useState(false);
+
+  const [overrideSaving, setOverrideSaving] = useState(false);
 
   // ── fetch ──────────────────────────────────────────────────────────────────
   const fetchRiders = useCallback(async (silent = false) => {
@@ -692,12 +866,50 @@ function RidersTab() {
     setDrawerOpen(false);
   };
 
+  // ── Work override (admin sets today's availability for a rider) ────────────
+  const handleWorkOverride = useCallback(async (rider, override) => {
+    if (overrideSaving) return;
+    setOverrideSaving(true);
+    // Optimistically update the selected rider card
+    const prevOverride = rider.admin_work_override;
+    const prevAt       = rider.admin_work_override_at;
+    setSelected(s => s?.id === rider.id
+      ? { ...s, admin_work_override: override, admin_work_override_at: override ? new Date().toISOString() : null }
+      : s
+    );
+    setRiders(list => list.map(r => r.id === rider.id
+      ? { ...r, admin_work_override: override, admin_work_override_at: override ? new Date().toISOString() : null }
+      : r
+    ));
+    try {
+      await adminRidersAPI.setWorkOverride(rider.id, override);
+      if (override === null) {
+        toast.success(`Override cleared for ${rider.full_name}.`);
+      } else {
+        toast.success(`${rider.full_name} set to ${override === 'working' ? 'on duty' : 'off duty'} for today.`);
+      }
+    } catch {
+      // Revert on failure
+      setSelected(s => s?.id === rider.id
+        ? { ...s, admin_work_override: prevOverride, admin_work_override_at: prevAt }
+        : s
+      );
+      setRiders(list => list.map(r => r.id === rider.id
+        ? { ...r, admin_work_override: prevOverride, admin_work_override_at: prevAt }
+        : r
+      ));
+      toast.error('Failed to update work override.');
+    } finally {
+      setOverrideSaving(false);
+    }
+  }, [overrideSaving, toast]);
+
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleteSaving(true);
     try {
       await adminRidersAPI.remove(deleteTarget.id);
-      toast.success('Rider deleted.');
+      toast.success('Rider moved to the archive for 30 days.');
       setDeleteOpen(false);
       if (selected?.id === deleteTarget.id) { setSelected(null); setDrawerOpen(false); }
       fetchRiders(true);
@@ -773,7 +985,7 @@ function RidersTab() {
         {/* table */}
         <div className={`ap-table-wrap${busy ? ' is-busy' : ''}`} aria-busy={busy}>
           {firstLoad ? (
-            <TableSkeleton rows={6} cols={5} />
+            <TableSkeleton rows={6} cols={6} />
           ) : isEmpty ? (
             <div className="ap-empty">
               <div className="rd-empty-icon" aria-hidden="true">
@@ -795,6 +1007,7 @@ function RidersTab() {
                   <th scope="col">Vehicle</th>
                   <th scope="col">Email</th>
                   <th scope="col">Status</th>
+                  <th scope="col">Duty</th>
                   <th style={{ width: 32 }} aria-hidden="true" />
                 </tr>
               </thead>
@@ -832,6 +1045,7 @@ function RidersTab() {
         onToggleStatus={handleToggleStatus}
         onResetPassword={handleResetPassword}
         onDelete={handleDelete}
+        onWorkOverride={handleWorkOverride}
       />
 
       {/* ── Modals ────────────────────────────────────────────────────────── */}
@@ -874,8 +1088,8 @@ function RidersTab() {
         onClose={() => setDeleteOpen(false)}
         onConfirm={handleConfirmDelete}
         title="Delete Rider"
-        message={`Permanently delete ${deleteTarget?.full_name || 'this rider'}? This can't be undone. Riders with delivery history can't be deleted — deactivate them instead.`}
-        confirmLabel="Delete"
+        message={`Move ${deleteTarget?.full_name || 'this rider'} to the archive? It can be restored for 30 days. Riders with delivery history cannot be archived — deactivate them instead.`}
+        confirmLabel="Archive"
         variant="danger"
         loading={deleteSaving}
       />

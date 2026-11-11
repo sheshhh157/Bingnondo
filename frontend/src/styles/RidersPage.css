@@ -169,10 +169,25 @@
 .rd-badge--inactive    { background: var(--color-muted); color: var(--color-muted-foreground); border: 1px solid var(--color-border); }
 .rd-badge--inactive    .rd-badge__dot { background: var(--color-muted-foreground); }
 
+.rd-duty-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border: 1px solid;
+  border-radius: 20px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rd-duty-badge--working { background: #F0FDF4; color: #15803D; border-color: #BBF7D0; }
+.rd-duty-badge--off { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
+.rd-duty-badge--unset { background: var(--color-muted); color: var(--color-muted-foreground); border-color: var(--color-border); }
+
 @keyframes rd-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 /* ── Avatar ────────────────────────────────────────────────────────────── */
 .rd-avatar {
+  position: relative;
   width: 34px; height: 34px;
   border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
@@ -181,7 +196,9 @@
   letter-spacing: 0.03em;
   flex-shrink: 0;
   border: 1px solid;
+  overflow: hidden;
 }
+.rd-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .rd-avatar--available   { background: #F0FDF4; border-color: #BBF7D0;               color: #15803D; }
 .rd-avatar--on_delivery { background: #FFFBEB; border-color: #FDE68A;               color: #92400E; }
 .rd-avatar--inactive    { background: var(--color-muted); border-color: var(--color-border); color: var(--color-muted-foreground); }
@@ -588,4 +605,99 @@
 @media (max-width: 560px) {
   .rd-del-card__grid { grid-template-columns: 1fr; }
   .rd-del-card { padding: 12px; }
+}
+
+/* ── Rider Drawer: Work Override Section ───────────────────────────────── */
+.rd-drawer__section-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-muted-foreground);
+  padding: 0 20px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+/* Two-button row: "Set On Duty" and "Set Off Duty" */
+.rd-override-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 20px;
+  margin-bottom: 8px;
+}
+
+.rd-override-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-card);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+}
+
+.rd-override-btn:hover {
+  border-color: var(--color-border-strong, #94a3b8);
+  color: var(--color-foreground);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+
+/* Green "working" override */
+.rd-override-btn--working.rd-override-btn--active {
+  background: rgba(22, 163, 74, 0.10);
+  border-color: #16A34A;
+  color: #15803d;
+}
+.rd-override-btn--working:hover:not(.rd-override-btn--active) {
+  border-color: #16A34A;
+  color: #15803d;
+}
+
+/* Red "off" override */
+.rd-override-btn--off.rd-override-btn--active {
+  background: rgba(220, 38, 38, 0.10);
+  border-color: #DC2626;
+  color: #b91c1c;
+}
+.rd-override-btn--off:hover:not(.rd-override-btn--active) {
+  border-color: #DC2626;
+  color: #b91c1c;
+}
+
+/* Small note below the buttons when an override is active */
+.rd-override-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--color-muted-foreground);
+  padding: 0 20px;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.rd-override-clear {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  flex-shrink: 0;
+}
+.rd-override-clear:hover {
+  opacity: 0.8;
 }

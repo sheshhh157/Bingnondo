@@ -1,4 +1,5 @@
 const socketHub = require('../../sockets');
+const { addOrderToBatch } = require('./batch');
 
 // ─── Rider auto-assignment ────────────────────────────────────────────────────
 //
@@ -38,9 +39,14 @@ async function pickAvailableRider(client) {
 }
 
 /**
- * Point one pending delivery at a rider and mark the rider busy.
+ * Point one pending delivery at a rider and add it to the rider's batch.
+ *
+ * The rider stays 'available' until the batch fills or the 20-min timer fires,
+ * at which point addOrderToBatch() sets status = 'on_delivery'.
+ *
  * Returns the updated delivery row, or null if the row was no longer
  * 'pending_assignment' (raced by another assignment).
+ * Also returns `batchDispatched` so the caller can emit the right socket event.
  */
 async function assignDeliveryToRider(client, deliveryId, rider) {
   const { rows } = await client.query(
@@ -59,12 +65,10 @@ async function assignDeliveryToRider(client, deliveryId, rider) {
 
   if (!rows[0]) return null;
 
-  await client.query(
-    `UPDATE riders SET status = 'on_delivery', updated_at = NOW() WHERE id = $1`,
-    [rider.id]
-  );
+  // Add to batch — this may dispatch immediately if batch is now full
+  const { dispatched } = await addOrderToBatch(client, rider.id, deliveryId);
 
-  return rows[0];
+  return { ...rows[0], batchDispatched: dispatched };
 }
 
 /**
@@ -108,6 +112,9 @@ async function autoAssignPendingDeliveries(client, { orderId = null } = {}) {
   }
 
   return assigned;
+  // Note: rider.status stays 'available' during the batch wait window so
+  // subsequent orders keep being routed to the same rider until the batch
+  // fills or dispatches. The batch module sets status = 'on_delivery' on dispatch.
 }
 
 /**
@@ -143,6 +150,21 @@ function emitAssignedDeliveries(assigned) {
       order_status:     'ready',
       assigned_at:      delivery.assigned_at,
     });
+
+    // If batch was immediately dispatched (full), notify rider now
+    if (delivery.batchDispatched && delivery.rider_id) {
+      // batch_id comes from the batch module; we emit a generic refresh signal
+      socketHub.emitDeliveryNew({
+        id:              delivery.id,
+        delivery_id:     delivery.id,
+        order_id:        delivery.order_id,
+        rider_id:        delivery.rider_id,
+        event:           'batch:dispatched',
+        status:          delivery.status,
+        delivery_status: delivery.status,
+        assigned_at:     delivery.assigned_at,
+      });
+    }
   }
 }
 

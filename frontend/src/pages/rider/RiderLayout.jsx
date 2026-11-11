@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import WorkStatusPrompt from '../../components/WorkStatusPrompt';
+import { getWorkStatus, setWorkStatus } from '../../services/riderApi';
 import '../../styles/RiderLayout.css';
 import riderCat from '../../assets/rider_cat.png';
 
@@ -55,8 +57,38 @@ export default function RiderLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [logoutOpen,  setLogoutOpen]  = useState(false);
 
+  // ── Daily work-status prompt ─────────────────────────────────────────────
+  // showPrompt: null = still loading, false = no prompt needed, true = show it
+  const [showPrompt,  setShowPrompt]  = useState(null);
+  const [workStatus,  setWorkStatus_] = useState(null); // 'working' | 'off' | null
+
+  useEffect(() => {
+    let cancelled = false;
+    getWorkStatus()
+      .then(data => {
+        if (cancelled) return;
+        if (data.needs_prompt) {
+          setShowPrompt(true);
+        } else {
+          setShowPrompt(false);
+          setWorkStatus_(data.work_status);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setShowPrompt(false); // fail open — don't block rider
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleWorkChoice = useCallback(async (chosen) => {
+    await setWorkStatus(chosen);
+    setWorkStatus_(chosen);
+    setShowPrompt(false);
+  }, []);
+
+  // ── Logout ───────────────────────────────────────────────────────────────
   const handleLogout = () => setLogoutOpen(true);
 
   const confirmLogout = () => {
@@ -67,8 +99,36 @@ export default function RiderLayout() {
 
   const initial = user?.full_name?.charAt(0)?.toUpperCase() || 'R';
 
+  // ── Determine status label for sidebar ───────────────────────────────────
+  const statusLabel = workStatus === 'off'
+    ? 'Off duty today'
+    : workStatus === 'working'
+    ? 'On duty'
+    : 'On duty';
+
+  // Don't render layout until we know if prompt is needed
+  if (showPrompt === null) {
+    return (
+      <div className="rl-root" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <svg style={{ opacity: 0.3 }} width="32" height="32" viewBox="0 0 24 24" fill="none"
+          stroke="#EA580C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2a10 10 0 1 0 10 10"/>
+          <style>{`@keyframes rl-spin{to{transform:rotate(360deg)}}svg{animation:rl-spin 0.9s linear infinite}`}</style>
+        </svg>
+      </div>
+    );
+  }
+
   return (
     <div className="rl-root">
+
+      {/* ── Daily work-status prompt overlay ───────────────────── */}
+      {showPrompt && (
+        <WorkStatusPrompt
+          riderName={user?.full_name}
+          onChoice={handleWorkChoice}
+        />
+      )}
 
       {/* ── Mobile top bar (<768px) ─────────────────────────────── */}
       <header className="rl-top-bar" aria-label="Rider top bar">
@@ -81,6 +141,7 @@ export default function RiderLayout() {
         </div>
         <div className="rl-top-bar__rider">
           <div className="rl-top-bar__avatar" aria-label={`Logged in as ${user?.full_name || 'Rider'}`}>
+            {user?.profile_image_url && <img src={user.profile_image_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
             {initial}
           </div>
         </div>
@@ -97,12 +158,21 @@ export default function RiderLayout() {
         </div>
 
         <div className="rl-sidebar__rider-card">
-          <div className="rl-sidebar__avatar" aria-hidden="true">{initial}</div>
+          <div className="rl-sidebar__avatar" aria-hidden="true">
+            {user?.profile_image_url && <img src={user.profile_image_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+            {initial}
+          </div>
           <div className="rl-sidebar__rider-info">
             <span className="rl-sidebar__rider-name">{user?.full_name || 'Rider'}</span>
             <span className="rl-sidebar__rider-status">
-              <span className="rl-status-dot" aria-hidden="true" />
-              On duty
+              <span
+                className="rl-status-dot"
+                aria-hidden="true"
+                style={workStatus === 'off'
+                  ? { background: '#DC2626' }
+                  : { background: '#16A34A' }}
+              />
+              {statusLabel}
             </span>
           </div>
         </div>

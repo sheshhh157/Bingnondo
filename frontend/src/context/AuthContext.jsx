@@ -11,6 +11,12 @@ const SOCKET_ROOM_MAP = {
   admin:         'manager',
 };
 
+function clearAuthStorage() {
+  localStorage.removeItem('bingnondo_access_token');
+  localStorage.removeItem('bingnondo_refresh_token');
+  localStorage.removeItem('bingnondo_user');
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -22,13 +28,13 @@ export function AuthProvider({ children }) {
       try {
         setUser(JSON.parse(stored));
       } catch {
-        localStorage.clear();
+        clearAuthStorage();
       }
     }
     setLoading(false);
 
     const onExpired = () => {
-      localStorage.clear();
+      clearAuthStorage();
       disconnectSocket();
       setUser(null);
       window.location.replace('/login');
@@ -63,17 +69,24 @@ export function AuthProvider({ children }) {
     return userData;
   }, []);
 
+  const updateUser = useCallback((updates) => {
+    if (!user) return;
+    const updated = { ...user, ...updates };
+    localStorage.setItem('bingnondo_user', JSON.stringify(updated));
+    setUser(updated);
+  }, [user]);
+
   // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = useCallback(() => {
     authClient.logout().catch(() => {});
-    localStorage.clear();
+    clearAuthStorage();
     disconnectSocket();
     setUser(null);
     window.location.replace('/login');
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

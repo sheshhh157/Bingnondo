@@ -3,6 +3,7 @@ const router  = express.Router();
 
 const { authenticateToken, requireRoles } = require('../../middleware/auth.middleware');
 const ctrl = require('./admin.settings.controller');
+const qrCtrl = require('./payment-qr-codes.controller');
 
 // All system-settings routes are admin-only
 router.use(authenticateToken, requireRoles('admin'));
@@ -27,6 +28,16 @@ router.delete('/variants/:id', ctrl.deleteVariantGroup); // DELETE /api/admin/sy
 // ─── Notification Settings ────────────────────────────────────────────────────
 router.get('/notifications', ctrl.getNotificationSettings);  // GET /api/admin/system-settings/notifications
 router.put('/notifications', ctrl.saveNotificationSettings); // PUT /api/admin/system-settings/notifications
+
+// ─── Delivery Fee ─────────────────────────────────────────────────────────────
+router.get('/delivery-fee', ctrl.getDeliveryFee);  // GET /api/admin/system-settings/delivery-fee
+router.put('/delivery-fee', ctrl.saveDeliveryFee); // PUT /api/admin/system-settings/delivery-fee
+
+// ─── Payment QR Codes ─────────────────────────────────────────────────────────
+router.get   ('/qr-codes',     qrCtrl.listQrCodes);    // GET    /api/admin/system-settings/qr-codes
+router.post  ('/qr-codes',     qrCtrl.createQrCode);   // POST   /api/admin/system-settings/qr-codes
+router.patch ('/qr-codes/:id', qrCtrl.updateQrCode);   // PATCH  /api/admin/system-settings/qr-codes/:id
+router.delete('/qr-codes/:id', qrCtrl.deleteQrCode);   // DELETE /api/admin/system-settings/qr-codes/:id
 
 router.get('/esp32-devices', ctrl.listEsp32Devices);          // GET /api/admin/system-settings/esp32-devices
 router.put('/esp32-devices/:code/wifi', ctrl.saveEsp32Wifi); // PUT /api/admin/system-settings/esp32-devices/:code/wifi

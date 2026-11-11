@@ -13,6 +13,7 @@ import CashierLayout from './pages/cashier/CashierLayout';
 
 // Kitchen
 import KitchenPage from './pages/kitchen/KitchenPage';
+import StaffProfile from './pages/shared/StaffProfile';
 
 // Admin
 import AdminLayout from './pages/admin/AdminLayout';
@@ -20,6 +21,7 @@ import AdminOverview from './pages/admin/AdminOverview';
 import StaffAccounts from './pages/admin/StaffAccounts';
 import SystemSettings from './pages/admin/SystemSettings';
 import AuditLog from './pages/admin/AuditLog';
+import ArchivePage from './pages/admin/ArchivePage';
 import CustomerRestrictions from './pages/admin/CustomerRestrictions';
 import RidersPage from './pages/admin/RidersPage';
 import AdminInventoryPage from './pages/shared/InventoryPage';
@@ -116,6 +118,14 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/kitchen/profile"
+                element={
+                  <ProtectedRoute allowedRoles={['kitchen_staff']}>
+                    <KitchenPage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* ── Admin — admin is NEVER a switch target; always full re-login ── */}
               <Route
@@ -128,10 +138,12 @@ export default function App() {
               >
                 <Route index element={<Navigate to="/admin/overview" replace />} />
                 <Route path="overview"     element={<AdminOverview />} />
+                <Route path="profile"      element={<StaffProfile />} />
                 <Route path="accounts"     element={<StaffAccounts />} />
                 <Route path="riders"       element={<RidersPage />} />
                 <Route path="settings"     element={<SystemSettings />} />
                 <Route path="audit"        element={<AuditLog />} />
+                <Route path="archive"      element={<ArchivePage />} />
                 <Route path="restrictions" element={<CustomerRestrictions />} />
                 {/* Menu & inventory management live on the admin side */}
                 <Route path="inventory"    element={<AdminInventoryPage />} />

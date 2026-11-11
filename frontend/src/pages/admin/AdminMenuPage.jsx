@@ -3,8 +3,13 @@ import { createPortal } from 'react-dom';
 import { staffMenuAPI, adminAPI, inventoryAPI, uploadAPI, reviewsAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import useMediaQuery from '../../hooks/useMediaQuery';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
 import { recipeUnitOptions, conversionFactor, unitLabel } from '../../utils/units';
+import {
+  LIMITS, MIN_PRICE, normalizeKey, isDuplicate, sanitizeProductName,
+  sanitizeDecimal, validateAmount,
+} from '../../utils/validation';
 import '../../styles/AdminMenuPage.css';
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -196,6 +201,7 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   const [editQty, setEditQty]       = useState('');
   const [editUnit, setEditUnit]     = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const [filterCat, setFilterCat]     = useState('all');
   const searchRef = useRef(null);
 
@@ -230,8 +236,8 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
   };
 
   const results = useMemo(
-    () => available.filter((inv) => matchesFilters(inv, searchQuery.trim().toLowerCase(), filterCat)),
-    [available, searchQuery, filterCat]
+    () => available.filter((inv) => matchesFilters(inv, debouncedSearchQuery.trim().toLowerCase(), filterCat)),
+    [available, debouncedSearchQuery, filterCat]
   );
 
   const selectedInv = inventoryItems.find((i) => i.id === Number(selId));
@@ -331,16 +337,16 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
                 {editingIdx === idx ? (
                   <div className="mn-linker__edit-row">
                     <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={editQty}
-                      onChange={(e) => setEditQty(e.target.value)}
+                      onChange={(e) => setEditQty(sanitizeDecimal(e.target.value, { maxDecimals: 4, maxIntegerDigits: 7 }))}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') { e.preventDefault(); confirmEdit(idx); }
                         if (e.key === 'Escape') setEditingIdx(null);
                       }}
                       className="mn-field__input mn-linker__edit-input"
+                      maxLength={12}
                       autoFocus
                       aria-label={`Quantity for ${l.name}`}
                     />
@@ -467,14 +473,14 @@ function IngredientLinker({ inventoryItems, linked, onChange }) {
               </label>
               <input
                 id="linker-qty"
-                type="number"
-                min="0.01"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={qty}
-                onChange={(e) => { setQty(e.target.value); setAddError(''); }}
+                onChange={(e) => { setQty(sanitizeDecimal(e.target.value, { maxDecimals: 4, maxIntegerDigits: 7 })); setAddError(''); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
                 className="mn-field__input"
                 placeholder="e.g. 0.25"
+                maxLength={12}
               />
             </div>
             {selectedInv && (
@@ -632,7 +638,7 @@ function ReviewsPanel({ itemId }) {
 }
 
 // ─── Add / Edit modal ─────────────────────────────────────────────────────────
-function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClose, onSave }) {
+function MenuItemModal({ item, items = [], categories, variantGroups, inventoryItems, onClose, onSave }) {
   const isEdit = !!item;
   const [tab, setTab] = useState('details');
   // Add mode is a strict three-step wizard: Details → Variants → Ingredients.
@@ -662,6 +668,31 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
   });
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState('');
+  const [touched, setTouched]           = useState({});
+
+  // Live field errors. These update on every keystroke, so duplicates and
+  // wrong character types are caught before the form is submitted.
+  const nameError = useMemo(() => {
+    const name = form.name.trim();
+    if (!name) return 'Item name is required.';
+    if (name.length < 2) return 'Item name must be at least 2 characters.';
+    if (isDuplicate(name, items, (row) => row.name, item?.id)) {
+      return 'An item with this name already exists.';
+    }
+    return '';
+  }, [form.name, items, item?.id]);
+
+  const priceError = useMemo(() => {
+    if (String(form.price).trim() === '') return 'Price is required.';
+    return validateAmount(form.price, { label: 'Price', min: MIN_PRICE });
+  }, [form.price]);
+
+  const descriptionError = form.description.length > LIMITS.description
+    ? `Description must be ${LIMITS.description} characters or fewer.`
+    : '';
+
+  const nameErrorVisible = (touched.name || form.name.length > 0) && nameError;
+  const priceErrorVisible = (touched.price || String(form.price).trim() !== '') && priceError;
 
   const enabledGroupIds = categories.find((c) => c.id === form.category_id)?.variant_group_ids || [];
   const enabledGroups = (variantGroups || []).filter((g) => enabledGroupIds.includes(g.id));
@@ -692,12 +723,41 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
     return () => { document.removeEventListener('keydown', handleKey); document.body.style.overflow = ''; };
   }, [onClose]);
 
-  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k) => (v) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    setTouched((t) => ({ ...t, [k]: true }));
+    setError('');
+  };
+
+  // First problem in a variant group, recomputed as the user types.
+  const variantGroupIssue = (g) => {
+    const rows = optionsOf(g.id);
+    for (let idx = 0; idx < rows.length; idx += 1) {
+      const r = rows[idx];
+      const name = String(r.name).trim();
+      const raw = String(r.price).trim();
+      if (name === '' && raw === '') continue;
+      if (!name) return `Option ${idx + 1} needs a name.`;
+      if (raw === '') return `Option ${idx + 1} needs a price.`;
+      const priceIssue = validateAmount(raw, { label: `Option ${idx + 1} price`, min: MIN_PRICE });
+      if (priceIssue) return priceIssue;
+      const duplicate = rows.some((other, otherIdx) => (
+        otherIdx !== idx && normalizeKey(other.name) === normalizeKey(name)
+      ));
+      if (duplicate) return `Duplicate option name "${name}".`;
+    }
+    if (rows.length > g.max_options) {
+      return `"${g.name}" allows up to ${g.max_options} option${g.max_options === 1 ? '' : 's'}.`;
+    }
+    return '';
+  };
 
   // Shared details validation, used by the wizard's Next button and final save.
   const validateDetails = () => {
-    if (!form.name.trim()) { setError('Item name is required.'); return false; }
-    if (!form.price || Number(form.price) <= 0) { setError('Enter a valid price.'); return false; }
+    setTouched((t) => ({ ...t, name: true, price: true }));
+    if (nameError) { setError(nameError); return false; }
+    if (priceError) { setError(priceError); return false; }
+    if (descriptionError) { setError(descriptionError); return false; }
     setError('');
     return true;
   };
@@ -706,26 +766,8 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
   // group and a group may not exceed its max. Fully blank rows are ignored.
   const validateVariants = () => {
     for (const g of enabledGroups) {
-      const seen = new Set();
-      let count = 0;
-      for (const r of optionsOf(g.id)) {
-        const name = String(r.name).trim();
-        const raw = String(r.price).trim();
-        if (name === '' && raw === '') continue;
-        count += 1;
-        if (!name) { setError(`Every option in "${g.name}" needs a name.`); return false; }
-        if (raw === '' || !Number.isFinite(Number(raw)) || Number(raw) <= 0) {
-          setError(`Enter a valid price for "${g.name} — ${name}".`);
-          return false;
-        }
-        const key = name.toLowerCase();
-        if (seen.has(key)) { setError(`Duplicate option name "${name}" in "${g.name}".`); return false; }
-        seen.add(key);
-      }
-      if (count > g.max_options) {
-        setError(`"${g.name}" allows up to ${g.max_options} option${g.max_options === 1 ? '' : 's'}.`);
-        return false;
-      }
+      const issue = variantGroupIssue(g);
+      if (issue) { setError(issue); return false; }
     }
     setError('');
     return true;
@@ -872,11 +914,37 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
                 <div className="mn-grid-2">
                   <div className="mn-field mn-grid-2__full">
                     <label htmlFor="mn-name" className="mn-field__label">Name *</label>
-                    <input id="mn-name" type="text" value={form.name} onChange={(e) => set('name')(e.target.value)} className="mn-field__input" placeholder="e.g. Tapsilog" required autoFocus={!isEdit} />
+                    <input
+                      id="mn-name"
+                      type="text"
+                      value={form.name}
+                      onChange={(e) => set('name')(sanitizeProductName(e.target.value, LIMITS.menuName))}
+                      className={`mn-field__input${nameErrorVisible ? ' mn-field__input--error' : ''}`}
+                      placeholder="e.g. Tapsilog"
+                      maxLength={LIMITS.menuName}
+                      required
+                      autoFocus={!isEdit}
+                      aria-invalid={Boolean(nameErrorVisible)}
+                    />
+                    {nameErrorVisible
+                      ? <p className="mn-field__error" role="alert">{nameError}</p>
+                      : <p className="mn-field__hint">Letters, numbers and basic punctuation only.</p>}
                   </div>
                   <div className="mn-field">
                     <label htmlFor="mn-price" className="mn-field__label">Price (₱) *</label>
-                    <input id="mn-price" type="number" min="0" step="0.5" value={form.price} onChange={(e) => set('price')(e.target.value)} className="mn-field__input" placeholder="e.g. 120" required />
+                    <input
+                      id="mn-price"
+                      type="text"
+                      inputMode="decimal"
+                      value={form.price}
+                      onChange={(e) => set('price')(sanitizeDecimal(e.target.value, { maxIntegerDigits: 6 }))}
+                      className={`mn-field__input${priceErrorVisible ? ' mn-field__input--error' : ''}`}
+                      placeholder="e.g. 120"
+                      maxLength={9}
+                      required
+                      aria-invalid={Boolean(priceErrorVisible)}
+                    />
+                    {priceErrorVisible && <p className="mn-field__error" role="alert">{priceError}</p>}
                   </div>
                   <div className="mn-field">
                     <label htmlFor="mn-cat" className="mn-field__label">Category *</label>
@@ -887,7 +955,19 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
                 </div>
                 <div className="mn-field">
                   <label htmlFor="mn-desc" className="mn-field__label">Description</label>
-                  <textarea id="mn-desc" value={form.description} onChange={(e) => set('description')(e.target.value)} className="mn-field__input mn-field__textarea" placeholder="Short description shown to customers…" rows={2} />
+                  <textarea
+                    id="mn-desc"
+                    value={form.description}
+                    onChange={(e) => set('description')(e.target.value.slice(0, LIMITS.description))}
+                    className={`mn-field__input mn-field__textarea${descriptionError ? ' mn-field__input--error' : ''}`}
+                    placeholder="Short description shown to customers…"
+                    rows={2}
+                    maxLength={LIMITS.description}
+                    aria-invalid={Boolean(descriptionError)}
+                  />
+                  <p className={`mn-field__counter${descriptionError ? ' mn-field__counter--error' : ''}`}>
+                    {form.description.length}/{LIMITS.description}
+                  </p>
                 </div>
                 <div className="mn-avail-row">
                   <div>
@@ -919,6 +999,7 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
                     {enabledGroups.map((g) => {
                       const rows = optionsOf(g.id);
                       const atMax = rows.length >= g.max_options;
+                      const groupIssue = variantGroupIssue(g);
                       return (
                         <div key={g.id} className="mn-variant-group">
                           <div className="mn-variant-group__head">
@@ -933,25 +1014,26 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
                                 <div key={i} className="mn-variant-row">
                                   <input
                                     type="text"
-                                    maxLength={100}
-                                    className="mn-field__input"
+                                    maxLength={LIMITS.shortName}
+                                    className={`mn-field__input${groupIssue ? ' mn-field__input--error' : ''}`}
                                     value={r.name}
-                                    onChange={(e) => updateOption(g.id, i, { name: e.target.value })}
+                                    onChange={(e) => updateOption(g.id, i, { name: sanitizeProductName(e.target.value, LIMITS.shortName) })}
                                     placeholder="Option name (e.g. Chocolate)"
                                     aria-label={`${g.name} option ${i + 1} name`}
+                                    aria-invalid={Boolean(groupIssue)}
                                   />
                                   <span className="mn-variant-row__price">
                                     ₱
                                     <input
-                                      type="number"
-                                      min="0"
-                                      step="0.5"
+                                      type="text"
                                       inputMode="decimal"
-                                      className="mn-field__input"
+                                      className={`mn-field__input${groupIssue ? ' mn-field__input--error' : ''}`}
                                       value={r.price}
-                                      onChange={(e) => updateOption(g.id, i, { price: e.target.value })}
+                                      onChange={(e) => updateOption(g.id, i, { price: sanitizeDecimal(e.target.value, { maxIntegerDigits: 6 }) })}
                                       placeholder="0"
+                                      maxLength={9}
                                       aria-label={`${g.name} option ${i + 1} price`}
+                                      aria-invalid={Boolean(groupIssue)}
                                     />
                                   </span>
                                   <button
@@ -966,6 +1048,7 @@ function MenuItemModal({ item, categories, variantGroups, inventoryItems, onClos
                               ))}
                             </div>
                           )}
+                          {groupIssue && <p className="mn-field__error" role="alert">{groupIssue}</p>}
                           <button
                             type="button"
                             className="mn-variant-add"
@@ -1074,15 +1157,14 @@ function ConfirmDialog({ item, onClose, onConfirm }) {
             <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
           </svg>
         </div>
-        <h3 id="mn-confirm-title" className="mn-confirm__title">Remove Menu Item</h3>
+        <h3 id="mn-confirm-title" className="mn-confirm__title">Archive Menu Item</h3>
         <p className="mn-confirm__msg">
-          Remove <strong>{item.name}</strong> from the menu?
-          It will no longer appear to customers but order history will be preserved.
+          Move <strong>{item.name}</strong> to the archive? It will be hidden from customers and can be restored for 30 days.
         </p>
         <div className="mn-confirm__actions">
           <button className="mn-btn mn-btn--ghost" onClick={onClose} disabled={loading}>Cancel</button>
           <button className="mn-btn mn-btn--danger" onClick={handleConfirm} disabled={loading}>
-            {loading ? 'Removing…' : 'Remove'}
+            {loading ? 'Archiving…' : 'Archive'}
           </button>
         </div>
       </div>
@@ -1298,6 +1380,7 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [filterCat, setFilterCat] = useState('all');
   const [filterAvail, setFilterAvail] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
@@ -1347,18 +1430,18 @@ export default function MenuPage() {
 
   const filtered = useMemo(() => {
     let r = items;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase();
       r = r.filter((i) => i.name.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q));
     }
     if (filterCat !== 'all') r = r.filter((i) => String(i.category_id) === filterCat);
     if (filterAvail === 'available') r = r.filter((i) => i.is_available);
     if (filterAvail === 'unavailable') r = r.filter((i) => !i.is_available);
     return r;
-  }, [items, search, filterCat, filterAvail]);
+  }, [items, debouncedSearch, filterCat, filterAvail]);
 
   // Reset to page 1 when filters/search/viewMode/perPage change
-  useEffect(() => { setPage(1); }, [search, filterCat, filterAvail, viewMode, perPage]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, filterCat, filterAvail, viewMode, perPage]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage   = Math.min(page, totalPages);
@@ -1398,7 +1481,7 @@ export default function MenuPage() {
       await staffMenuAPI.remove(deleteTarget.id);
       setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
       setDeleteTarget(null);
-      showToast(`"${deleteTarget.name}" removed from the menu.`);
+      showToast(`"${deleteTarget.name}" moved to the archive for 30 days.`);
     } catch (err) {
       const msg = err?.response?.data?.message || 'Failed to remove item.';
       showToast(msg, 'error');
@@ -1513,8 +1596,8 @@ export default function MenuPage() {
             <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/>
             <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
           </svg>
-          <p>{search ? 'No items match your search.' : 'No menu items yet.'}</p>
-          {!search && (
+          <p>{debouncedSearch ? 'No items match your search.' : 'No menu items yet.'}</p>
+          {!debouncedSearch && (
             <button className="mn-btn mn-btn--primary" onClick={() => setModal({ mode: 'add' })}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Add first item
@@ -1555,7 +1638,7 @@ export default function MenuPage() {
       )}
 
       {modal && (
-        <MenuItemModal item={modal.item} categories={categories} variantGroups={variantGroups} inventoryItems={inventoryItems} onClose={() => setModal(null)} onSave={handleSave} />
+        <MenuItemModal item={modal.item} items={items} categories={categories} variantGroups={variantGroups} inventoryItems={inventoryItems} onClose={() => setModal(null)} onSave={handleSave} />
       )}
       {deleteTarget && (
         <ConfirmDialog item={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} />

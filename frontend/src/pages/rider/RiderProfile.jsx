@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getRiderProfile, updateRiderProfile } from '../../services/riderApi';
+import { uploadAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import '../../styles/RiderProfile.css';
@@ -33,7 +34,7 @@ function IconX() {
 const VEHICLE_TYPES = ['Motorcycle', 'Bicycle', 'E-bike', 'Car', 'Other'];
 
 export default function RiderProfile() {
-  const { logout } = useAuth();
+  const { logout, updateUser } = useAuth();
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [profile, setProfile]   = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -42,6 +43,8 @@ export default function RiderProfile() {
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState('');
   const [success, setSuccess]   = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -49,6 +52,9 @@ export default function RiderProfile() {
         const res = await getRiderProfile();
         setProfile(res.rider);
         setForm({
+          first_name: res.rider.first_name || '',
+          middle_name: res.rider.middle_name || '',
+          last_name: res.rider.last_name || '',
           plate_number: res.rider.plate_number || '',
           vehicle_type: res.rider.vehicle_type || '',
           mobile_number: res.rider.mobile_number || '',
@@ -67,6 +73,7 @@ export default function RiderProfile() {
     try {
       const res = await updateRiderProfile(form);
       setProfile((prev) => ({ ...prev, ...res.rider }));
+      updateUser(res.rider);
       setEditing(false);
       setSuccess('Profile updated.');
       setTimeout(() => setSuccess(''), 3000);
@@ -79,12 +86,43 @@ export default function RiderProfile() {
 
   const cancelEdit = () => {
     setForm({
+      first_name: profile?.first_name || '',
+      middle_name: profile?.middle_name || '',
+      last_name: profile?.last_name || '',
       plate_number: profile?.plate_number || '',
       vehicle_type: profile?.vehicle_type || '',
       mobile_number: profile?.mobile_number || '',
     });
     setEditing(false);
     setError('');
+  };
+
+  const handlePhotoChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Profile photo must be JPG, PNG, or WEBP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image is too large. Maximum size is 5MB.');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    setError('');
+    try {
+      const { data } = await uploadAPI.uploadRiderProfileImage(file);
+      setProfile((current) => ({ ...current, ...data.rider }));
+      updateUser(data.rider);
+      setSuccess('Profile photo updated.');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to upload profile photo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const formatDate = (iso) => {
@@ -130,8 +168,29 @@ export default function RiderProfile() {
 
       {/* ── Avatar + name card ── */}
       <div className="rp-avatar-card">
-        <div className="rp-avatar" aria-hidden="true">
-          {profile?.full_name?.charAt(0)?.toUpperCase() || 'R'}
+        <div className="rp-avatar-wrap">
+          <div className="rp-avatar" aria-hidden="true">
+            {profile?.full_name?.charAt(0)?.toUpperCase() || 'R'}
+            {profile?.profile_image_url && (
+              <img src={profile.profile_image_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            )}
+          </div>
+          <input
+            ref={photoInputRef}
+            className="rp-photo-input"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handlePhotoChange}
+            aria-label="Choose profile photo"
+          />
+          <button
+            type="button"
+            className="rp-photo-button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={uploadingPhoto}
+          >
+            {uploadingPhoto ? 'Uploading…' : profile?.profile_image_url ? 'Change photo' : 'Add photo'}
+          </button>
         </div>
         <div className="rp-avatar-card__info">
           <h2 className="rp-avatar-card__name">{profile?.full_name}</h2>
@@ -149,8 +208,16 @@ export default function RiderProfile() {
         <h3 className="rp-section__label">Account Info</h3>
         <div className="rp-fields">
           <div className="rp-field">
-            <span className="rp-field__label">Full Name</span>
-            <span className="rp-field__value">{profile?.full_name || '—'}</span>
+            <span className="rp-field__label">First Name</span>
+            <span className="rp-field__value">{profile?.first_name || '—'}</span>
+          </div>
+          <div className="rp-field">
+            <span className="rp-field__label">Middle Name</span>
+            <span className="rp-field__value">{profile?.middle_name || '—'}</span>
+          </div>
+          <div className="rp-field">
+            <span className="rp-field__label">Last Name</span>
+            <span className="rp-field__value">{profile?.last_name || '—'}</span>
           </div>
           <div className="rp-field">
             <span className="rp-field__label">Email</span>
@@ -166,7 +233,7 @@ export default function RiderProfile() {
       {/* ── Editable info ── */}
       <div className="rp-section">
         <div className="rp-section__head">
-          <h3 className="rp-section__label">Vehicle & Contact</h3>
+          <h3 className="rp-section__label">Personal, Vehicle & Contact</h3>
           {!editing && (
             <button className="rp-btn rp-btn--ghost rp-btn--sm" onClick={() => setEditing(true)}>
               <IconEdit />
@@ -177,6 +244,41 @@ export default function RiderProfile() {
 
         {editing ? (
           <div className="rp-edit-form">
+            <div className="rp-form-field">
+              <label htmlFor="rp-first-name" className="rp-form-field__label">First Name</label>
+              <input
+                id="rp-first-name"
+                type="text"
+                className="rp-form-field__input"
+                value={form.first_name}
+                onChange={(e) => setForm((p) => ({ ...p, first_name: e.target.value }))}
+                maxLength={100}
+                required
+              />
+            </div>
+            <div className="rp-form-field">
+              <label htmlFor="rp-middle-name" className="rp-form-field__label">Middle Name <span>(Optional)</span></label>
+              <input
+                id="rp-middle-name"
+                type="text"
+                className="rp-form-field__input"
+                value={form.middle_name}
+                onChange={(e) => setForm((p) => ({ ...p, middle_name: e.target.value }))}
+                maxLength={100}
+              />
+            </div>
+            <div className="rp-form-field">
+              <label htmlFor="rp-last-name" className="rp-form-field__label">Last Name</label>
+              <input
+                id="rp-last-name"
+                type="text"
+                className="rp-form-field__input"
+                value={form.last_name}
+                onChange={(e) => setForm((p) => ({ ...p, last_name: e.target.value }))}
+                maxLength={100}
+                required
+              />
+            </div>
             <div className="rp-form-field">
               <label htmlFor="rp-mobile" className="rp-form-field__label">Mobile Number</label>
               <input

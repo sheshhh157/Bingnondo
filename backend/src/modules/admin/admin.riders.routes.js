@@ -29,4 +29,7 @@ router.post('/:id/reset-password', ctrl.resetRiderPassword);
 //                                     they have delivery history)
 router.delete('/:id',             ctrl.deleteRider);
 
+// PATCH  /api/admin/riders/:id/work-override — set/clear today's work override
+router.patch('/:id/work-override', ctrl.setAdminWorkOverride);
+
 module.exports = router;
