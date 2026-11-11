@@ -6,6 +6,7 @@ import { invalidateApiCache } from '../services/requestCache';
 
 const SocketContext = createContext(null);
 const SocketEventContext = createContext(null);
+const SOCKET_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
 // Module-level singleton to survive React StrictMode double-mount and HMR
 let globalSocket = null;
@@ -144,7 +145,7 @@ export function SocketProvider({ children }) {
 
     // First initialization
     globalSocketInitPromise = (async () => {
-      const socket = io(window.location.origin, {
+      const socket = io(SOCKET_URL, {
         path: '/socket.io',
         transports: ['websocket', 'polling'],
         // The backend derives the `manager` room from this token, so it has to
