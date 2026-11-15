@@ -36,7 +36,8 @@ exports.listStaffAccounts = async (req, res) => {
     // we include everyone so the admin can see the full picture)
     const { rows: accounts } = await db.query(
       `SELECT
-         sa.id, sa.full_name, sa.email, sa.role, sa.status,
+         sa.id, sa.first_name, sa.middle_name, sa.last_name,
+         sa.full_name, sa.email, sa.role, sa.status,
          sa.created_by, sa.created_at, sa.updated_at, sa.profile_image_url,
          creator.full_name AS created_by_name
        FROM staff_accounts sa

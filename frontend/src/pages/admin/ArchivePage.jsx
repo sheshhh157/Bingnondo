@@ -3,7 +3,7 @@ import { adminAPI } from '../../services/api';
 import Pagination from '../../components/Pagination';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { useAdminToast } from './useAdminToast';
-import { PageHeader } from './adminShared';
+import { Modal, PageHeader } from './adminShared';
 import '../../styles/AdminPage.css';
 
 const PAGE_SIZE = 10;
@@ -32,6 +32,8 @@ export default function ArchivePage() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [search, setSearch] = useState('');
   const [type, setType] = useState('all');
   const [page, setPage] = useState(1);
@@ -80,12 +82,15 @@ export default function ArchivePage() {
     }
   }
 
-  async function deletePermanently(record) {
-    if (!window.confirm(`Permanently delete "${record.display_name}"? This cannot be undone.`)) return;
+  async function deletePermanently() {
+    const record = deleteTarget;
+    if (!record || deleteConfirmation !== 'DELETE') return;
     setActionId(record.id);
     try {
       await adminAPI.deleteArchivedRecord(record.id);
       toast.success(`${record.display_name} permanently deleted.`);
+      setDeleteTarget(null);
+      setDeleteConfirmation('');
       await load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not permanently delete this record.');
@@ -186,7 +191,10 @@ export default function ArchivePage() {
                         <button
                           type="button"
                           className="ap-btn ap-btn--danger ap-btn--sm"
-                          onClick={() => deletePermanently(record)}
+                          onClick={() => {
+                            setDeleteConfirmation('');
+                            setDeleteTarget(record);
+                          }}
                           disabled={actionId != null}
                         >
                           Delete permanently
@@ -209,6 +217,55 @@ export default function ArchivePage() {
           </>
         )}
       </section>
+
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => {
+          if (actionId == null) {
+            setDeleteTarget(null);
+            setDeleteConfirmation('');
+          }
+        }}
+        title="Delete permanently"
+        width={440}
+      >
+        <p style={{ fontSize: '0.8125rem', color: 'var(--color-muted-foreground)', lineHeight: 1.6, margin: '0 0 14px' }}>
+          This will permanently delete <strong>{deleteTarget?.display_name}</strong>. This action cannot be undone.
+          Type <strong>DELETE</strong> to confirm.
+        </p>
+        <label htmlFor="archive-delete-confirm" style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: 6 }}>
+          Confirmation
+        </label>
+        <input
+          id="archive-delete-confirm"
+          className="ap-input"
+          type="text"
+          value={deleteConfirmation}
+          onChange={event => setDeleteConfirmation(event.target.value)}
+          placeholder="Type DELETE"
+          autoComplete="off"
+          autoFocus
+          disabled={actionId != null}
+        />
+        <div className="ap-modal__footer">
+          <button
+            type="button"
+            className="ap-btn ap-btn--ghost ap-btn--md"
+            onClick={() => { setDeleteTarget(null); setDeleteConfirmation(''); }}
+            disabled={actionId != null}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="ap-btn ap-btn--danger ap-btn--md"
+            onClick={deletePermanently}
+            disabled={deleteConfirmation !== 'DELETE' || actionId != null}
+          >
+            {actionId != null ? 'Deleting…' : 'Delete permanently'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
