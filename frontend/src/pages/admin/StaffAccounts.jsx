@@ -9,6 +9,8 @@ import {
 import { useAdminToast } from './useAdminToast';
 import { formatDate } from './format';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
+import FormDraftNotice from '../../components/FormDraftNotice';
+import useSessionDraft, { createSessionDraftKey } from '../../hooks/useSessionDraft';
 import {
   LIMITS,
   sanitizePersonName, sanitizeEmail,
@@ -83,9 +85,25 @@ const KebabIcon = () => (
 // ── Create account modal ──────────────────────────────────────────────────────
 function CreateModal({ open, onClose, onCreated, toast, accounts = [] }) {
   const EMPTY = { first_name: '', middle_name: '', last_name: '', email: '', role: 'cashier', temp_password: '' };
-  const [form, setForm]       = useState(EMPTY);
+  const { user } = useAuth();
+  const initialDraft = {
+    first_name: '', middle_name: '', last_name: '', email: '', role: 'cashier',
+  };
+  const draft = useSessionDraft(createSessionDraftKey(user, 'staff-account-create'), initialDraft);
+  const saveDraft = draft.save;
+  const [form, setForm]       = useState(() => ({ ...EMPTY, ...draft.initialValue }));
   const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    saveDraft({
+      first_name: form.first_name,
+      middle_name: form.middle_name,
+      last_name: form.last_name,
+      email: form.email,
+      role: form.role,
+    });
+  }, [saveDraft, form]);
 
   // Compose just for the real-time duplicate UI check (backend does the final check too).
   const composedName = [form.first_name, form.middle_name, form.last_name]
@@ -136,6 +154,7 @@ function CreateModal({ open, onClose, onCreated, toast, accounts = [] }) {
       });
       toast.success(`Account created for ${composedName}.`);
       onCreated();
+      draft.clear();
       onClose();
       setForm(EMPTY);
       setTouched({});
@@ -145,12 +164,22 @@ function CreateModal({ open, onClose, onCreated, toast, accounts = [] }) {
   }
 
   const err = (k) => (touched[k] ? liveErrors[k] : '');
+  const discardDraft = () => {
+    draft.clear();
+    setForm(EMPTY);
+    setTouched({});
+  };
   // Duplicate error shows once either first or last name is touched.
   const dupErr = (touched.first_name || touched.last_name) ? liveErrors.duplicate : '';
 
   return (
     <Modal open={open} onClose={onClose} title="Create staff account">
       <form onSubmit={e => { e.preventDefault(); submit(); }}>
+        <FormDraftNotice
+          restored={draft.restored}
+          error={draft.error}
+          onDiscard={discardDraft}
+        />
 
         {/* Name row: First + Last side by side */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
@@ -227,15 +256,24 @@ function CreateModal({ open, onClose, onCreated, toast, accounts = [] }) {
 // ── Edit account modal ────────────────────────────────────────────────────────
 function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
   // The DB now returns first_name, middle_name, last_name directly — no splitting needed.
-  const [form, setForm] = useState(() => ({
+  const { user } = useAuth();
+  const initialForm = {
     first_name:  account.first_name  || '',
     middle_name: account.middle_name || '',
     last_name:   account.last_name   || '',
     email: account.email || '',
     role:  account.role  || 'cashier',
-  }));
+  };
+  const draft = useSessionDraft(
+    createSessionDraftKey(user, 'staff-account-edit', account.id),
+    initialForm
+  );
+  const saveDraft = draft.save;
+  const [form, setForm] = useState(() => draft.initialValue);
   const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => { saveDraft(form); }, [saveDraft, form]);
 
   const composedName = [form.first_name, form.middle_name, form.last_name]
     .map(s => s.trim()).filter(Boolean).join(' ');
@@ -282,6 +320,7 @@ function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
         role:        form.role,
       });
       toast.success(`${composedName} updated.`);
+      draft.clear();
       onSaved();
       onClose();
     } catch (err) {
@@ -291,10 +330,20 @@ function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
 
   const err   = (k) => (touched[k] ? liveErrors[k] : '');
   const dupErr = (touched.first_name || touched.last_name) ? liveErrors.duplicate : '';
+  const discardDraft = () => {
+    draft.clear();
+    setForm(initialForm);
+    setTouched({});
+  };
 
   return (
     <Modal open onClose={onClose} title="Edit staff account">
       <form onSubmit={e => { e.preventDefault(); submit(); }}>
+        <FormDraftNotice
+          restored={draft.restored}
+          error={draft.error}
+          onDiscard={discardDraft}
+        />
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
           <Field label="First name" id="sa-edit-first" error={err('first_name')}>
