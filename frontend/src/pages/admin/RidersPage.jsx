@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { adminRidersAPI } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import {
   TableSkeleton, Btn, Field, TextInput, PasswordInput,
   Modal, ConfirmModal, PageHeader, Pagination,
@@ -8,6 +9,8 @@ import {
 import { useAdminToast } from './useAdminToast';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
+import FormDraftNotice from '../../components/FormDraftNotice';
+import useSessionDraft, { createSessionDraftKey } from '../../hooks/useSessionDraft';
 import DeliveriesTab from './DeliveriesTab';
 import {
   LIMITS,
@@ -201,8 +204,9 @@ function StatsBar({ riders }) {
 // ── Rider Form Modal ──────────────────────────────────────────────────────────
 function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders = [] }) {
   const isEdit = Boolean(initial);
+  const { user } = useAuth();
 
-  const [form, setForm] = useState(() => ({
+  const initialForm = {
     // DB now returns first_name / middle_name / last_name directly — no splitting needed.
     first_name:    initial?.first_name    || '',
     middle_name:   initial?.middle_name   || '',
@@ -213,9 +217,31 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders
     vehicle_type:  initial?.vehicle_type  || 'motorcycle',
     notes:         initial?.notes         || '',
     temp_password: '',
-  }));
+  };
+  const initialDraft = {
+    first_name: initialForm.first_name,
+    middle_name: initialForm.middle_name,
+    last_name: initialForm.last_name,
+    mobile_number: initialForm.mobile_number,
+    email: initialForm.email,
+    plate_number: initialForm.plate_number,
+    vehicle_type: initialForm.vehicle_type,
+    notes: initialForm.notes,
+  };
+  const draft = useSessionDraft(
+    createSessionDraftKey(user, 'rider-form', initial?.id ?? 'new'),
+    initialDraft
+  );
+  const saveDraft = draft.save;
+  const [form, setForm] = useState(() => ({ ...initialForm, ...draft.initialValue }));
 
   const [touched, setTouched] = useState({});
+
+  useEffect(() => {
+    const safeForm = { ...form };
+    delete safeForm.temp_password;
+    saveDraft(safeForm);
+  }, [saveDraft, form]);
 
   // Compose locally only for the real-time duplicate UI check.
   const composedName = [form.first_name, form.middle_name, form.last_name]
@@ -248,7 +274,7 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders
   const handlePlateChange  = (e) => set('plate_number',  sanitizePlate(e.target.value, LIMITS.plate));
   const handlePassChange   = (e) => set('temp_password', e.target.value.slice(0, LIMITS.password));
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const allKeys = isEdit
       ? ['first_name', 'middle_name', 'last_name', 'mobile_number', 'email']
       : ['first_name', 'middle_name', 'last_name', 'mobile_number', 'email', 'temp_password'];
@@ -257,15 +283,26 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders
                          liveErrors.duplicate || liveErrors.mobile_number || liveErrors.email || liveErrors.temp_password);
     if (hasErrors) return;
     // Backend now expects first_name / middle_name / last_name separately.
-    onSave(form);
+    const saved = await onSave(form);
+    if (saved) draft.clear();
   };
 
   const err    = (k) => (touched[k] ? liveErrors[k] : '');
   const dupErr = (touched.first_name || touched.last_name) ? liveErrors.duplicate : '';
+  const discardDraft = () => {
+    draft.clear();
+    setForm(initialForm);
+    setTouched({});
+  };
 
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Rider' : 'Add New Rider'} width={540}>
       <form onSubmit={e => { e.preventDefault(); handleSubmit(); }}>
+        <FormDraftNotice
+          restored={draft.restored}
+          error={draft.error}
+          onDiscard={discardDraft}
+        />
 
         {/* Vehicle type picker — visual pill row */}
         <Field label="Vehicle Type" id="rd-vehicle-type">
@@ -802,9 +839,11 @@ function RidersTab() {
       }
       setFormOpen(false);
       fetchRiders(true);
+      return true;
     } catch (err) {
       const msg = err?.message || (editRider ? 'Failed to update rider.' : 'Failed to create rider.');
       toast.error(msg);
+      return false;
     } finally {
       setFormSaving(false);
     }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import {
   Spinner, TableSkeleton, Btn, Field, TextInput, PasswordInput, AppSelect, Modal,
   PageHeader, RowAction, Pagination,
@@ -8,6 +9,8 @@ import { useAdminToast } from './useAdminToast';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { formatDate } from './format';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
+import FormDraftNotice from '../../components/FormDraftNotice';
+import useSessionDraft, { createSessionDraftKey } from '../../hooks/useSessionDraft';
 import {
   LIMITS,
   sanitizePersonName, sanitizeEmail, sanitizePhone,
@@ -377,13 +380,29 @@ const PlusIcon = () => (
 
 // ── Create user (mobile app) account modal ─────────────────────────
 function CreateCustomerModal({ open, onClose, onCreated, toast }) {
+  const { user } = useAuth();
   const EMPTY = {
     first_name: '', last_name: '', email: '', mobile_number: '',
     address: '', temp_password: '',
   };
-  const [form, setForm]       = useState(EMPTY);
+  const initialDraft = {
+    first_name: '', last_name: '', email: '', mobile_number: '', address: '',
+  };
+  const draft = useSessionDraft(createSessionDraftKey(user, 'customer-account-create'), initialDraft);
+  const saveDraft = draft.save;
+  const [form, setForm]       = useState(() => ({ ...EMPTY, ...draft.initialValue }));
   const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    saveDraft({
+      first_name: form.first_name,
+      last_name: form.last_name,
+      email: form.email,
+      mobile_number: form.mobile_number,
+      address: form.address,
+    });
+  }, [saveDraft, form]);
 
   const liveErrors = {
     first_name:    validatePersonName(form.first_name, { label: 'First name', max: 50 }),
@@ -424,6 +443,7 @@ function CreateCustomerModal({ open, onClose, onCreated, toast }) {
       });
       toast.success(`User account created for ${form.first_name.trim()} ${form.last_name.trim()}.`);
       onCreated();
+      draft.clear();
       onClose();
       setForm(EMPTY);
       setTouched({});
@@ -433,10 +453,20 @@ function CreateCustomerModal({ open, onClose, onCreated, toast }) {
   }
 
   const err = (k) => (touched[k] ? liveErrors[k] : '');
+  const discardDraft = () => {
+    draft.clear();
+    setForm(EMPTY);
+    setTouched({});
+  };
 
   return (
     <Modal open={open} onClose={onClose} title="Create user account">
       <form onSubmit={e => { e.preventDefault(); submit(); }}>
+        <FormDraftNotice
+          restored={draft.restored}
+          error={draft.error}
+          onDiscard={discardDraft}
+        />
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
           <Field label="First name" id="cu-first" error={err('first_name')}>

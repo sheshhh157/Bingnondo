@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { adminAPI, uploadAPI } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { Spinner, Btn, Field, TextInput, PasswordInput, PageHeader, Modal, ConfirmModal, Badge } from './adminShared';
 import { useAdminToast } from './useAdminToast';
+import FormDraftNotice from '../../components/FormDraftNotice';
+import useSessionDraft, { createSessionDraftKey } from '../../hooks/useSessionDraft';
 import {
   LIMITS,
   validateShortName,
@@ -303,9 +306,15 @@ function CategoryManager({ categories, variantGroups, onRemove, onRename, onTogg
 
 // ── Add category modal ───────────────────────────────────────────────
 function AddCategoryModal({ open, onClose, onAdd, categories = [] }) {
-  const [name, setName]       = useState('');
+  const { user } = useAuth();
+  const initialDraft = { name: '' };
+  const draft = useSessionDraft(createSessionDraftKey(user, 'category-create'), initialDraft);
+  const saveDraft = draft.save;
+  const [name, setName]       = useState(() => draft.initialValue.name);
   const [touched, setTouched] = useState(false);
   const [saving, setSaving]   = useState(false);
+
+  useEffect(() => { saveDraft({ name }); }, [saveDraft, name]);
 
   // Real-time derived error.
   const liveError = validateShortName(name, {
@@ -322,20 +331,29 @@ function AddCategoryModal({ open, onClose, onAdd, categories = [] }) {
     setSaving(true);
     const ok = await onAdd(name.trim());
     setSaving(false);
-    if (ok !== false) { setName(''); setTouched(false); onClose(); }
+    if (ok !== false) { draft.clear(); setName(''); setTouched(false); onClose(); }
   }
 
   function close() {
     if (saving) return;
-    setName(''); setTouched(false);
     onClose();
   }
 
   const displayError = touched ? liveError : '';
+  const discardDraft = () => {
+    draft.clear();
+    setName('');
+    setTouched(false);
+  };
 
   return (
     <Modal open={open} onClose={close} title="Add category" width={400}>
       <form onSubmit={submit}>
+        <FormDraftNotice
+          restored={draft.restored}
+          error={draft.error}
+          onDiscard={discardDraft}
+        />
         <Field label="Category name" id="cat-name" error={displayError}
           hint={`Letters, digits, spaces allowed · max ${LIMITS.shortName} chars`}>
           <TextInput id="cat-name" value={name} maxLength={LIMITS.shortName}
@@ -406,11 +424,23 @@ function VariantGroupList({ groups, usageOf, onEdit, onDelete, flashId }) {
 }
 
 function VariantGroupModal({ group, onClose, onSaved, toast, variantGroups = [] }) {
-  const [name, setName]             = useState(group?.name ?? '');
-  const [maxOptions, setMaxOptions] = useState(String(group?.max_options ?? 3));
+  const { user } = useAuth();
+  const initialDraft = {
+    name: group?.name ?? '',
+    maxOptions: String(group?.max_options ?? 3),
+  };
+  const draft = useSessionDraft(
+    createSessionDraftKey(user, 'variant-group', group?.id ?? 'new'),
+    initialDraft
+  );
+  const saveDraft = draft.save;
+  const [name, setName]             = useState(() => draft.initialValue.name);
+  const [maxOptions, setMaxOptions] = useState(() => draft.initialValue.maxOptions);
   const [touched, setTouched]       = useState({});
   const [saving, setSaving]         = useState(false);
   const [serverError, setServerError] = useState('');
+
+  useEffect(() => { saveDraft({ name, maxOptions }); }, [saveDraft, name, maxOptions]);
 
   // Real-time derived errors.
   const maxNum = Number(maxOptions);
@@ -433,6 +463,12 @@ function VariantGroupModal({ group, onClose, onSaved, toast, variantGroups = [] 
 
   const touch = (k) => setTouched(t => ({ ...t, [k]: true }));
   const err   = (k) => (touched[k] ? liveErrors[k] : '');
+  const discardDraft = () => {
+    draft.clear();
+    setName(initialDraft.name);
+    setMaxOptions(initialDraft.maxOptions);
+    setTouched({});
+  };
 
   async function save(e) {
     e.preventDefault();
@@ -446,6 +482,7 @@ function VariantGroupModal({ group, onClose, onSaved, toast, variantGroups = [] 
       const saved = res.data?.data ?? res.data;
       onSaved(saved);
       toast.success(group ? `Variant "${saved.name}" saved.` : `Variant "${saved.name}" created.`);
+      draft.clear();
       onClose();
     } catch (e2) {
       setServerError(e2?.response?.data?.message || e2?.message || 'Failed to save variant.');
@@ -455,6 +492,11 @@ function VariantGroupModal({ group, onClose, onSaved, toast, variantGroups = [] 
   return (
     <Modal open onClose={onClose} title={group ? `Edit variant — ${group.name}` : 'Add variant'} width={440}>
       <form onSubmit={save}>
+        <FormDraftNotice
+          restored={draft.restored}
+          error={draft.error}
+          onDiscard={discardDraft}
+        />
         <Field label="Variant name" id="vg-name" error={err('name')}
           hint={`Letters, digits, spaces allowed · max ${LIMITS.shortName} chars`}>
           <TextInput id="vg-name" value={name} maxLength={LIMITS.shortName}
@@ -524,10 +566,24 @@ function NotificationSettings({ categories, onChange }) {
 // with the account name and number in the database.
 function QrCodeModal({ code, onClose, onSaved, toast }) {
   const isEdit = !!code;
-  const [name, setName] = useState(code?.name ?? '');
-  const [number, setNumber] = useState(code?.number ?? '');
-  const [isActive, setIsActive] = useState(code ? !!code.is_active : true);
-  const [displayOrder, setDisplayOrder] = useState(String(code?.display_order ?? 0));
+  const { user } = useAuth();
+  const initialDraft = {
+    name: code?.name ?? '',
+    number: code?.number ?? '',
+    isActive: code ? !!code.is_active : true,
+    displayOrder: String(code?.display_order ?? 0),
+    reselectImage: false,
+  };
+  const draft = useSessionDraft(
+    createSessionDraftKey(user, 'payment-qr', code?.id ?? 'new'),
+    initialDraft
+  );
+  const saveDraft = draft.save;
+  const [name, setName] = useState(() => draft.initialValue.name);
+  const [number, setNumber] = useState(() => draft.initialValue.number);
+  const [isActive, setIsActive] = useState(() => draft.initialValue.isActive);
+  const [displayOrder, setDisplayOrder] = useState(() => draft.initialValue.displayOrder);
+  const [reselectImage, setReselectImage] = useState(() => draft.initialValue.reselectImage);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(code?.image_url ?? '');
   const [touched, setTouched] = useState({});
@@ -536,6 +592,10 @@ function QrCodeModal({ code, onClose, onSaved, toast }) {
   const fileRef = useRef(null);
   const objectUrlRef = useRef(null);
 
+  useEffect(() => {
+    saveDraft({ name, number, isActive, displayOrder, reselectImage });
+  }, [saveDraft, name, number, isActive, displayOrder, reselectImage]);
+
   useEffect(() => () => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
   }, []);
@@ -543,7 +603,9 @@ function QrCodeModal({ code, onClose, onSaved, toast }) {
   const liveErrors = {
     name: validateText(name, { label: 'Account name', max: 100 }),
     number: validateText(number, { label: 'Account number', max: 50 }),
-    image: preview ? '' : 'Upload a QR code image.',
+    image: reselectImage && !file
+      ? 'Select the replacement image again to continue.'
+      : preview ? '' : 'Upload a QR code image.',
     displayOrder: (() => {
       const raw = displayOrder.trim();
       if (!raw) return '';
@@ -571,6 +633,7 @@ function QrCodeModal({ code, onClose, onSaved, toast }) {
     objectUrlRef.current = url;
     setFile(f);
     setPreview(url);
+    setReselectImage(true);
     setServerError('');
     touch('image');
   }
@@ -611,6 +674,7 @@ function QrCodeModal({ code, onClose, onSaved, toast }) {
 
       onSaved(saved);
       toast.success(isEdit ? 'QR code updated.' : 'QR code added.');
+      draft.clear();
       onClose();
     } catch (e2) {
       // The upload may have succeeded even when saving the record failed.
@@ -623,9 +687,31 @@ function QrCodeModal({ code, onClose, onSaved, toast }) {
     }
   }
 
+  const discardDraft = () => {
+    draft.clear();
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    setName(initialDraft.name);
+    setNumber(initialDraft.number);
+    setIsActive(initialDraft.isActive);
+    setDisplayOrder(initialDraft.displayOrder);
+    setReselectImage(false);
+    setFile(null);
+    setPreview(code?.image_url ?? '');
+    setTouched({});
+  };
+
   return (
     <Modal open onClose={onClose} title={isEdit ? `Edit QR code — ${code.name}` : 'Add payment QR code'} width={480}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <FormDraftNotice
+          restored={draft.restored}
+          error={draft.error}
+          onDiscard={discardDraft}
+          detailNote="Any new QR image must be selected again."
+        />
         <Field label="QR code image" id="qr-image" error={err('image')}
           hint="JPG, PNG or WEBP · max 5MB. The image uploads directly to the cloud.">
           <div
@@ -725,11 +811,23 @@ function defaultEsp32ServerUrl() {
 }
 
 function Esp32WifiModal({ device, onClose, onSaved, toast }) {
-  const [ssid, setSsid] = useState(device?.ssid || '');
+  const { user } = useAuth();
+  const initialDraft = {
+    ssid: device?.ssid || '',
+    serverUrl: device?.server_url || defaultEsp32ServerUrl(),
+  };
+  const draft = useSessionDraft(
+    createSessionDraftKey(user, 'esp32-wifi', device?.device_code ?? 'new'),
+    initialDraft
+  );
+  const saveDraft = draft.save;
+  const [ssid, setSsid] = useState(() => draft.initialValue.ssid);
   const [password, setPassword] = useState('');
-  const [serverUrl, setServerUrl] = useState(device?.server_url || defaultEsp32ServerUrl());
+  const [serverUrl, setServerUrl] = useState(() => draft.initialValue.serverUrl);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => { saveDraft({ ssid, serverUrl }); }, [saveDraft, ssid, serverUrl]);
 
   function close() {
     if (saving) return;
@@ -768,6 +866,7 @@ function Esp32WifiModal({ device, onClose, onSaved, toast }) {
       const res = await adminAPI.saveEsp32Wifi(device.device_code, payload);
       toast.success(res.data?.message || 'Wi-Fi config saved.');
       onSaved();
+      draft.clear();
       onClose();
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Failed to save Wi-Fi config.');
@@ -776,9 +875,22 @@ function Esp32WifiModal({ device, onClose, onSaved, toast }) {
     }
   }
 
+  const discardDraft = () => {
+    draft.clear();
+    setSsid(initialDraft.ssid);
+    setServerUrl(initialDraft.serverUrl);
+    setPassword('');
+  };
+
   return (
     <Modal open onClose={close} title={`Configure ${device?.device_code || 'ESP32'}`} width={460}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <FormDraftNotice
+          restored={draft.restored}
+          error={draft.error}
+          onDiscard={discardDraft}
+          detailNote="For security, re-enter the Wi-Fi password if a new or changed password is required."
+        />
         <Field label="Wi-Fi name (SSID)" id="esp32-ssid"
           hint={device?.ssid ? undefined : 'The kitchen network the ESP32 should join.'}>
           <TextInput id="esp32-ssid" value={ssid} maxLength={32}
@@ -1399,6 +1511,7 @@ export default function SystemSettings() {
 
       {variantModal && (
         <VariantGroupModal
+          key={variantModal.group?.id ?? 'new'}
           group={variantModal.group}
           onClose={()=>setVariantModal(null)}
           onSaved={handleVariantSaved}

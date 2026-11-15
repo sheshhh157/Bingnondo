@@ -4,6 +4,8 @@ import { inventoryAPI, categoriesAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
+import FormDraftNotice from '../../components/FormDraftNotice';
+import useSessionDraft, { createSessionDraftKey } from '../../hooks/useSessionDraft';
 import { UNIT_OPTIONS } from '../../utils/units';
 import {
   LIMITS,
@@ -489,15 +491,34 @@ function CategoryMultiSelect({ id, categories, value, onChange }) {
 // ─── Add / Edit ingredient modal ──────────────────────────────────────────────
 function ItemModal({ mode, item, categories, allItems = [], onClose, onSubmit }) {
   const isEdit = mode === 'edit';
-  const [name, setName]                 = useState(item?.name || '');
-  const [unit, setUnit]                 = useState(item?.unit || '');
-  const [currentStock, setCurrentStock] = useState(item?.current_stock != null ? String(item.current_stock) : '');
-  const [reorderLevel, setReorderLevel] = useState(item?.reorder_level != null ? String(item.reorder_level) : '');
-  const [categoryIds, setCategoryIds]   = useState(() => (item?.categories || []).map((c) => c.id));
+  const { user } = useAuth();
+  const initialDraft = {
+    name: item?.name || '',
+    unit: item?.unit || '',
+    currentStock: item?.current_stock != null ? String(item.current_stock) : '',
+    reorderLevel: item?.reorder_level != null ? String(item.reorder_level) : '',
+    categoryIds: (item?.categories || []).map((category) => category.id),
+  };
+  const draft = useSessionDraft(
+    user?.role === 'admin'
+      ? createSessionDraftKey(user, 'inventory-ingredient', item?.id ?? 'new')
+      : null,
+    initialDraft
+  );
+  const saveDraft = draft.save;
+  const [name, setName]                 = useState(() => draft.initialValue.name);
+  const [unit, setUnit]                 = useState(() => draft.initialValue.unit);
+  const [currentStock, setCurrentStock] = useState(() => draft.initialValue.currentStock);
+  const [reorderLevel, setReorderLevel] = useState(() => draft.initialValue.reorderLevel);
+  const [categoryIds, setCategoryIds]   = useState(() => draft.initialValue.categoryIds);
   const [loading, setLoading]           = useState(false);
   const [serverError, setServerError]   = useState('');
   const [touched, setTouched]           = useState({});
   const nameRef = useRef(null);
+
+  useEffect(() => {
+    saveDraft({ name, unit, currentStock, reorderLevel, categoryIds });
+  }, [saveDraft, name, unit, currentStock, reorderLevel, categoryIds]);
 
   useEffect(() => {
     nameRef.current?.focus();
@@ -544,6 +565,7 @@ function ItemModal({ mode, item, categories, allItems = [], onClose, onSubmit })
         reorder_level: Number(reorderLevel) || 0,
         category_ids:  categoryIds,
       });
+      draft.clear();
       onClose();
     } catch (err) {
       setServerError(err.response?.data?.message || 'Failed to save ingredient.');
@@ -554,6 +576,15 @@ function ItemModal({ mode, item, categories, allItems = [], onClose, onSubmit })
   // name field, so the user can still see context while they rethink).
   const nameDuplicate = name.trim() &&
     isDuplicate(name.trim(), allItems, (r) => r.name, item?.id ?? null);
+  const discardDraft = () => {
+    draft.clear();
+    setName(initialDraft.name);
+    setUnit(initialDraft.unit);
+    setCurrentStock(initialDraft.currentStock);
+    setReorderLevel(initialDraft.reorderLevel);
+    setCategoryIds(initialDraft.categoryIds);
+    setTouched({});
+  };
 
   return createPortal(
     <div className="inv-modal-overlay" onClick={onClose} role="presentation">
@@ -575,6 +606,11 @@ function ItemModal({ mode, item, categories, allItems = [], onClose, onSubmit })
 
         <div className="inv-modal__body">
           <form id="inv-item-form" onSubmit={handleSubmit} noValidate>
+            <FormDraftNotice
+              restored={draft.restored}
+              error={draft.error}
+              onDiscard={discardDraft}
+            />
             <div className="inv-field">
               <label htmlFor="ing-name" className="inv-field__label">
                 Ingredient name <span className="inv-field__required">*</span>
@@ -1119,6 +1155,7 @@ export default function InventoryPage() {
       {/* Add / edit ingredient modal — admin only */}
       {isAdmin && itemModal && (
         <ItemModal
+          key={`${itemModal.mode}:${itemModal.item?.id ?? 'new'}`}
           mode={itemModal.mode}
           item={itemModal.item}
           categories={categories}

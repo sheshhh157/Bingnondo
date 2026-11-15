@@ -2,9 +2,12 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { staffMenuAPI, adminAPI, inventoryAPI, uploadAPI, reviewsAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
+import { useAuth } from '../../context/AuthContext';
 import useMediaQuery from '../../hooks/useMediaQuery';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import FilterModal, { FilterTrigger, FilterInline } from '../../components/MobileFilter';
+import FormDraftNotice from '../../components/FormDraftNotice';
+import useSessionDraft, { createSessionDraftKey } from '../../hooks/useSessionDraft';
 import { recipeUnitOptions, conversionFactor, unitLabel } from '../../utils/units';
 import {
   LIMITS, MIN_PRICE, normalizeKey, isDuplicate, sanitizeProductName,
@@ -640,35 +643,52 @@ function ReviewsPanel({ itemId }) {
 // ─── Add / Edit modal ─────────────────────────────────────────────────────────
 function MenuItemModal({ item, items = [], categories, variantGroups, inventoryItems, onClose, onSave }) {
   const isEdit = !!item;
-  const [tab, setTab] = useState('details');
-  // Add mode is a strict three-step wizard: Details → Variants → Ingredients.
-  const [step, setStep] = useState('details');
-  const activeView = isEdit ? tab : step;
-  const goTo = (view) => (isEdit ? setTab(view) : setStep(view));
-  const [form, setForm] = useState({
+  const { user } = useAuth();
+  const initialForm = {
     name: item?.name || '',
     price: item?.price || '',
     description: item?.description || '',
     category_id: item?.category_id || categories[0]?.id || '',
     is_available: item?.is_available ?? true,
-  });
+  };
+  const initialVariantOptions = {};
+  for (const variant of item?.variants || []) {
+    if (variant.group_id == null) continue;
+    if (!initialVariantOptions[variant.group_id]) initialVariantOptions[variant.group_id] = [];
+    initialVariantOptions[variant.group_id].push({ name: variant.name, price: String(variant.price) });
+  }
+  const initialDraft = {
+    tab: 'details',
+    step: 'details',
+    form: initialForm,
+    linked: item?.ingredients || [],
+    variantOptions: initialVariantOptions,
+    photoRemoved: false,
+  };
+  const draft = useSessionDraft(
+    createSessionDraftKey(user, 'menu-item', item?.id ?? 'new'),
+    initialDraft
+  );
+  const saveDraft = draft.save;
+  const [tab, setTab] = useState(() => draft.initialValue.tab);
+  // Add mode is a strict three-step wizard: Details → Variants → Ingredients.
+  const [step, setStep] = useState(() => draft.initialValue.step);
+  const activeView = isEdit ? tab : step;
+  const goTo = (view) => (isEdit ? setTab(view) : setStep(view));
+  const [form, setForm] = useState(() => draft.initialValue.form);
   const [photoFile, setPhotoFile]       = useState(null);
-  const [photoRemoved, setPhotoRemoved] = useState(false);
+  const [photoRemoved, setPhotoRemoved] = useState(() => draft.initialValue.photoRemoved);
   const [uploadStatus, setUploadStatus] = useState('');
-  const [linked, setLinked]             = useState(item?.ingredients || []);
+  const [linked, setLinked]             = useState(() => draft.initialValue.linked);
   // Per-item option rows for each enabled variant group: { [groupId]: [{ name, price }] }.
-  const [variantOptions, setVariantOptions] = useState(() => {
-    const map = {};
-    for (const v of item?.variants || []) {
-      if (v.group_id == null) continue;
-      if (!map[v.group_id]) map[v.group_id] = [];
-      map[v.group_id].push({ name: v.name, price: String(v.price) });
-    }
-    return map;
-  });
+  const [variantOptions, setVariantOptions] = useState(() => draft.initialValue.variantOptions);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState('');
   const [touched, setTouched]           = useState({});
+
+  useEffect(() => {
+    saveDraft({ tab, step, form, linked, variantOptions, photoRemoved });
+  }, [saveDraft, tab, step, form, linked, variantOptions, photoRemoved]);
 
   // Live field errors. These update on every keystroke, so duplicates and
   // wrong character types are caught before the form is submitted.
@@ -839,11 +859,25 @@ function MenuItemModal({ item, items = [], categories, variantGroups, inventoryI
         },
         isEdit ? item.id : null
       );
+      draft.clear();
       onClose();
     } catch (err) {
       setUploadStatus('');
       setError(err.response?.data?.message || 'Failed to save item.');
     } finally { setLoading(false); }
+  };
+
+  const discardDraft = () => {
+    draft.clear();
+    setTab('details');
+    setStep('details');
+    setForm(initialForm);
+    setPhotoFile(null);
+    setPhotoRemoved(false);
+    setLinked(item?.ingredients || []);
+    setVariantOptions(initialVariantOptions);
+    setTouched({});
+    setError('');
   };
 
   return createPortal(
@@ -857,6 +891,13 @@ function MenuItemModal({ item, items = [], categories, variantGroups, inventoryI
             </svg>
           </button>
         </div>
+
+        <FormDraftNotice
+          restored={draft.restored}
+          error={draft.error}
+          onDiscard={discardDraft}
+          detailNote="Any new photo must be selected again."
+        />
 
         {isEdit ? (
           <div className="mn-modal__tabs">
@@ -1638,7 +1679,7 @@ export default function MenuPage() {
       )}
 
       {modal && (
-        <MenuItemModal item={modal.item} items={items} categories={categories} variantGroups={variantGroups} inventoryItems={inventoryItems} onClose={() => setModal(null)} onSave={handleSave} />
+        <MenuItemModal key={`${modal.mode}:${modal.item?.id ?? 'new'}`} item={modal.item} items={items} categories={categories} variantGroups={variantGroups} inventoryItems={inventoryItems} onClose={() => setModal(null)} onSave={handleSave} />
       )}
       {deleteTarget && (
         <ConfirmDialog item={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} />
