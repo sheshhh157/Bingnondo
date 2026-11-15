@@ -8,6 +8,49 @@ const nodemailer = require('nodemailer');
 
 let transporter;
 
+function parseSender(value) {
+  const match = String(value || '').match(/^\s*(.*?)\s*<([^<>]+)>\s*$/);
+  if (match) return { name: match[1].replace(/^"|"$/g, ''), email: match[2].trim() };
+  return { name: 'Bingnondo Cafe', email: String(value || '').trim() };
+}
+
+async function sendWithBrevo({ to, subject, html, text }) {
+  const apiKey = String(process.env.BREVO_API_KEY || '').trim();
+  if (!apiKey) throw new Error('BREVO_API_KEY is not configured.');
+
+  const sender = parseSender(process.env.MAIL_FROM);
+  if (!sender.email || !sender.email.includes('@')) {
+    throw new Error('MAIL_FROM must contain a verified Brevo sender email address.');
+  }
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender,
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text || html.replace(/<[^>]+>/g, ''),
+    }),
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = result.message || result.code || `HTTP ${response.status}`;
+    throw new Error(`Brevo email API failed: ${detail}`);
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[mailer] Brevo accepted email to ${to} (${result.messageId || 'message ID unavailable'}).`);
+  }
+  return result;
+}
+
 async function getTransporter() {
   if (transporter) return transporter;
 
@@ -70,10 +113,17 @@ async function getTransporter() {
  * @param {{ to: string, subject: string, html: string, text?: string }} options
  */
 async function sendEmail({ to, subject, html, text }) {
+  // Railway Free, Trial, and Hobby block outbound SMTP. Prefer Brevo's HTTPS
+  // API whenever configured; it works on all Railway plans.
+  if (process.env.BREVO_API_KEY) {
+    console.log('[mailer] Sending email through Brevo API.');
+    return sendWithBrevo({ to, subject, html, text });
+  }
+
   const t = await getTransporter();
 
   const info = await t.sendMail({
-    from: process.env.MAIL_FROM || '"Bingnondo Cafe" <noreply@bingnondo.com>',
+    from: process.env.MAIL_FROM || `"Bingnondo Cafe" <${process.env.SMTP_USER || 'noreply@bingnondo.com'}>`,
     to,
     subject,
     html,
