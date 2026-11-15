@@ -320,7 +320,9 @@ export const adminAPI = {
     apiRequest(`/admin/staff-accounts/${id}`, {
       method: 'PUT',
       body: JSON.stringify({
-        full_name: data.full_name,
+        first_name:  data.first_name,
+        middle_name: data.middle_name,
+        last_name:   data.last_name,
         email:     data.email,
         role:      data.role,
       }),

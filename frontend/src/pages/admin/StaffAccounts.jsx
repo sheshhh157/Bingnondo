@@ -256,7 +256,8 @@ function CreateModal({ open, onClose, onCreated, toast, accounts = [] }) {
 // ── Edit account modal ────────────────────────────────────────────────────────
 function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
   // The DB now returns first_name, middle_name, last_name directly — no splitting needed.
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const isOwnAdminAccount = String(account.id) === String(user?.id) && account.role === 'admin';
   const initialForm = {
     first_name:  account.first_name  || '',
     middle_name: account.middle_name || '',
@@ -312,13 +313,14 @@ function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
     if (hasErrors()) return;
     setLoading(true);
     try {
-      await adminAPI.updateStaffAccount(account.id, {
+      const result = await adminAPI.updateStaffAccount(account.id, {
         first_name:  form.first_name.trim(),
         middle_name: form.middle_name.trim() || undefined,
         last_name:   form.last_name.trim(),
         email:       form.email.trim(),
-        role:        form.role,
+        ...(isOwnAdminAccount ? {} : { role: form.role }),
       });
+      if (isOwnAdminAccount && result?.data) updateUser(result.data);
       toast.success(`${composedName} updated.`);
       draft.clear();
       onSaved();
@@ -389,12 +391,18 @@ function EditModal({ account, onClose, onSaved, toast, accounts = [] }) {
             error={err('email')}
             maxLength={LIMITS.email} />
         </Field>
-        <Field label="Role" id="sa-edit-role" error={err('role')} hint={ROLE_DESC[form.role]}>
-          <AppSelect id="sa-edit-role" value={form.role}
-            onChange={e => set('role', e.target.value)}>
-            {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-          </AppSelect>
-        </Field>
+        {isOwnAdminAccount ? (
+          <Field label="Role" id="sa-edit-role" hint="Your administrator role cannot be changed here.">
+            <TextInput id="sa-edit-role" value={ROLE_LABELS.admin} readOnly />
+          </Field>
+        ) : (
+          <Field label="Role" id="sa-edit-role" error={err('role')} hint={ROLE_DESC[form.role]}>
+            <AppSelect id="sa-edit-role" value={form.role}
+              onChange={e => set('role', e.target.value)}>
+              {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            </AppSelect>
+          </Field>
+        )}
         <div className="ap-modal__footer">
           <Btn variant="ghost" onClick={onClose} disabled={loading}>Cancel</Btn>
           <Btn variant="primary" type="submit" loading={loading}>Save changes</Btn>
@@ -458,7 +466,7 @@ function StaffRow({ account, isSelf, menuOpen, onToggleMenu, onCloseMenu, onEdit
   const isActive = account.status === 'active';
   const busy = actionLoading === account.id;
   const selfActive = isSelf && isActive;
-  const manageable = ROLES.includes(account.role);
+  const manageable = ROLES.includes(account.role) || (isSelf && account.role === 'admin');
 
   const actions = [
     { key: 'edit',  label: 'Edit',           icon: <EditIcon />,  onClick: () => onEdit(account),   disabled: !manageable },
@@ -727,7 +735,7 @@ export default function StaffAccounts() {
                 </thead>
                 <tbody>
                   {visible.map(a => (
-                    <StaffRow key={a.id} account={a} isSelf={a.id === user?.id}
+                    <StaffRow key={a.id} account={a} isSelf={String(a.id) === String(user?.id)}
                       menuOpen={menuId === a.id}
                       onToggleMenu={() => setMenuId(id => (id === a.id ? null : a.id))}
                       onCloseMenu={() => setMenuId(null)}
