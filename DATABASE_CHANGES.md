@@ -103,3 +103,42 @@ Admin saves Wi-Fi config
 ```
 
 If the device fails to apply: `applied_version` stays old, `last_error` records the failure, firmware persists `failedConfigVersion` with exponential backoff. Admin presses **Resend** (bumps version) or **Test connection** before saving again.
+
+---
+
+## Data Change — Admin Account (`bingnondo@gmail.com`)
+
+**Date:** 2026-11-15
+**Type:** Data change (no schema migration)
+
+A second administrator was created; the original admin was kept active.
+
+| id | full_name | email | role | status | created_by |
+|----|-----------|-------|------|--------|------------|
+| 1 | Admin User | admin@bingnondo.com | admin | active | — |
+| 247 | Admin User | bingnondo@gmail.com | admin | active | 1 |
+
+### SQL applied
+
+```sql
+INSERT INTO staff_accounts (full_name, email, password_hash, role, status, created_by)
+VALUES ('Admin User', 'bingnondo@gmail.com', '<bcrypt hash>', 'admin', 'active', 1)
+RETURNING id;
+
+INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+VALUES (1, 'create_staff_account', 'staff_accounts', 247,
+        '{"email":"bingnondo@gmail.com","role":"admin","source":"db"}');
+```
+
+### Audit
+- `actor_id = 1`
+- `action = create_staff_account`
+- `target_type = staff_accounts`
+- `target_id = 247`
+
+### Security
+- The account was created with a temporary password. The plaintext password is intentionally **not** recorded in this repository.
+- Change the password after first login.
+
+### Verification
+- `POST /api/auth/login` with `bingnondo@gmail.com` returned HTTP 200 and `user.role === "admin"`.
