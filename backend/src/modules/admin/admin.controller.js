@@ -294,7 +294,8 @@ exports.updateStaffAccount = async (req, res) => {
     );
     const current = currentRows[0];
     if (!current) return res.status(404).json({ message: 'Staff account not found.' });
-    if (!VALID_ROLES.includes(current.role)) {
+    const editingOwnAdminAccount = current.role === 'admin' && staffId === Number(adminId);
+    if (!VALID_ROLES.includes(current.role) && !editingOwnAdminAccount) {
       return res.status(403).json({ message: 'This account cannot be modified through this interface.' });
     }
 
@@ -305,6 +306,10 @@ exports.updateStaffAccount = async (req, res) => {
     const nextLast   = last_name   !== undefined ? String(last_name).trim()   : null;
     const nextEmail  = email       !== undefined ? String(email).toLowerCase().trim() : null;
     const nextRole   = role        !== undefined ? role : null;
+
+    if (editingOwnAdminAccount && nextRole !== null) {
+      return res.status(403).json({ message: 'You cannot change your own administrator role.' });
+    }
 
     if (nextFirst  !== null && nextFirst  === '') return res.status(400).json({ message: 'First name cannot be empty.' });
     if (nextLast   !== null && nextLast   === '') return res.status(400).json({ message: 'Last name cannot be empty.' });
@@ -317,7 +322,7 @@ exports.updateStaffAccount = async (req, res) => {
     if (nextRole !== null && !VALID_ROLES.includes(nextRole)) {
       return res.status(400).json({ message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}.` });
     }
-    if (nextRole !== null && nextRole !== current.role && staffId === adminId) {
+    if (nextRole !== null && nextRole !== current.role && staffId === Number(adminId)) {
       return res.status(403).json({ message: 'You cannot change your own role.' });
     }
 
