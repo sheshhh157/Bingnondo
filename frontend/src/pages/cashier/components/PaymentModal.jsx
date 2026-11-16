@@ -257,8 +257,8 @@ export default function PaymentModal({ items, total, draft, onClose, onSuccess }
                       }
                     />
                     <PayMethodCard
-                      id="method-gcash" value="gcash" label="GCash"
-                      description="PayMongo QR checkout"
+                      id="method-gcash" value="gcash" label="Online payment"
+                      description="Customer pays online; confirm when received"
                       selected={method === 'gcash'}
                       onSelect={() => { setMethod('gcash'); setError(''); }}
                       icon={
@@ -310,7 +310,7 @@ export default function PaymentModal({ items, total, draft, onClose, onSuccess }
                   <span className="pm-spinner" aria-label="Processing…" />
                 ) : (
                   <>
-                    {method === 'gcash' ? 'Generate QR' : 'Mark as Paid'}
+                    {method === 'gcash' ? 'Confirm Online Payment' : 'Mark as Paid'}
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M5 12h14M12 5l7 7-7 7"/>
                     </svg>
@@ -382,7 +382,7 @@ function Receipt({ order, orderNumber, draft, total, method, cashGiven, change, 
           </svg>
         </div>
         <h2 className="pm-receipt__title">Payment Confirmed</h2>
-        <p className="pm-receipt__sub">Order #{ref} — {payMethod === 'cash' ? 'Cash' : 'GCash'}</p>
+        <p className="pm-receipt__sub">Order #{ref} — {payMethod === 'cash' ? 'Cash' : 'Online payment'}</p>
       </div>
 
       <div className="pm-receipt__paper">
