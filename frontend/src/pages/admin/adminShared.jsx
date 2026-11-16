@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalBodyFlag } from '../../hooks/useModalBodyFlag';
 
 // ── SpinSkeleton / button etc — small primitives ─────────────────────────
 export function Spinner({ size = 16 }) {
@@ -91,6 +92,7 @@ export function Modal({ open, onClose, title, width = 520, headingId = 'modal-ti
   const ref = useRef();
   const prevFocus = useRef(null);
   const onCloseRef = useRef(onClose);
+  useModalBodyFlag(open);
 
   useEffect(() => {
     onCloseRef.current = onClose;

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalBodyFlag } from '../../hooks/useModalBodyFlag';
 import { staffMenuAPI, adminAPI, inventoryAPI, uploadAPI, reviewsAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
@@ -644,6 +645,7 @@ function ReviewsPanel({ itemId }) {
 function MenuItemModal({ item, items = [], categories, variantGroups, inventoryItems, onClose, onSave }) {
   const isEdit = !!item;
   const { user } = useAuth();
+  useModalBodyFlag(true);
   const initialForm = {
     name: item?.name || '',
     price: item?.price || '',
@@ -1175,6 +1177,7 @@ function MenuItemModal({ item, items = [], categories, variantGroups, inventoryI
 // ─── Confirm dialog ───────────────────────────────────────────────────────────
 function ConfirmDialog({ item, onClose, onConfirm }) {
   const [loading, setLoading] = useState(false);
+  useModalBodyFlag(true);
 
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape' && !loading) onClose(); };

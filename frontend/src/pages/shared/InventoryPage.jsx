@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalBodyFlag } from '../../hooks/useModalBodyFlag';
 import { inventoryAPI, categoriesAPI } from '../../services/api';
 import { getSocket } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
@@ -113,6 +114,7 @@ function RestockModal({ item, onClose, onSubmit }) {
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  useModalBodyFlag(true);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -240,6 +242,7 @@ function AdjustModal({ item, onClose, onSubmit }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef(null);
+  useModalBodyFlag(true);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -492,6 +495,7 @@ function CategoryMultiSelect({ id, categories, value, onChange }) {
 function ItemModal({ mode, item, categories, allItems = [], onClose, onSubmit }) {
   const isEdit = mode === 'edit';
   const { user } = useAuth();
+  useModalBodyFlag(true);
   const initialDraft = {
     name: item?.name || '',
     unit: item?.unit || '',
@@ -750,6 +754,7 @@ export default function InventoryPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  useModalBodyFlag(filtersOpen || !!confirmItem);
   const { msg: toastMsg, type: toastType, show: showToast } = useToast();
 
   const fetchItems = useCallback(async () => {
