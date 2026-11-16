@@ -60,10 +60,10 @@ async function processPayment(req, res, next) {
 
     const { rows: payRows } = await client.query(
       `UPDATE payments
-       SET method = $1, status = 'paid', paid_at = NOW()
+       SET method = $1, cash_given = $3, status = 'paid', paid_at = NOW()
        WHERE id = $2
        RETURNING *`,
-      [method, payment_id]
+      [method, payment_id, method === 'cash' ? parseFloat(cash_given) : null]
     );
 
     // Paid -> ring the kitchen ESP32 buzzer.

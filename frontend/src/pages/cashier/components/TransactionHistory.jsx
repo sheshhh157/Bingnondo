@@ -98,6 +98,12 @@ function SortIcon({ col, sortCol, sortDir }) {
 function OrderDetail({ order }) {
   return (
     <>
+      {order.payment_method === 'cash' && order.cash_given != null && (
+        <div className="th-expanded__line th-expanded__payment">
+          <span>Cash given</span>
+          <span>{currency(order.cash_given)}</span>
+        </div>
+      )}
       {(order.items || []).map((item, idx) => (
         <div key={idx} className="th-expanded__line">
           <span>{itemLabel(item)} ×{item.quantity}</span>
