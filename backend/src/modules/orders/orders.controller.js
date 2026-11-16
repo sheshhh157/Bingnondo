@@ -191,10 +191,10 @@ async function createOrder(req, res, next) {
     // 5. Record the payment as paid. The order only exists because it was paid,
     //    so the payment row is born 'paid' — there is no unpaid state.
     const { rows: payRows } = await client.query(
-      `INSERT INTO payments (order_id, method, amount, status, paid_at)
-       VALUES ($1, $2, $3, 'paid', NOW())
+      `INSERT INTO payments (order_id, method, amount, cash_given, status, paid_at)
+       VALUES ($1, $2, $3, $4, 'paid', NOW())
        RETURNING *`,
-      [order.id, payment.method, totalAmount]
+      [order.id, payment.method, totalAmount, payment.method === 'cash' ? parseFloat(payment.cash_given) : null]
     );
 
     // 5b. Paid -> ring the kitchen ESP32 buzzer (same transaction as the order).
@@ -251,7 +251,7 @@ const MAX_ORDERS_LIMIT = 10000;
  */
 const LATEST_PAYMENT_JOIN = `
   LEFT JOIN LATERAL (
-    SELECT status, method, paid_at,
+    SELECT status, method, paid_at, cash_given,
            gcash_ref_number, receipt_image_url, receipt_uploaded_at,
            rejection_reason, verified_by, verified_at, gcash_amount_sent,
            resubmitted_at, rejection_count, previous_receipt_image_url,
@@ -409,6 +409,7 @@ async function getOrders(req, res, next) {
          p.method     AS payment_method,
          p.status     AS payment_status,
          p.paid_at,
+         p.cash_given::float AS cash_given,
          json_agg(
            json_build_object(
              'id',           oi.id,
@@ -431,7 +432,7 @@ async function getOrders(req, res, next) {
        JOIN order_items oi ON oi.order_id = o.id
        JOIN menu_items mi ON mi.id = oi.menu_item_id
        WHERE ${where}
-       GROUP BY o.id, sa.full_name, p.method, p.status, p.paid_at
+       GROUP BY o.id, sa.full_name, p.method, p.status, p.paid_at, p.cash_given
        ORDER BY o.created_at DESC
        LIMIT ${safeLimit} OFFSET ${safeOffset}`,
       params
