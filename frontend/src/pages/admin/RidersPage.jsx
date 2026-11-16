@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalBodyFlag } from '../../hooks/useModalBodyFlag';
 import { adminRidersAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -205,6 +206,7 @@ function StatsBar({ riders }) {
 function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders = [] }) {
   const isEdit = Boolean(initial);
   const { user } = useAuth();
+  useModalBodyFlag(open);
 
   const initialForm = {
     // DB now returns first_name / middle_name / last_name directly — no splitting needed.
@@ -460,6 +462,7 @@ function RiderFormModal({ open, onClose, onSave, initial = null, loading, riders
 function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
   const [pw, setPw]           = useState('');
   const [touched, setTouched] = useState(false);
+  useModalBodyFlag(open);
 
   const liveError = validatePassword(pw);
 
@@ -503,6 +506,7 @@ function ResetPasswordModal({ open, onClose, onSave, rider, loading }) {
 
 // ── Rider Detail Drawer ───────────────────────────────────────────────────────
 function RiderDetailDrawer({ rider, open, onClose, onEdit, onToggleStatus, onResetPassword, onDelete, onWorkOverride }) {
+  useModalBodyFlag(open);
   if (!rider) return null;
 
   const created = rider.created_at
