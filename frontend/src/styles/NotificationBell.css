@@ -5,6 +5,13 @@
   z-index: 150;
 }
 
+/* Keep the floating bell and its panel out of the way while an admin modal
+   or drawer is active. The bell remains available after the dialog closes. */
+.al-root:has([aria-modal="true"]) .nb-root {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .nb-btn {
   position: relative;
   display: inline-flex;
