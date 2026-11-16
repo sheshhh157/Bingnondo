@@ -5,9 +5,10 @@
   z-index: 150;
 }
 
-/* Keep the floating bell and its panel out of the way while an admin modal
-   or drawer is active. The bell remains available after the dialog closes. */
-.al-root:has([aria-modal="true"]) .nb-root {
+/* Keep the floating bell and its panel out of the way while any modal is open.
+   Works with portaled dialogs too — useModalBodyFlag sets this attribute on <body>
+   whenever a modal mounts, and removes it when it unmounts. */
+body[data-modal-open] .nb-root {
   visibility: hidden;
   pointer-events: none;
 }
