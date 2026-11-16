@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalBodyFlag } from '../hooks/useModalBodyFlag';
 import '../styles/ConfirmDialog.css';
 
 const TONE_ICON = {
@@ -29,6 +30,7 @@ export default function ConfirmDialog({
   onCancel,
 }) {
   const confirmBtnRef = useRef(null);
+  useModalBodyFlag(open);
 
   useEffect(() => {
     if (!open) return;
