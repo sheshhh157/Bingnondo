@@ -4,7 +4,9 @@ const getDatabaseOptions = require('./databaseOptions');
 const pool = new Pool({
   ...getDatabaseOptions(),
   // Connection pool settings
-  max:             10,   // max simultaneous connections
+  // Keep per-instance usage modest for hosted databases with a shared
+  // session-mode pooler limit across multiple app instances.
+  max:             5,
   idleTimeoutMillis: 30000,
   allowExitOnIdle: true,
   connectionTimeoutMillis: 2000,

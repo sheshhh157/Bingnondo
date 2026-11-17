@@ -352,14 +352,18 @@ exports.getNotifications = async (req, res) => {
     );
 
     // One source failing (say, an empty table) must not blank the whole feed.
-    const results = await Promise.all(
-      enabled.map((c) =>
-        FETCHERS[c]().catch((err) => {
-          console.error(`[getNotifications:${c}]`, err);
-          return [];
-        })
-      )
-    );
+    // Keep database demand bounded: several category fetchers make multiple
+    // queries, and parallel requests here can exceed the hosted pooler's
+    // session-mode client limit. Fetch categories one at a time.
+    const results = [];
+    for (const category of enabled) {
+      try {
+        results.push(await FETCHERS[category]());
+      } catch (err) {
+        console.error(`[getNotifications:${category}]`, err);
+        results.push([]);
+      }
+    }
 
     const merged = results.flat().sort((a, b) => new Date(b.at) - new Date(a.at));
     const unread = Math.min(
