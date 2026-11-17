@@ -3,5 +3,5 @@ builder = "RAILPACK"
 
 [deploy]
 startCommand = "npm start"
-healthcheckPath = "/api/esp32/alert?device_code=ESP32-KitchenA"
+healthcheckPath = "/api/test"
 healthcheckTimeout = 30000
