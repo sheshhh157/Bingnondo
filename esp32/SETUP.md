@@ -11,7 +11,7 @@ Active buzzer + 2.4" ST7789 screen (240x320), USB powered. The acknowledge butto
 
 With several orders waiting, each button press acknowledges the one on screen (the oldest), then the next one shows.
 
-**Idle display sleep:** after 60 seconds with no alerts the sketch blanks every pixel and puts the ST7789 controller to sleep to reduce panel wear. It wakes and redraws when a new alert arrives or the button is pressed. The screen stays on while the server is offline (`SERVER OFFLINE`) or a config status (`APPLYING…` / `CONFIG FAILED`) is showing. Because the module's `LED` / `BL` pin is wired to 3V3, the backlight cannot be switched off in software — the panel still glows faintly while asleep. To make the screen go fully dark, rewire `LED` / `BL` to a free GPIO (e.g. GPIO32) through a transistor and drive it low in `displaySleep()`.
+**Idle display sleep:** after 60 seconds with no alerts the sketch blanks every pixel and puts the ST7789 controller to sleep to reduce panel wear. It wakes and redraws when a new alert arrives or the button is pressed. The screen stays on while the server is offline (`SERVER OFFLINE`) or a config status (`APPLYING…` / `CONFIG FAILED`) is showing. By default `LED` / `BL` stays wired to 3V3, so the backlight cannot be switched in software and the panel still glows faintly while asleep. To turn it fully off, wire `LED` / `BL` directly to GPIO32 and set `#define BACKLIGHT_CONTROL 1` in the sketch (see section 3) — the pin is then driven LOW while asleep.
 
 ## 1. Copy the files into your project
 Same folder layout as your project, so they drop in over yours.
@@ -71,16 +71,16 @@ Fine for testing. If it ever stays in permanent use, add an NPN transistor (GPIO
 | CS | GPIO5 |
 | DC / A0 | GPIO16 |
 | RESET / RES | GPIO17 |
-| LED / BL / BLK | 3V3 |
+| LED / BL / BLK | 3V3 (default) **or** GPIO32 when `BACKLIGHT_CONTROL 1` |
 
 Leave SDO/MISO, T_* (touch) and SD-card pins unconnected.
 
 Three things that cost us hours — check them first if the screen misbehaves:
 - **The screen's `SDA`/`SCL` are SPI names, not I²C.** They wire to `GPIO23`/`GPIO18` as in the table — *never* to the ESP32 pins actually labelled `SDA`/`SCL` (GPIO21/GPIO22).
-- **`LED`/`BL`/`BLK` must be connected to `3V3`** or the screen stays dark/white no matter how perfect everything else is.
+- **`LED`/`BL`/`BLK` must be connected to `3V3`** (the default) or the screen stays dark/white no matter how perfect everything else is. If you move it to GPIO32, set `#define BACKLIGHT_CONTROL 1` or the backlight will never be driven.
 - Your DevKit prints GPIO16 as `RX2` and GPIO17 as `TX2` on the header; that's normal — use those pins for `DC` and `RESET`.
 
-Because `LED` / `BL` is tied to 3V3, the idle display sleep can blank the pixels and sleep the ST7789 controller but cannot turn the backlight off. For a fully dark screen, wire `LED` / `BL` to a free GPIO (e.g. GPIO32) through an NPN transistor or MOSFET and drive that pin LOW while asleep.
+Because `LED` / `BL` is tied to 3V3 by default, the idle display sleep can blank the pixels and sleep the ST7789 controller but cannot turn the backlight off. To make the screen go fully dark, move the `LED` / `BL` wire from 3V3 to **GPIO32** (no transistor or resistor needed for this build) and set `#define BACKLIGHT_CONTROL 1` near the top of `kitchen_buzzer.ino`; the sketch then drives GPIO32 HIGH while awake and LOW while asleep. Leave the flag at `0` if `LED` / `BL` is still on 3V3. Watch the backlight brightness after switching: an ESP32 pin is rated for about 20 mA, so if the panel flickers, dims, or the pin gets warm, reconnect `LED` / `BL` to 3V3 and set the flag back to `0`.
 
 ## 4. PC side (one-time Windows setup)
 - **Firewall:** the backend listens on port 5000 and must accept inbound connections (admin PowerShell):
@@ -112,7 +112,7 @@ If you need to start over completely, hold the button while powering on. That cl
 
 - ESP32 and PC must be on the same Wi-Fi; allow Node.js through the PC firewall on port 5000 (see section 4).
 - **Screen stays white/blank or shows garbage:** check the wiring notes in section 3 first (BL to 3V3, module-side pin order) — on our build that was the real cause. If wiring is perfect and it is still blurred/garbled, set `#define USE_ST7789 0` and install the **Adafruit ILI9341** library instead.
-- **Screen is dark but the backlight still glows:** that is the 60 s idle sleep. It wakes on the next alert or button press. To turn the backlight off too, see the `BL` rewiring note in section 3.
+- **Screen is dark but the backlight still glows:** that is the 60 s idle sleep with the default 3V3 wiring. It wakes on the next alert or button press. With `LED` / `BL` on GPIO32 and `BACKLIGHT_CONTROL 1`, the backlight goes off too. If the screen is dark immediately after boot with the flag enabled, check the `LED` / `BL` wire and that GPIO32 is driving HIGH.
 - Colors look inverted: tell me and I'll flip it (one line).
 - Serial `HTTP 401` = key mismatch, `HTTP 404` = device code not in `esp32_devices`, `HTTP -1` = server unreachable. Short `HTTP -1` bursts right after boot/reset are normal.
 - Serial heartbeat every 10 s: `RSSI -XX dBm | WiFi up | fails N`. Healthy is RSSI above about −70 dBm with `fails 0`.

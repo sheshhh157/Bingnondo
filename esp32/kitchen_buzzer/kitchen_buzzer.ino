@@ -6,8 +6,9 @@
                          big, plus "+N waiting" and the next order numbers.
     - Button press    -> acknowledges the order shown on screen (the oldest).
                          Buzzer stops once no alerts are left.
-    - No alerts for 60s -> the screen blanks and the ST7789 sleeps. The backlight
-                         stays on because LED/BL is wired to 3V3 (see SETUP.md).
+    - No alerts for 60s -> the screen blanks and the ST7789 sleeps. By default the
+                          backlight stays on (LED/BL on 3V3). Set BACKLIGHT_CONTROL 1
+                          and wire LED/BL to GPIO32 to switch it off too (see SETUP.md).
   Alerts are created when an order is paid (counter order, or GCash receipt verified).
 
   First boot / Wi-Fi changes:
@@ -28,7 +29,8 @@
     Button : GPIO27 -> button -> GND   (optional; internal pull-up, no resistor needed.
              Without a button connected nothing happens; acknowledge from the kitchen screen.)
     Screen : VCC->3V3, GND->GND, SCK/SCL->GPIO18, SDI/SDA/MOSI->GPIO23,
-             CS->GPIO5, DC->GPIO16, RESET->GPIO17, LED/BL->3V3 (backlight always on)
+             CS->GPIO5, DC->GPIO16, RESET->GPIO17,
+             LED/BL->3V3 (default) or GPIO32 with BACKLIGHT_CONTROL 1
 */
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -61,6 +63,8 @@ const int BUTTON_PIN = 27;
 #define TFT_CS   5
 #define TFT_DC   16
 #define TFT_RST  17
+#define BACKLIGHT_CONTROL 0   // set 1 after moving LED/BL from 3V3 to GPIO32
+#define BACKLIGHT_PIN 32
 
 // Screen driver. Your screen is an ST7789, so leave this as 1.
 // Many 2.4" 240x320 modules sold online are really ILI9341: if the screen stays
@@ -117,6 +121,14 @@ unsigned long lastActivity = 0;  // last time something needed the screen
 void setOutputs(bool on) {
   outputOn = on;
   digitalWrite(BUZZER_PIN, on ? HIGH : LOW);
+}
+
+void setBacklight(bool on) {
+#if BACKLIGHT_CONTROL
+  digitalWrite(BACKLIGHT_PIN, on ? HIGH : LOW);
+#else
+  (void)on;
+#endif
 }
 
 String makeSetupApName() {
@@ -301,20 +313,22 @@ void drawScreen(unsigned long now) {
 }
 
 // ---------------------------------------------------------- display power ----
-// LED/BL is wired to 3V3, so the backlight cannot be switched in software.
-// We blank every pixel and put the ST7789 controller to sleep instead. The
-// backlight still glows faintly; rewire BL to a GPIO through a transistor to
-// turn it fully off.
+// By default LED/BL stays on 3V3 and cannot be switched in software; we only
+// blank pixels and sleep the ST7789 controller. With BACKLIGHT_CONTROL 1 the
+// backlight is wired directly to GPIO32 and is driven LOW while asleep.
 void displaySleep() {
   if (displayAsleep) return;
   tft.fillScreen(COL_BLACK);
   tft.sendCommand(0x10);              // ST77XX_SLPIN (same command on ILI9341)
+  delay(120);
+  setBacklight(false);
   displayAsleep = true;
   lastScreen = "ASLEEP";
   Serial.println("Display asleep (idle)");
 }
 
 void displayWake() {
+  setBacklight(true);                 // keep BL on even if the panel is already awake
   if (!displayAsleep) return;
   tft.sendCommand(0x11);              // ST77XX_SLPOUT
   delay(120);                         // wait after sleep-out before drawing
@@ -526,6 +540,10 @@ void setup() {
     }
   }
 
+#if BACKLIGHT_CONTROL
+  pinMode(BACKLIGHT_PIN, OUTPUT);
+  setBacklight(true);
+#endif
   TFT_START();
   tft.setRotation(1);                    // landscape: 320 x 240
   tft.fillScreen(COL_BLACK);
