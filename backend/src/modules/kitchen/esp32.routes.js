@@ -22,10 +22,55 @@ function deviceAuth(req, res, next) {
 
 // GET /api/esp32/alert?device_code=ESP32-KitchenA
 // The ESP32 polls this every couple of seconds. Reply:
-//   { buzz, pending, alert_id, orders: ["ORD-0012", ...] }
+//   { buzz, pending, alert_id, orders: ["ORD-0012", ...], display }
 //   buzz   -> true while any alert is unacknowledged
 //   alert_id / orders[0] -> the oldest waiting alert (what the button will acknowledge)
 //   orders -> up to 6 waiting order numbers, oldest first, for the screen
+//   display -> the order to draw on screen (items, notes, special request) with
+//              acknowledged=true for the last acknowledged order when nothing waits
+const DISPLAY_WINDOW_MINUTES = 10;
+const MAX_DISPLAY_ITEMS = 5;
+
+const clipText = (value, max) => {
+  const text = value == null ? '' : String(value).trim();
+  if (text.length <= max) return text;
+  return max > 2 ? `${text.slice(0, max - 2)}..` : text.slice(0, max);
+};
+
+function formatDisplay(row, acknowledged) {
+  if (!row) return null;
+  const items = Array.isArray(row.items) ? row.items : [];
+  return {
+    alert_id: row.alert_id,
+    order_number: row.order_number,
+    acknowledged,
+    special_request: clipText(row.special_request, 40),
+    items: items.slice(0, MAX_DISPLAY_ITEMS).map((item) => ({
+      name: clipText(item.name, 26),
+      qty: item.qty,
+      notes: clipText(item.notes, 36),
+    })),
+    more: Math.max(0, items.length - MAX_DISPLAY_ITEMS),
+  };
+}
+
+const DISPLAY_SELECT = `
+   SELECT ka.id AS alert_id,
+          'ORD-' || LPAD(ka.order_id::text, 4, '0') AS order_number,
+          o.special_request,
+          json_agg(
+            json_build_object(
+              'name', mi.name || COALESCE(' - ' || oi.variant_name, ''),
+              'qty', oi.quantity,
+              'notes', oi.notes
+            ) ORDER BY oi.id
+          ) FILTER (WHERE oi.id IS NOT NULL) AS items
+     FROM kitchen_alerts ka
+     JOIN orders o ON o.id = ka.order_id
+     LEFT JOIN order_items oi ON oi.order_id = o.id
+     LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+`;
+
 router.get('/alert', deviceAuth, async (req, res, next) => {
   try {
     const code = req.query.device_code;
@@ -49,11 +94,37 @@ router.get('/alert', deviceAuth, async (req, res, next) => {
       [dev.rows[0].id]
     );
 
+    let display = null;
+    if (rows.length > 0) {
+      const { rows: waiting } = await db.query(
+        `${DISPLAY_SELECT}
+          WHERE ka.device_id = $1 AND ka.acknowledged_at IS NULL
+          GROUP BY ka.id, o.id, o.special_request
+          ORDER BY ka.triggered_at ASC, ka.id ASC
+          LIMIT 1`,
+        [dev.rows[0].id]
+      );
+      display = formatDisplay(waiting[0], false);
+    } else {
+      const { rows: recent } = await db.query(
+        `${DISPLAY_SELECT}
+          WHERE ka.device_id = $1
+            AND ka.acknowledged_at IS NOT NULL
+            AND ka.acknowledged_at >= NOW() - ($2::int * INTERVAL '1 minute')
+          GROUP BY ka.id, o.id, o.special_request
+          ORDER BY ka.acknowledged_at DESC, ka.id DESC
+          LIMIT 1`,
+        [dev.rows[0].id, DISPLAY_WINDOW_MINUTES]
+      );
+      display = formatDisplay(recent[0], true);
+    }
+
     res.json({
       buzz: rows.length > 0,
       pending: rows.length,
       alert_id: rows[0] ? rows[0].alert_id : null,
       orders: rows.slice(0, 6).map((r) => r.order_number),
+      display,
     });
   } catch (err) {
     next(err);
