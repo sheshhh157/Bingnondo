@@ -11,6 +11,8 @@ Active buzzer + 2.4" ST7789 screen (240x320), USB powered. The acknowledge butto
 
 With several orders waiting, each button press acknowledges the one on screen (the oldest), then the next one shows.
 
+**Idle display sleep:** after 60 seconds with no alerts the sketch blanks every pixel and puts the ST7789 controller to sleep to reduce panel wear. It wakes and redraws when a new alert arrives or the button is pressed. The screen stays on while the server is offline (`SERVER OFFLINE`) or a config status (`APPLYING…` / `CONFIG FAILED`) is showing. Because the module's `LED` / `BL` pin is wired to 3V3, the backlight cannot be switched off in software — the panel still glows faintly while asleep. To make the screen go fully dark, rewire `LED` / `BL` to a free GPIO (e.g. GPIO32) through a transistor and drive it low in `displaySleep()`.
+
 ## 1. Copy the files into your project
 Same folder layout as your project, so they drop in over yours.
 
@@ -78,6 +80,8 @@ Three things that cost us hours — check them first if the screen misbehaves:
 - **`LED`/`BL`/`BLK` must be connected to `3V3`** or the screen stays dark/white no matter how perfect everything else is.
 - Your DevKit prints GPIO16 as `RX2` and GPIO17 as `TX2` on the header; that's normal — use those pins for `DC` and `RESET`.
 
+Because `LED` / `BL` is tied to 3V3, the idle display sleep can blank the pixels and sleep the ST7789 controller but cannot turn the backlight off. For a fully dark screen, wire `LED` / `BL` to a free GPIO (e.g. GPIO32) through an NPN transistor or MOSFET and drive that pin LOW while asleep.
+
 ## 4. PC side (one-time Windows setup)
 - **Firewall:** the backend listens on port 5000 and must accept inbound connections (admin PowerShell):
   ```powershell
@@ -108,6 +112,7 @@ If you need to start over completely, hold the button while powering on. That cl
 
 - ESP32 and PC must be on the same Wi-Fi; allow Node.js through the PC firewall on port 5000 (see section 4).
 - **Screen stays white/blank or shows garbage:** check the wiring notes in section 3 first (BL to 3V3, module-side pin order) — on our build that was the real cause. If wiring is perfect and it is still blurred/garbled, set `#define USE_ST7789 0` and install the **Adafruit ILI9341** library instead.
+- **Screen is dark but the backlight still glows:** that is the 60 s idle sleep. It wakes on the next alert or button press. To turn the backlight off too, see the `BL` rewiring note in section 3.
 - Colors look inverted: tell me and I'll flip it (one line).
 - Serial `HTTP 401` = key mismatch, `HTTP 404` = device code not in `esp32_devices`, `HTTP -1` = server unreachable. Short `HTTP -1` bursts right after boot/reset are normal.
 - Serial heartbeat every 10 s: `RSSI -XX dBm | WiFi up | fails N`. Healthy is RSSI above about −70 dBm with `fails 0`.
