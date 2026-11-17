@@ -1,0 +1,15 @@
+[backend]
+build = {
+  builder = "nixpacks"
+  rootDirectory = "backend"
+}
+
+[backend.deploy]
+startCommand = "npm start"
+healthcheckPath = "/api/esp32/alert?device_code=ESP32-KitchenA"
+healthcheckTimeout = 30000
+
+[backend.variables]
+NODE_ENV = "production"
+PORT = 5000
+DATABASE_SSL = "true"
