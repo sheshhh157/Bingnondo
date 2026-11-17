@@ -6,9 +6,6 @@
                          big, plus "+N waiting" and the next order numbers.
     - Button press    -> acknowledges the order shown on screen (the oldest).
                          Buzzer stops once no alerts are left.
-    - No alerts for 60s -> the screen blanks and the ST7789 sleeps. LED/BL is on
-                          3V3 by default (backlight always on). Set BACKLIGHT_CONTROL 1
-                          and wire LED/BL to GPIO32 to switch it off too (see SETUP.md).
   Alerts are created when an order is paid (counter order, or GCash receipt verified).
 
   First boot / Wi-Fi changes:
@@ -29,8 +26,7 @@
     Button : GPIO27 -> button -> GND   (optional; internal pull-up, no resistor needed.
              Without a button connected nothing happens; acknowledge from the kitchen screen.)
     Screen : VCC->3V3, GND->GND, SCK/SCL->GPIO18, SDI/SDA/MOSI->GPIO23,
-             CS->GPIO5, DC->GPIO16, RESET->GPIO17,
-             LED/BL->3V3 (default) or GPIO32 with BACKLIGHT_CONTROL 1
+             CS->GPIO5, DC->GPIO16, RESET->GPIO17, LED/BL->3V3
 */
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -63,8 +59,6 @@ const int BUTTON_PIN = 27;
 #define TFT_CS   5
 #define TFT_DC   16
 #define TFT_RST  17
-#define BACKLIGHT_CONTROL 0   // set 1 after moving LED/BL from 3V3 to GPIO32
-#define BACKLIGHT_PIN 32
 
 // Screen driver. Your screen is an ST7789, so leave this as 1.
 // Many 2.4" 240x320 modules sold online are really ILI9341: if the screen stays
@@ -100,7 +94,6 @@ const unsigned long BEEP_ON     = 300;
 const unsigned long BEEP_OFF    = 500;
 const unsigned long DEBOUNCE_MS = 50;
 const unsigned long POLL_TIMEOUT_MS = 1500;
-const unsigned long DISPLAY_IDLE_MS = 60000;   // blank + sleep after 60s idle
 
 // State from the server
 int    pending = 0;
@@ -115,20 +108,10 @@ unsigned long lastRedraw = 0;
 bool outputOn = false;
 bool lastButton = HIGH;
 String lastScreen = "";          // signature of what's drawn, to avoid flicker
-bool displayAsleep = false;      // ST7789 is in sleep; pixels are blank
-unsigned long lastActivity = 0;  // last time something needed the screen
 
 void setOutputs(bool on) {
   outputOn = on;
   digitalWrite(BUZZER_PIN, on ? HIGH : LOW);
-}
-
-void setBacklight(bool on) {
-#if BACKLIGHT_CONTROL
-  digitalWrite(BACKLIGHT_PIN, on ? HIGH : LOW);
-#else
-  (void)on;
-#endif
 }
 
 String makeSetupApName() {
@@ -213,7 +196,6 @@ void runSetupPortal() {
     return;
   }
 
-  displayWake();                      // setup instructions must stay visible
   drawSetupScreen();
 
   WiFiManager wm;
@@ -257,12 +239,10 @@ void runSetupPortal() {
   Serial.printf("Server URL: %s\n", serverUrl.length() ? serverUrl.c_str() : "(not set)");
 
   lastScreen = "";
-  lastActivity = millis();
 }
 
 // ---------------------------------------------------------------- screen ----
 void drawScreen(unsigned long now) {
-  if (displayAsleep) return;         // wake the panel before drawing
   bool offline = failCount >= 3;
 
   // Only redraw when something visible changed, plus a periodic refresh so the
@@ -310,33 +290,6 @@ void drawScreen(unsigned long now) {
   // Footer hint
   tft.fillRect(0, 210, SCREEN_W, 30, COL_RED);
   printCentered("PRESS BUTTON TO ACK", 218, 2, COL_WHITE);
-}
-
-// ---------------------------------------------------------- display power ----
-// By default LED/BL stays on 3V3 and cannot be switched in software; we only
-// blank pixels and sleep the ST7789 controller. With BACKLIGHT_CONTROL 1 the
-// backlight is wired directly to GPIO32 and is driven LOW while asleep.
-void displaySleep() {
-  if (displayAsleep) return;
-  tft.fillScreen(COL_BLACK);
-  tft.sendCommand(0x10);              // ST77XX_SLPIN (same command on ILI9341)
-  delay(120);
-  setBacklight(false);
-  displayAsleep = true;
-  lastScreen = "ASLEEP";
-  Serial.println("Display asleep (idle)");
-}
-
-void displayWake() {
-  setBacklight(true);                 // keep BL on even if the panel is already awake
-  if (!displayAsleep) return;
-  tft.sendCommand(0x11);              // ST77XX_SLPOUT
-  delay(120);                         // wait after sleep-out before drawing
-  displayAsleep = false;
-  lastScreen = "";
-  lastRedraw = 0;
-  lastActivity = millis();
-  Serial.println("Display awake");
 }
 
 // --------------------------------------------------------------- network ----
@@ -510,10 +463,7 @@ void pollConfig() {
   }
 
   configStatus = "APPLYING…";
-  displayWake();
-  lastActivity = millis();
   lastScreen = "";
-  drawScreen(millis());
   applyWifiConfig(newVersion, newSsid, newPassword, newServer);
 }
 
@@ -540,15 +490,9 @@ void setup() {
     }
   }
 
-#if BACKLIGHT_CONTROL
-  pinMode(BACKLIGHT_PIN, OUTPUT);
-  setBacklight(true);
-#endif
   TFT_START();
   tft.setRotation(1);                    // landscape: 320 x 240
   tft.fillScreen(COL_BLACK);
-  displayAsleep = false;
-  lastActivity = millis();
   printCentered("Starting...", 110, 2, COL_WHITE);
 
   setupApName = makeSetupApName();
@@ -584,8 +528,6 @@ void loop() {
   bool b = digitalRead(BUTTON_PIN);
   if (b == LOW && lastButton == HIGH && now - lastPress > DEBOUNCE_MS) {
     lastPress = now;
-    displayWake();                       // any press wakes the screen
-    lastActivity = now;
     if (pending > 0 && sendAck(alertId)) {
       // Show the result right away instead of waiting for the next poll
       pending--;
@@ -596,7 +538,6 @@ void loop() {
       drawScreen(now);
       lastPoll = 0;                      // poll immediately
     }
-    drawScreen(now);
   }
   lastButton = b;
 
@@ -609,18 +550,7 @@ void loop() {
       failCount++;                       // keeps last known state meanwhile
     }
     if (pending == 0) setOutputs(false);
-
-    // Keep the panel awake while there is something to see; otherwise blank +
-    // sleep after DISPLAY_IDLE_MS of no alerts.
-    bool keepAwake = (pending > 0) || (failCount >= 3) || (configStatus.length() > 0);
-    if (keepAwake) {
-      displayWake();
-      lastActivity = now;
-      drawScreen(now);
-    } else {
-      drawScreen(now);
-      if (!displayAsleep && now - lastActivity >= DISPLAY_IDLE_MS) displaySleep();
-    }
+    drawScreen(now);
 
     if (now - lastRssi >= 10000) {
       lastRssi = now;
