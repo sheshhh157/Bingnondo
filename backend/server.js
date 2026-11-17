@@ -44,6 +44,9 @@ const ensureSchema = require('./src/config/ensureSchema');
 
 const app    = express();
 const server = http.createServer(app);
+// Railway terminates the public connection at one trusted proxy. This lets
+// Express resolve the client IP from X-Forwarded-For for rate limiting.
+app.set('trust proxy', 1);
 const io     = new Server(server, {
   cors: { origin: process.env.FRONTEND_URL || '*', methods: ['GET', 'POST'] },
   transports: ['websocket', 'polling'],
