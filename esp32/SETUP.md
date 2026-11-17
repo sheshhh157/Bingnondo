@@ -6,10 +6,10 @@ Active buzzer + 2.4" ST7789 screen (240x320), USB powered. The acknowledge butto
    - a **counter order** (it is created already paid), and
    - a **GCash order** once staff verify the receipt.
 2. The backend saves a row in `kitchen_alerts`; the kitchen screen lists the order under **New Orders** and the ESP32 starts beeping.
-3. The ESP32 asks `GET /api/esp32/alert` every second (`POLL_MS`, default 1000 ms). While alerts are waiting it beeps, and the screen shows the oldest order big, with "+N waiting" and the next order numbers.
+3. The ESP32 asks `GET /api/esp32/alert` every second (`POLL_MS`, default 1000 ms). While alerts are waiting it beeps, and the screen shows the oldest order with its **item names, quantities, notes and special request**, plus "+N waiting" when more orders are queued.
 4. Press the **button** on the ESP32 if you've wired it, or press **Acknowledge (All)** on the kitchen screen. Either way the order's alert row is cleared, so the buzzer stops on the next poll.
 
-With several orders waiting, each button press acknowledges the one on screen (the oldest), then the next one shows.
+The acknowledged order stays on screen with a green **ACKNOWLEDGED** footer until another order is waiting, so you don't lose sight of it. With several orders waiting, each button press acknowledges the one on screen (the oldest), then the next one shows. The detail feed keeps the last acknowledged order for 10 minutes; after that the screen returns to "All clear". No wiring changes are needed.
 
 ## 1. Copy the files into your project
 Same folder layout as your project, so they drop in over yours.
@@ -42,12 +42,12 @@ Database: run `npm --prefix backend run migrate`. Migration `008_esp32_devices.s
 ```
 curl -H "x-device-key: YOUR_KEY" "http://localhost:5000/api/esp32/alert?device_code=ESP32-KitchenA"
 ```
-Expect `{"buzz":false,"pending":0,"alert_id":null,"orders":[]}`.
-Create a counter order in the cashier page and run it again: `buzz:true` with the order number, and "Incoming Alerts" appears on the kitchen page. Test the button route (use the `alert_id` from the reply):
+Expect `{"buzz":false,"pending":0,"alert_id":null,"orders":[],"display":null}`.
+Create a counter order in the cashier page and run it again: `buzz:true` with the order number and a `display` object such as `{"alert_id":1,"order_number":"ORD-0001","acknowledged":false,"special_request":"No onions","items":[{"name":"Burger - Large","qty":2,"notes":"Extra sauce"}],"more":0}`, and "Incoming Alerts" appears on the kitchen page. Test the button route (use the `alert_id` from the reply):
 ```
 curl -X POST -H "x-device-key: YOUR_KEY" -H "Content-Type: application/json" -d "{\"device_code\":\"ESP32-KitchenA\",\"alert_id\":1}" http://localhost:5000/api/esp32/ack
 ```
-The kitchen panel should clear it.
+The kitchen panel should clear it. Running the `GET` again now returns `pending:0` and the same order in `display` with `"acknowledged":true`, which is what keeps it visible on the ESP32.
 
 ## 3. Wiring
 **Buzzer** (active buzzer, wired directly, no transistor or resistor):
@@ -93,7 +93,7 @@ Three things that cost us hours — check them first if the screen misbehaves:
 ## 5. Flash and connect Wi-Fi
 Arduino IDE → Library Manager: install **Adafruit ST7735 and ST7789 Library** (accept its dependencies), **ArduinoJson 7.x**, and **WiFiManager** (tzapu, v2.0.17+). Open `esp32/kitchen_buzzer/kitchen_buzzer.ino`, choose your ESP32 board, upload, and open Serial Monitor at 115200.
 
-Only `DEVICE_CODE` and `DEVICE_KEY` remain in the sketch. Wi-Fi credentials and the server URL are not hardcoded.
+Only `DEVICE_CODE`, `DEVICE_KEY`, and `FORCE_SERVER_URL` remain in the sketch. Wi-Fi credentials are not hardcoded. `FORCE_SERVER_URL` is currently set to `https://bingnondo-production.up.railway.app` and overwrites the saved server URL on every boot; set it to `""` if you want the portal, serial command, or admin push to control the URL instead.
 
 First-time setup:
 1. Power the ESP32. It creates a setup Wi-Fi named **`Bingnondo-XXXX`** (the last 4 hex digits of its MAC address).
@@ -106,12 +106,18 @@ If the Wi-Fi password changes later, the ESP32 cannot reconnect and automaticall
 
 If you need to start over completely, hold the button while powering on. That clears the saved Wi-Fi and server URL and restarts the setup portal.
 
+To change only the server URL, open Serial Monitor at 115200 and send:
+
+`url https://bingnondo-production.up.railway.app`
+
+The change saves immediately; no button, portal, or reboot is required. Send `status` to see the saved URL and `help` for the command list.
+
 - ESP32 and PC must be on the same Wi-Fi; allow Node.js through the PC firewall on port 5000 (see section 4).
 - **Screen stays white/blank or shows garbage:** check the wiring notes in section 3 first (BL to 3V3, module-side pin order) — on our build that was the real cause. If wiring is perfect and it is still blurred/garbled, set `#define USE_ST7789 0` and install the **Adafruit ILI9341** library instead.
 - Colors look inverted: tell me and I'll flip it (one line).
 - Serial `HTTP 401` = key mismatch, `HTTP 404` = device code not in `esp32_devices`, `HTTP -1` = server unreachable. Short `HTTP -1` bursts right after boot/reset are normal.
 - Serial heartbeat every 10 s: `RSSI -XX dBm | WiFi up | fails N`. Healthy is RSSI above about −70 dBm with `fails 0`.
-- Tuning knobs at the top of the sketch: `POLL_MS` (1000 ms poll rate) and `POLL_TIMEOUT_MS` (1500 ms before a stuck poll gives up and retries).
+- Tuning knobs at the top of the sketch: `POLL_MS` (1000 ms poll rate) and `POLL_TIMEOUT_MS` (5000 ms before a stuck poll gives up and retries).
 - Power: USB adapter (5V, 1A+) into the ESP32's micro-USB port.
 
 ## 6. Change Wi-Fi from Admin → System Settings

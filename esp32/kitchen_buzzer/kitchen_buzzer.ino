@@ -2,10 +2,11 @@
   Bingnondo kitchen buzzer (ESP32 + 2.4" ST7789 240x320 + button)
 
   Every POLL_MS it asks the backend for waiting order alerts.
-    - Waiting alerts  -> buzzer beeps, screen shows the oldest order
-                         big, plus "+N waiting" and the next order numbers.
+    - Waiting alerts  -> buzzer beeps, screen shows the oldest order with its
+                         items, quantities and notes, plus "+N waiting".
     - Button press    -> acknowledges the order shown on screen (the oldest).
-                         Buzzer stops once no alerts are left.
+                         That order stays visible as ACKNOWLEDGED until another
+                         order is waiting. Buzzer stops once no alerts are left.
   Alerts are created when an order is paid (counter order, or GCash receipt verified).
 
   First boot / Wi-Fi changes:
@@ -29,6 +30,7 @@
              CS->GPIO5, DC->GPIO16, RESET->GPIO17, LED/BL->3V3
 */
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
@@ -40,6 +42,7 @@
 // Keep these matching backend/.env for the single-buzzer setup.
 const char* DEVICE_CODE = "ESP32-KitchenA";          // same as esp32_devices.device_code
 const char* DEVICE_KEY  = "6621aaa4feda0ccab5c33c8b9c45f10f4e93073340123e63";
+const char* FORCE_SERVER_URL = "https://bingnondo-production.up.railway.app";
 // ----------------------------------------------------------------------------
 
 // Wi-Fi credentials and the backend URL are entered in the setup portal and
@@ -52,6 +55,56 @@ unsigned int wifi_version = 0;
 unsigned int failedConfigVersion = 0;
 unsigned long configBackoffMs = 30000;
 String configStatus = "";
+
+const char* ISRG_ROOT_X2 = R"PEM(-----BEGIN CERTIFICATE-----
+MIICGzCCAaGgAwIBAgIQQdKd0XLq7qeAwSxs6S+HUjAKBggqhkjOPQQDAzBPMQsw
+CQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJuZXQgU2VjdXJpdHkgUmVzZWFyY2gg
+R3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBYMjAeFw0yMDA5MDQwMDAwMDBaFw00
+MDA5MTcxNjAwMDBaME8xCzAJBgNVBAYTAlVTMSkwJwYDVQQKEyBJbnRlcm5ldCBT
+ZWN1cml0eSBSZXNlYXJjaCBHcm91cDEVMBMGA1UEAxMMSVNSRyBSb290IFgyMHYw
+EAYHKoZIzj0CAQYFK4EEACIDYgAEzZvVn4CDCuwJSvMWSj5cz3es3mcFDR0HttwW
++1qLFNvicWDEukWVEYmO6gbf9yoWHKS5xcUy4APgHoIYOIvXRdgKam7mAHf7AlF9
+ItgKbppbd9/w+kHsOdx1ymgHDB/qo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0T
+AQH/BAUwAwEB/zAdBgNVHQ4EFgQUfEKWrt5LSDv6kviejM9ti6lyN5UwCgYIKoZI
+zj0EAwMDaAAwZQIwe3lORlCEwkSHRhtFcP9Ymd70/aTSVaYgLXTWNLxBo1BfASdW
+tL4ndQavEi51mI38AjEAi/V3bNTIZargCyzuFJ0nN6T5U6VR5CmD1/iQMVtCnwr1
+/q4AaOeMSQ+2b1tbFfLn
+-----END CERTIFICATE-----)PEM";
+
+const char* GTS_ROOT_R1 = R"PEM(-----BEGIN CERTIFICATE-----
+MIIFVzCCAz+gAwIBAgINAgPlk28xsBNJiGuiFzANBgkqhkiG9w0BAQwFADBHMQsw
+CQYDVQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZpY2VzIExMQzEU
+MBIGA1UEAxMLR1RTIFJvb3QgUjEwHhcNMTYwNjIyMDAwMDAwWhcNMzYwNjIyMDAw
+MDAwWjBHMQswCQYDVQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZp
+Y2VzIExMQzEUMBIGA1UEAxMLR1RTIFJvb3QgUjEwggIiMA0GCSqGSIb3DQEBAQUA
+A4ICDwAwggIKAoICAQC2EQKLHuOhd5s73L+UPreVp0A8of2C+X0yBoJx9vaMf/vo
+27xqLpeXo4xL+Sv2sfnOhB2x+cWX3u+58qPpvBKJXqeqUqv4IyfLpLGcY9vXmX7w
+Cl7raKb0xlpHDU0QM+NOsROjyBhsS+z8CZDfnWQpJSMHobTSPS5g4M/SCYe7zUjw
+TcLCeoiKu7rPWRnWr4+wB7CeMfGCwcDfLqZtbBkOtdh+JhpFAz2weaSUKK0Pfybl
+qAj+lug8aJRT7oM6iCsVlgmy4HqMLnXWnOunVmSPlk9orj2XwoSPwLxAwAtcvfaH
+szVsrBhQf4TgTM2S0yDpM7xSma8ytSmzJSq0SPly4cpk9+aCEI3oncKKiPo4Zor8
+Y/kB+Xj9e1x3+naH+uzfsQ55lVe0vSbv1gHR6xYKu44LtcXFilWr06zqkUspzBmk
+MiVOKvFlRNACzqrOSbTqn3yDsEB750Orp2yjj32JgfpMpf/VjsPOS+C12LOORc92
+wO1AK/1TD7Cn1TsNsYqiA94xrcx36m97PtbfkSIS5r762DL8EGMUUXLeXdYWk70p
+aDPvOmbsB4om3xPXV2V4J95eSRQAogB/mqghtqmxlbCluQ0WEdrHbEg8QOB+DVrN
+VjzRlwW5y0vtOUucxD/SVRNuJLDWcfr0wbrM7Rv1/oFB2ACYPTrIrnqYNxgFlQID
+AQABo0IwQDAOBgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4E
+FgQU5K8rJnEaK0gnhS9SZizv8IkTcT4wDQYJKoZIhvcNAQEMBQADggIBAJ+qQibb
+C5u+/x6Wki4+omVKapi6Ist9wTrYggoGxval3sBOh2Z5ofmmWJyq+bXmYOfg6LEe
+QkEzCzc9zolwFcq1JKjPa7XSQCGYzyI0zzvFIoTgxQ6KfF2I5DUkzps+GlQebtuy
+h6f88/qBVRRiClmpIgUxPoLW7ttXNLwzldMXG+gnoot7TiYaelpkttGsN/H9oPM4
+7HLwEXWdyzRSjeZ2axfG34arJ45JK3VmgRAhpuo+9K4l/3wV3s6MJT/KYnAK9y8J
+ZgfIPxz88NtFMN9iiMG1D53Dn0reWVlHxYciNuaCp+0KueIHoI17eko8cdLiA6Ef
+MgfdG+RCzgwARWGAtQsgWSl4vflVy2PFPEz0tv/bal8xa5meLMFrUKTX5hgUvYU/
+Z6tGn6D/Qqc6f1zLXbBwHSs09dR2CQzreExZBfMzQsNhFRAbd03OIozUhfJFfbdT
+6u9AWpQKXCBfTkBdYiJ23//OYb2MI3jSNwLgjt7RETeJ9r/tSQdirpLsQBqvFAnZ
+0E6yove+7u7Y/9waLd64NnHi/Hm3lCXRSHNboTXns5lndcEZOitHTtNCjv0xyBZm
+2tIMPNuzjsmhDYAPexZ3FL//2wmUspO8IFgV6dtxQ/PeEMMA3KgqlbbC1j+Qa3bb
+bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
+-----END CERTIFICATE-----)PEM";
+
+WiFiClientSecure secureClient;
+WiFiClient plainClient;
 
 // Pins
 const int BUZZER_PIN = 25;
@@ -93,7 +146,7 @@ const unsigned long POLL_MS     = 1000;
 const unsigned long BEEP_ON     = 300;
 const unsigned long BEEP_OFF    = 500;
 const unsigned long DEBOUNCE_MS = 50;
-const unsigned long POLL_TIMEOUT_MS = 1500;
+const unsigned long POLL_TIMEOUT_MS = 5000;
 
 // State from the server
 int    pending = 0;
@@ -101,6 +154,18 @@ long   alertId = 0;              // oldest waiting alert (what the button acknow
 String orders[4];
 int    orderCount = 0;
 int    failCount = 0;            // consecutive failed polls
+
+// Detail of the order drawn on screen, from the `display` field of /alert
+bool   hasDisplay = false;
+long   displayAlertId = 0;
+String displayOrder;
+String displayStatus;
+String displayItems[5];
+String displayItemNotes;
+String displayRequest;
+int    displayItemCount = 0;
+int    displayMore = 0;
+bool   displayAcked = false;
 
 // Local state
 unsigned long lastPoll = 0, lastToggle = 0, lastPress = 0, lastRssi = 0;
@@ -121,12 +186,22 @@ String makeSetupApName() {
   return String(name);
 }
 
+void saveServerUrl(const String& url);
+
 void loadSettings() {
   prefs.begin("bingnondo", true);
   serverUrl = prefs.getString("server_url", "");
   prefs.end();
   serverUrl.trim();
   while (serverUrl.endsWith("/")) serverUrl.remove(serverUrl.length() - 1);
+
+  String forced = FORCE_SERVER_URL;
+  forced.trim();
+  while (forced.endsWith("/")) forced.remove(forced.length() - 1);
+  if (forced.length() > 0 && forced != serverUrl) {
+    saveServerUrl(forced);
+    Serial.printf("Forced server URL to %s\n", serverUrl.c_str());
+  }
 }
 
 void loadWifiVersion() {
@@ -164,6 +239,83 @@ void saveServerUrl(const String& url) {
   prefs.end();
 }
 
+void printSerialHelp() {
+  Serial.println("Serial commands: url <http(s)://...> | status | help");
+}
+
+bool isValidServerUrl(const String& value) {
+  String lower = value;
+  lower.toLowerCase();
+  return lower.startsWith("http://") || lower.startsWith("https://");
+}
+
+void processSerialCommand(const String& line) {
+  String trimmed = line;
+  trimmed.trim();
+  if (trimmed.length() == 0) return;
+
+  String lower = trimmed;
+  lower.toLowerCase();
+
+  if (lower == "help" || lower == "?") {
+    printSerialHelp();
+    return;
+  }
+
+  if (lower == "status") {
+    Serial.printf("Server URL: %s\n", serverUrl.length() ? serverUrl.c_str() : "(not set)");
+    Serial.printf("WiFi: %s | IP: %s\n",
+                  WiFi.status() == WL_CONNECTED ? "up" : "DOWN",
+                  WiFi.localIP().toString().c_str());
+    return;
+  }
+
+  if (lower == "url" || lower.startsWith("url ") || lower == "seturl" || lower.startsWith("seturl ")) {
+    int space = trimmed.indexOf(' ');
+    String value = space < 0 ? "" : trimmed.substring(space + 1);
+    value.trim();
+    while (value.endsWith("/")) value.remove(value.length() - 1);
+
+    if (!isValidServerUrl(value)) {
+      Serial.println("URL must start with http:// or https://");
+      return;
+    }
+
+    saveServerUrl(value);
+    failCount = 0;
+    lastPoll = 0;
+    lastConfigPoll = 0;
+    lastScreen = "";
+    Serial.printf("Server URL set to %s\n", serverUrl.c_str());
+    if (WiFi.status() == WL_CONNECTED) drawScreen(millis());
+    return;
+  }
+
+  printSerialHelp();
+}
+
+void handleSerialCommands() {
+  static String buffer;
+  static unsigned long lastCharAt = 0;
+
+  while (Serial.available()) {
+    char c = static_cast<char>(Serial.read());
+    if (c == '\n' || c == '\r') {
+      String line = buffer;
+      buffer = "";
+      lastCharAt = 0;
+      processSerialCommand(line);
+      return;
+    }
+    if (buffer.length() < 220) buffer += c;
+    lastCharAt = millis();
+  }
+
+  if (buffer.length() > 0 && millis() - lastCharAt > 1000) {
+    buffer = "";
+  }
+}
+
 // Print text horizontally centered on the screen at the given y
 void printCentered(const String& text, int y, uint8_t size, uint16_t color) {
   tft.setTextSize(size);
@@ -171,6 +323,16 @@ void printCentered(const String& text, int y, uint8_t size, uint16_t color) {
   int w = text.length() * 6 * size;          // default font is 6px wide per char at size 1
   tft.setCursor((SCREEN_W - w) / 2, y);
   tft.print(text);
+}
+
+String fitText(const String& text, int maxChars) {
+  if (text.length() <= maxChars) return text;
+  return text.substring(0, maxChars - 2) + "..";
+}
+
+void printCenteredFit(const String& text, int y, uint8_t size, uint16_t color) {
+  int maxChars = (SCREEN_W - 16) / (6 * size);
+  printCentered(fitText(text, maxChars), y, size, color);
 }
 
 void drawSetupScreen() {
@@ -207,7 +369,7 @@ void runSetupPortal() {
 
   WiFiManagerParameter customServerUrl(
     "server_url",
-    "Server URL (http://PC-IP:5000)",
+    "Server URL (http://PC-IP:5000 or https://...)",
     serverUrl.c_str(),
     200
   );
@@ -248,6 +410,9 @@ void drawScreen(unsigned long now) {
   // Only redraw when something visible changed, plus a periodic refresh so the
   // screen never looks stuck.
   String sig = String(offline) + "|" + pending + "|" + alertId;
+  sig += String("|") + hasDisplay + "|" + displayStatus + "|" + displayOrder;
+  for (int i = 0; i < displayItemCount; i++) sig += "|" + displayItems[i];
+  sig += "|" + displayItemNotes + "|" + displayRequest + "|" + displayMore;
   for (int i = 0; i < orderCount; i++) sig += "|" + orders[i];
   if (sig == lastScreen && now - lastRedraw < 5000) return;
   lastScreen = sig;
@@ -265,46 +430,99 @@ void drawScreen(unsigned long now) {
   tft.setCursor(SCREEN_W - 8 - status.length() * 12, 8);
   tft.print(status);
 
-  if (pending == 0) {
-    printCentered("All clear", 90, 4, COL_GREEN);
-    printCentered("No new orders", 140, 2, COL_GREY);
+  if (!hasDisplay) {
+    if (pending == 0) {
+      printCentered("All clear", 90, 4, COL_GREEN);
+      printCentered("No new orders", 140, 2, COL_GREY);
+      if (configStatus.length() > 0) printCentered(configStatus, 185, 1, COL_YELLOW);
+      return;
+    }
+
+    printCentered("NEW ORDER", 44, 2, COL_WHITE);
+    String bigOrder = orderCount > 0 ? orders[0] : String("NEW ORDER");
+    printCentered(bigOrder, 70, 6, COL_YELLOW);
+
+    if (pending > 1) {
+      printCentered(String("+") + (pending - 1) + " waiting", 130, 2, COL_CYAN);
+      int y = 156;
+      for (int i = 1; i < orderCount; i++) {
+        printCentered(orders[i], y, 2, COL_GREY);
+        y += 22;
+      }
+    }
+
     if (configStatus.length() > 0) printCentered(configStatus, 185, 1, COL_YELLOW);
+    tft.fillRect(0, 210, SCREEN_W, 30, COL_RED);
+    printCentered("PRESS BUTTON TO ACK", 218, 2, COL_WHITE);
     return;
   }
 
-  printCentered("NEW ORDER", 44, 2, COL_WHITE);
-  printCentered(orders[0], 70, 6, COL_YELLOW);   // "ORD-0012" = 8 chars * 36px = 288px
+  printCenteredFit(displayStatus, 38, 2, displayAcked ? COL_GREEN : COL_YELLOW);
+  printCenteredFit(displayOrder, 60, 4, COL_WHITE);
 
+  int y = 94;
+  for (int i = 0; i < displayItemCount; i++) {
+    printCenteredFit(displayItems[i], y, 2, i % 2 == 0 ? COL_CYAN : COL_WHITE);
+    y += 15;
+  }
+  if (displayMore > 0) {
+    printCenteredFit(String("+") + displayMore + " more items", 172, 1, COL_GREY);
+  }
+  if (displayItemNotes.length() > 0) {
+    printCenteredFit(String("Items: ") + displayItemNotes, 181, 1, COL_GREY);
+  }
+  if (displayRequest.length() > 0) {
+    printCenteredFit(String("Note: ") + displayRequest, 191, 1, COL_YELLOW);
+  }
   if (pending > 1) {
-    printCentered(String("+") + (pending - 1) + " waiting", 130, 2, COL_CYAN);
-    int y = 156;
-    for (int i = 1; i < orderCount; i++) {       // up to 3 more
-      printCentered(orders[i], y, 2, COL_GREY);
-      y += 22;
-    }
+    printCenteredFit(String("+") + (pending - 1) + " waiting", 201, 1, COL_CYAN);
+  } else if (configStatus.length() > 0) {
+    printCenteredFit(configStatus, 201, 1, COL_GREY);
   }
 
-  // Config status chip
-  if (configStatus.length() > 0) printCentered(configStatus, 185, 1, COL_YELLOW);
-
-  // Footer hint
-  tft.fillRect(0, 210, SCREEN_W, 30, COL_RED);
-  printCentered("PRESS BUTTON TO ACK", 218, 2, COL_WHITE);
+  if (displayAcked) {
+    tft.fillRect(0, 210, SCREEN_W, 30, COL_GREEN);
+    printCentered("ACKNOWLEDGED", 218, 2, COL_BLACK);
+  } else {
+    tft.fillRect(0, 210, SCREEN_W, 30, COL_RED);
+    printCentered("PRESS BUTTON TO ACK", 218, 2, COL_WHITE);
+  }
 }
 
 // --------------------------------------------------------------- network ----
+const char* rootCaForUrl(const String& url) {
+  if (url.indexOf("bingnondo-production.up.railway.app") >= 0) return ISRG_ROOT_X2;
+  if (url.indexOf("bingnondo.vercel.app") >= 0) return GTS_ROOT_R1;
+  return nullptr;
+}
+
+bool beginRequest(HTTPClient& http, const String& url) {
+  if (!url.startsWith("https://")) return http.begin(plainClient, url);
+
+  const char* rootCa = rootCaForUrl(url);
+  if (rootCa != nullptr) secureClient.setCACert(rootCa);
+  else secureClient.setInsecure();
+  secureClient.setHandshakeTimeout(30);
+  return http.begin(secureClient, url);
+}
+
+void logHttpError(HTTPClient& http, const char* label, int code) {
+  if (code < 0) Serial.printf("%s error: %s\n", label, http.errorToString(code).c_str());
+}
+
 // Poll the server. Updates pending / alertId / orders. Returns true on success.
 bool pollServer() {
   if (WiFi.status() != WL_CONNECTED || serverUrl.length() == 0) return false;
 
   HTTPClient http;
   String url = serverUrl + "/api/esp32/alert?device_code=" + DEVICE_CODE;
-  http.begin(url);
+  beginRequest(http, url);
   http.setTimeout(POLL_TIMEOUT_MS);
   http.addHeader("x-device-key", DEVICE_KEY);
   int code = http.GET();
 
   if (code != 200) {
+    logHttpError(http, "Poll failed", code);
     Serial.printf("Poll failed, HTTP %d\n", code);   // 401 = wrong key, 404 = wrong device code
     http.end();
     return false;
@@ -325,6 +543,29 @@ bool pollServer() {
   for (JsonVariant v : doc["orders"].as<JsonArray>()) {
     if (orderCount < 4) orders[orderCount++] = v.as<String>();
   }
+
+  JsonObject d = doc["display"];
+  hasDisplay = !d.isNull();
+  displayItemCount = 0;
+  displayItemNotes = "";
+  if (hasDisplay) {
+    displayAlertId = d["alert_id"] | 0L;
+    displayOrder = d["order_number"] | "";
+    displayRequest = d["special_request"] | "";
+    displayAcked = d["acknowledged"] | false;
+    displayStatus = displayAcked ? "ACKNOWLEDGED" : "NEW ORDER";
+    displayMore = d["more"] | 0;
+    for (JsonVariant v : d["items"].as<JsonArray>()) {
+      if (displayItemCount >= 5) break;
+      JsonObject item = v.as<JsonObject>();
+      displayItems[displayItemCount++] = String(item["qty"] | 1) + "x " + String(item["name"] | "");
+      String notes = item["notes"] | "";
+      if (notes.length() > 0 && displayItemNotes.length() < 60) {
+        if (displayItemNotes.length() > 0) displayItemNotes += "; ";
+        displayItemNotes += notes;
+      }
+    }
+  }
   Serial.println(body);
   return true;
 }
@@ -334,12 +575,13 @@ bool sendAck(long id) {
   if (WiFi.status() != WL_CONNECTED || serverUrl.length() == 0 || id <= 0) return false;
 
   HTTPClient http;
-  http.begin(serverUrl + "/api/esp32/ack");
-  http.setTimeout(3000);
+  beginRequest(http, serverUrl + "/api/esp32/ack");
+  http.setTimeout(5000);
   http.addHeader("x-device-key", DEVICE_KEY);
   http.addHeader("Content-Type", "application/json");
   String body = String("{\"device_code\":\"") + DEVICE_CODE + "\",\"alert_id\":" + id + "}";
   int code = http.POST(body);
+  logHttpError(http, "Ack failed", code);
   Serial.printf("Ack %ld -> HTTP %d\n", id, code);
   http.end();
   return code == 200;
@@ -357,11 +599,11 @@ bool connectToWifi(const String& ssid, const String& pass, unsigned long timeout
   return WiFi.status() == WL_CONNECTED;
 }
 
-bool sendConfigAck(unsigned int version, bool success, const String& error) {
-  if (WiFi.status() != WL_CONNECTED || serverUrl.length() == 0) return false;
+bool sendConfigAckTo(const String& targetUrl, unsigned int version, bool success, const String& error) {
+  if (WiFi.status() != WL_CONNECTED || targetUrl.length() == 0) return false;
 
   HTTPClient http;
-  http.begin(serverUrl + "/api/esp32/config/ack");
+  beginRequest(http, targetUrl + "/api/esp32/config/ack");
   http.setTimeout(5000);
   http.addHeader("x-device-key", DEVICE_KEY);
   http.addHeader("Content-Type", "application/json");
@@ -375,9 +617,14 @@ bool sendConfigAck(unsigned int version, bool success, const String& error) {
   String body;
   serializeJson(doc, body);
   int code = http.POST(body);
+  logHttpError(http, "Config ack failed", code);
   Serial.printf("Config ack v%u %s -> HTTP %d\n", version, success ? "ok" : "failed", code);
   http.end();
   return code == 200;
+}
+
+bool sendConfigAck(unsigned int version, bool success, const String& error) {
+  return sendConfigAckTo(serverUrl, version, success, error);
 }
 
 void applyWifiConfig(unsigned int newVersion, const String& newSsid,
@@ -406,6 +653,8 @@ void applyWifiConfig(unsigned int newVersion, const String& newSsid,
   }
 
   WiFi.setSleep(false);
+  bool serverChanged = newServerUrl.length() > 0 && newServerUrl != oldServer;
+  if (serverChanged) sendConfigAckTo(oldServer, newVersion, true, "");
   if (newServerUrl.length() > 0) saveServerUrl(newServerUrl);
   saveWifiVersion(newVersion);
   wifi_version = newVersion;
@@ -427,12 +676,13 @@ void pollConfig() {
   HTTPClient http;
   String url = serverUrl + "/api/esp32/config?device_code=" + DEVICE_CODE
              + "&version=" + String(wifi_version);
-  http.begin(url);
+  beginRequest(http, url);
   http.setTimeout(5000);
   http.addHeader("x-device-key", DEVICE_KEY);
   int code = http.GET();
 
   if (code != 200) {
+    logHttpError(http, "Config poll failed", code);
     Serial.printf("Config poll failed, HTTP %d\n", code);
     http.end();
     return;
@@ -470,6 +720,7 @@ void pollConfig() {
 // ----------------------------------------------------------------- setup ----
 void setup() {
   Serial.begin(115200);
+  Serial.setTimeout(50);
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   setOutputs(false);
@@ -499,6 +750,8 @@ void setup() {
   loadSettings();
   loadWifiVersion();
   loadFailedConfigVersion();
+  Serial.printf("Server URL: %s\n", serverUrl.length() ? serverUrl.c_str() : "(not set)");
+  printSerialHelp();
   runSetupPortal();
 
   setOutputs(true);  delay(150);         // startup blip
@@ -513,6 +766,8 @@ void setup() {
 // ------------------------------------------------------------------ loop ----
 void loop() {
   unsigned long now = millis();
+
+  handleSerialCommands();
 
   if (WiFi.status() != WL_CONNECTED || serverUrl.length() == 0) {
     runSetupPortal();
@@ -529,12 +784,16 @@ void loop() {
   if (b == LOW && lastButton == HIGH && now - lastPress > DEBOUNCE_MS) {
     lastPress = now;
     if (pending > 0 && sendAck(alertId)) {
-      // Show the result right away instead of waiting for the next poll
+      long ackedId = alertId;
       pending--;
       for (int i = 1; i < orderCount; i++) orders[i - 1] = orders[i];
       if (orderCount > 0) orderCount--;
       alertId = 0;                       // real next id arrives with the next poll
       if (pending == 0) setOutputs(false);
+      if (hasDisplay && displayAlertId == ackedId) {
+        displayAcked = true;
+        displayStatus = "ACKNOWLEDGED";
+      }
       drawScreen(now);
       lastPoll = 0;                      // poll immediately
     }
