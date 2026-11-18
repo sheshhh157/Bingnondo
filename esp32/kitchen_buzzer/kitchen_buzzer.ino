@@ -38,7 +38,6 @@
 #include <Adafruit_GFX.h>
 #include <WiFiManager.h>
 #include <Preferences.h>
-#include <esp_task_wdt.h>
 
 // ---- DEVICE IDENTITY -------------------------------------------------------
 // Keep these matching backend/.env for the single-buzzer setup.
@@ -723,17 +722,8 @@ void pollConfig() {
 void setup() {
   Serial.begin(115200);
   Serial.setTimeout(50);
+  delay(500);                       // let USB-serial settle before printing
   Serial.println("> boot: serial up");
-
-  // Keep the task watchdog from resetting us if setup() blocks (e.g. Wi-Fi
-  // portal opening). We re-enable / feed it once we reach loop().
-  esp_task_wdt_config_t twdt_config = {
-    .timeout_ms = 10000,
-    .idle_core_mask = 0,
-    .trigger_panic = false
-  };
-  esp_task_wdt_init(&twdt_config);   // safe to ignore ESP_ERR_INVALID_STATE if already inited
-  esp_task_wdt_delete(NULL);         // remove this task from watchdog during setup
 
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
@@ -787,9 +777,6 @@ void setup() {
 
 // ------------------------------------------------------------------ loop ----
 void loop() {
-  // Re-add this task to the watchdog now that setup() is done.
-  esp_task_wdt_add(NULL);
-
   unsigned long now = millis();
 
   handleSerialCommands();
