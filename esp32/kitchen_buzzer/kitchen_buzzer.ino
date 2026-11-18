@@ -31,12 +31,14 @@
 */
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <WiFiManager.h>
 #include <Preferences.h>
+#include <esp_task_wdt.h>
 
 // ---- DEVICE IDENTITY -------------------------------------------------------
 // Keep these matching backend/.env for the single-buzzer setup.
@@ -103,7 +105,6 @@ Z6tGn6D/Qqc6f1zLXbBwHSs09dR2CQzreExZBfMzQsNhFRAbd03OIozUhfJFfbdT
 bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
 -----END CERTIFICATE-----)PEM";
 
-WiFiClientSecure secureClient;
 WiFiClient plainClient;
 
 // Pins
@@ -499,6 +500,7 @@ const char* rootCaForUrl(const String& url) {
 bool beginRequest(HTTPClient& http, const String& url) {
   if (!url.startsWith("https://")) return http.begin(plainClient, url);
 
+  WiFiClientSecure secureClient;
   const char* rootCa = rootCaForUrl(url);
   if (rootCa != nullptr) secureClient.setCACert(rootCa);
   else secureClient.setInsecure();
@@ -721,15 +723,25 @@ void pollConfig() {
 void setup() {
   Serial.begin(115200);
   Serial.setTimeout(50);
+  Serial.println("> boot: serial up");
+
+  // Keep the task watchdog from resetting us if setup() blocks (e.g. Wi-Fi
+  // portal opening). We re-enable / feed it once we reach loop().
+  esp_task_wdt_init(10, false);   // 10 s timeout, no panic
+  esp_task_wdt_delete(NULL);      // remove this task from watchdog during setup
+
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   setOutputs(false);
 
   // Fallback: hold the button while powering on to erase Wi-Fi + server URL.
+  // Do NOT restart here — a stuck/shorted button would cause an infinite boot
+  // loop before the screen even initializes. Clear settings and fall through to
+  // the setup portal instead.
   if (digitalRead(BUTTON_PIN) == LOW) {
-    delay(1000);
+    delay(3000);
     if (digitalRead(BUTTON_PIN) == LOW) {
-      Serial.println("Button held at boot: clearing Wi-Fi + server URL");
+      Serial.println("> boot: button held — clearing Wi-Fi + server URL");
       WiFiManager wm;
       wm.resetSettings();
       prefs.begin("bingnondo", false);
@@ -737,11 +749,14 @@ void setup() {
       prefs.remove("wifi_version");
       prefs.remove("wifi_failed_version");
       prefs.end();
-      ESP.restart();
+      prefs.begin("bingnondo", true);
+      Serial.println("> boot: settings cleared, will open setup portal");
+      prefs.end();
     }
   }
 
   TFT_START();
+  Serial.println("> boot: tft init done");
   tft.setRotation(1);                    // landscape: 320 x 240
   tft.fillScreen(COL_BLACK);
   printCentered("Starting...", 110, 2, COL_WHITE);
@@ -752,7 +767,9 @@ void setup() {
   loadFailedConfigVersion();
   Serial.printf("Server URL: %s\n", serverUrl.length() ? serverUrl.c_str() : "(not set)");
   printSerialHelp();
+  Serial.println("> boot: entering setup portal");
   runSetupPortal();
+  Serial.println("> boot: setup portal returned");
 
   setOutputs(true);  delay(150);         // startup blip
   setOutputs(false);
@@ -765,6 +782,9 @@ void setup() {
 
 // ------------------------------------------------------------------ loop ----
 void loop() {
+  // Re-add this task to the watchdog now that setup() is done.
+  esp_task_wdt_add(NULL);
+
   unsigned long now = millis();
 
   handleSerialCommands();
