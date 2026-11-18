@@ -727,8 +727,13 @@ void setup() {
 
   // Keep the task watchdog from resetting us if setup() blocks (e.g. Wi-Fi
   // portal opening). We re-enable / feed it once we reach loop().
-  esp_task_wdt_init(10, false);   // 10 s timeout, no panic
-  esp_task_wdt_delete(NULL);      // remove this task from watchdog during setup
+  esp_task_wdt_config_t twdt_config = {
+    .timeout_ms = 10000,
+    .idle_core_mask = 0,
+    .trigger_panic = false
+  };
+  esp_task_wdt_init(&twdt_config);   // safe to ignore ESP_ERR_INVALID_STATE if already inited
+  esp_task_wdt_delete(NULL);         // remove this task from watchdog during setup
 
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
